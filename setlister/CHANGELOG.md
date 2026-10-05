@@ -12,12 +12,6 @@
 - Přepočet dvacetisekundových prostojů je vidět i v souhrnu setu.
 - Opraveno načítání nové verze frontendu po aktualizaci add-onu a favicon nyní používá přímo logo kapely.
 
-## 0.1.0
-
-- První Home Assistant add-on verze.
-- Sdílená SQLite databáze v trvalém `/data`.
-- Synchronizace mezi zařízeními a historie posledních 200 verzí.
-- Repertoár, archivace, alba, XLSX import a tisk individuálních poznámek.
 ## 0.2.1
 
 - Automatický dvacetisekundový prostoj se nepřičítá přes ručně vloženou pauzu nebo intermezzo.
@@ -31,3 +25,10 @@
 - Přidány volitelné dvacetisekundové prostoje a vlastní pauzy/intermezza.
 - Tisková sestava má úspornější jednostránkové rozložení a oddělené levé/pravé poznámky.
 - Přidána favicon s logem kapely.
+
+## 0.1.0
+
+- První Home Assistant add-on verze.
+- Sdílená SQLite databáze v trvalém `/data`.
+- Synchronizace mezi zařízeními a historie posledních 200 verzí.
+- Repertoár, archivace, alba, XLSX import a tisk individuálních poznámek.

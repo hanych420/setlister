@@ -11,4 +11,4 @@ Repozitář obsahuje Home Assistant add-on **Setlister** pro správu repertoáru
 
 Data jsou uložena v trvalém adresáři `/data` add-onu a zahrnuta do záloh Home Assistantu.
 
-Podrobná dokumentace je v [setlister/DOCS.md](setlister/DOCS.md).
+Podrobná dokumentace je v [setlister/DOCS.md](setlister/DOCS.md). Přehled změn všech publikovaných verzí najdeš v [RELEASE_NOTES.md](RELEASE_NOTES.md).

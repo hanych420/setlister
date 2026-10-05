@@ -1,0 +1,98 @@
+# Setlister — release notes
+
+Přehled všech publikovaných verzí aplikace Setlister od prvního veřejného vydání.
+
+## 0.2.3 — Vlastní našeptávače
+
+### Novinky
+
+- Nativní nabídky prohlížeče byly nahrazeny vlastními našeptávači ve vzhledu Setlisteru.
+- Našeptávání se používá při výběru alba, dříve zadaných zvuků a presetů i při přidávání nástrojů členům kapely.
+- Nabídky lze ovládat myší, dotykem a klávesami se šipkami a `Enter`.
+- Výsledky se během psaní filtrují a nejrelevantnější návrhy se řadí jako první.
+
+## 0.2.2 — Chytřejší tisk a spolehlivé načítání aktualizací
+
+### Tisk setlistů
+
+- Velikost názvů skladeb a rozestupy se automaticky přizpůsobují obsahu tak, aby setlist využil jednu A4.
+- `K0` se již zbytečně netiskne.
+- Výchozí nástroj člena se neopakuje u každé skladby.
+- Nástroj a nenulové kapo se zobrazují pouze tehdy, když dochází ke změně.
+- Automatické pokyny k přeladění zůstávají mezi příslušnými skladbami.
+
+### Ostatní změny
+
+- Počet dvacetisekundových prostojů je vidět přímo v souhrnu aktuálního setu.
+- Opravena ikona záložky — nyní používá samostatné logo Propadleeku.
+- Statické soubory jsou verzované a server nepoužívá zastaralou kopii frontendu po aktualizaci add-onu.
+
+## 0.2.1 — Oprava prostojů
+
+### Opravy
+
+- Automatický dvacetisekundový prostoj se již nepřičítá před ani za ručně vloženou pauzu nebo intermezzo.
+
+## 0.2.0 — Soukromé rozpracované sety a rozšířené skládání
+
+### Práce více uživatelů
+
+- Rozpracovaný aktuální setlist se ukládá samostatně v každém prohlížeči.
+- Obnovení stránky zachová rozpracovaný set, ale skládání jednoho uživatele neovlivňuje repertoár druhého.
+- Sdílený repertoár, uložené setlisty, členové a poznámky zůstávají v databázi na Raspberry Pi.
+- Souběžné úpravy sdílených dat se slučují po jednotlivých skladbách, údajích a členech.
+
+### Skládání setlistu
+
+- Písničku lze trvale smazat.
+- Název, album a délku písničky lze upravit přímo z aktuálního setu.
+- Cílovou délku setu lze nechat prázdnou.
+- Přidána volba započítat dvacetisekundové prostoje mezi sousedními skladbami.
+- Do setu lze vložit vlastní pojmenovanou pauzu nebo intermezzo s nastavitelnou délkou.
+
+### Tisk a vzhled
+
+- Tisková sestava byla zhuštěna pro delší setlisty.
+- Kapo a nástroj jsou vlevo, zvuk, preset a vlastní poznámka vpravo.
+- Přechody a přeladění zůstávají vložené mezi skladbami.
+- Přidána první favicon s logem kapely.
+
+## 0.1.0 — První veřejná verze
+
+### Repertoár
+
+- Knihovna písní s názvem, albem a délkou.
+- Vyhledávání a filtrování repertoáru podle alba.
+- Archivace starších skladeb a možnost archivované skladby znovu zobrazit.
+- Přidávání jednotlivých písní i hromadné vložení textu.
+- Import repertoáru ze strukturované XLSX šablony a možnost šablonu stáhnout.
+
+### Setlisty
+
+- Skládání aktuálního setu přetažením nebo pomocí tlačítek na telefonu.
+- Automatický součet délky a porovnání s cílovým časem.
+- Ukládání více pojmenovaných setlistů, jejich načítání, duplikování a mazání.
+- Skladby použité v aktuálním setu se dočasně skryjí z nabídky repertoáru.
+
+### Kapela a individuální poznámky
+
+- Správa členů kapely a jejich výchozích i dalších nástrojů.
+- Individuální poznámky ke každé skladbě pro každého člena.
+- Kapo pouze pro podporované kytary a zvuk/preset pouze pro elektrickou kytaru.
+- Automatické rozpoznání změny nástroje a kapodastra; poslední kapo se pamatuje zvlášť pro každý nástroj.
+- Podpora volných pokynů, například náklepu, podání kytary nebo jiné akce na pódiu.
+
+### Tisk a export
+
+- Čistý společný setlist bez poznámek.
+- Samostatná stránka pro každého vybraného člena pouze s jeho vlastními pokyny.
+- Nastavitelný počet čistých kopií; výchozí počet je šest, pokud se netisknou individuální stránky.
+- Tisk do PDF i stažení samostatné tiskové HTML sestavy.
+- Export a import kompletní datové zálohy.
+
+### Provoz a data
+
+- Home Assistant add-on a Docker varianta pro Raspberry Pi.
+- Sdílená SQLite databáze v trvalém adresáři `/data`.
+- Synchronizace mezi zařízeními a historie posledních 200 verzí databáze.
+- Připraveno pro zveřejnění přes existující Cloudflare Tunnel a ochranu pomocí Cloudflare Access.
