@@ -2,6 +2,12 @@
 
 Přehled všech publikovaných verzí aplikace Setlister od prvního veřejného vydání.
 
+## 0.2.4 — Přehlednější kapodastr v tisku
+
+- `K0` se v individuálním výtisku nezobrazuje.
+- Hodnoty `K1` až `K12` se zobrazují u každé příslušné skladby, i když se kapodastr oproti předchozí skladbě nezměnil.
+- Automatické pokyny k přeladění mezi skladbami zůstávají zachované.
+
 ## 0.2.3 — Vlastní našeptávače
 
 ### Novinky

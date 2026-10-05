@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4
+
+- V individuálním tisku se skrývá pouze `K0`; hodnoty `K1` až `K12` jsou vidět u každé příslušné skladby.
+
 ## 0.2.3
 
 - Nativní našeptávače byly nahrazeny vlastní přístupnou nabídkou ve vzhledu Setlisteru.

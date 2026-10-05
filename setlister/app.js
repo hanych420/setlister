@@ -1484,7 +1484,7 @@
         const note = normalizeNote(entry.memberNotes?.[member.id]);
         const itemPlan = transitionPlan[index] || {};
         const instrument = itemPlan.instrument || note.instrument || profileForMember(member).defaultInstrument;
-        if (instrumentUsesCapo(member, instrument) && itemPlan.capoChanged && note.capo !== "K0") {
+        if (instrumentUsesCapo(member, instrument) && note.capo !== "K0") {
           appendPrintNote(left, "", note.capo);
         }
         if (profileForMember(member).instruments.length > 1 && itemPlan.instrumentChanged) {
