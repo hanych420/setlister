@@ -6,15 +6,15 @@
   <meta name="theme-color" content="#12110f">
   <meta name="description" content="Lokální plánovač koncertních setlistů.">
   <title>Setlister — plánovač setlistů</title>
-  <link rel="icon" href="assets/favicon.svg?v=0.2.2" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.2.2">
+  <link rel="icon" href="assets/favicon.svg?v=0.2.3" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css?v=0.2.3">
 </head>
 <body>
   <div class="stage-light" aria-hidden="true"></div>
 
   <header class="topbar">
     <a class="brand" href="#" aria-label="Setlister — domů">
-      <img class="brand-logo" src="assets/logo.svg?v=0.2.2" alt="Logo kapely">
+      <img class="brand-logo" src="assets/logo.svg?v=0.2.3" alt="Logo kapely">
       <span>
         <strong>Setlister</strong>
         <small>Setlist studio</small>
@@ -162,8 +162,7 @@
       </label>
       <label class="field song-album-field">
         <span>Album</span>
-        <input id="songAlbum" type="text" maxlength="100" list="albumSuggestions" placeholder="Např. První deska" autocomplete="off">
-        <datalist id="albumSuggestions"></datalist>
+        <input id="songAlbum" type="text" maxlength="100" placeholder="Např. První deska" autocomplete="off">
       </label>
       <div class="duration-fields">
         <label class="field">
@@ -277,7 +276,7 @@
         </label>
         <label class="field" id="noteSoundField">
           <span>Zvuk / preset</span>
-          <input id="noteSound" type="text" maxlength="100" placeholder="Např. Preset 12 — Crunch">
+          <input id="noteSound" type="text" maxlength="100" placeholder="Např. Preset 12 — Crunch" autocomplete="off">
         </label>
         <label class="field note-text-field">
           <span>Vlastní pokyn</span>
@@ -357,7 +356,7 @@
   <div id="printArea" aria-hidden="true"></div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/vendor/spreadsheet-reader.js?v=0.2.2"></script>
-  <script src="app.js?v=0.2.2"></script>
+  <script src="assets/vendor/spreadsheet-reader.js?v=0.2.3"></script>
+  <script src="app.js?v=0.2.3"></script>
 </body>
 </html>

@@ -158,6 +158,41 @@ select {
 .input-suffix input { padding-right: 48px; }
 .input-suffix b { position: absolute; top: 50%; right: 13px; color: var(--muted); font-size: .8rem; transform: translateY(-50%); }
 
+.autocomplete { position: relative; min-width: 0; }
+.autocomplete-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  max-height: 218px;
+  overflow-y: auto;
+  border: 1px solid var(--line-bright);
+  border-radius: 12px;
+  padding: 5px;
+  background: #201d19;
+  box-shadow: 0 18px 45px rgb(0 0 0 / 55%);
+  scrollbar-color: var(--line-bright) transparent;
+}
+.autocomplete-menu[hidden] { display: none; }
+.autocomplete-option {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 10px;
+  color: var(--text);
+  background: transparent;
+  font-size: .8rem;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+.autocomplete-option:hover, .autocomplete-option.active {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
 .button {
   display: inline-flex;
   min-height: 42px;
@@ -434,7 +469,7 @@ code { color: var(--accent-light); }
 .member-instrument input { margin: 0; accent-color: var(--accent); }
 .member-instrument span { font-size: .73rem; }
 .member-instrument .song-icon-button { width: 22px; height: 22px; border: 0; }
-.member-instrument-add { display: grid; grid-template-columns: minmax(0, 1fr) 34px; gap: 7px; }
+.member-instrument-add { display: grid; grid-template-columns: minmax(0, 1fr) 34px; align-items: start; gap: 7px; }
 .member-instrument-add .song-icon-button { width: 34px; height: 34px; }
 .add-member-button { margin-top: 11px; }
 

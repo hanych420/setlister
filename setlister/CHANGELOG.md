@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.3
+
+- Nativní našeptávače byly nahrazeny vlastní přístupnou nabídkou ve vzhledu Setlisteru.
+- Vlastní našeptávání je použito pro alba, dříve použité zvuky/presety a nástroje členů.
+
 ## 0.2.2
 
 - Tisk automaticky využije dostupnou výšku jedné A4 a zvolí největší bezpečnou velikost písma.

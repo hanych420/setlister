@@ -70,7 +70,6 @@
     songDialogTitle: document.querySelector("#songDialogTitle"),
     songTitle: document.querySelector("#songTitle"),
     songAlbum: document.querySelector("#songAlbum"),
-    albumSuggestions: document.querySelector("#albumSuggestions"),
     songMinutes: document.querySelector("#songMinutes"),
     songSeconds: document.querySelector("#songSeconds"),
     songError: document.querySelector("#songError"),
@@ -643,6 +642,121 @@
     return button;
   }
 
+  function setupAutocomplete(input, getOptions) {
+    if (!input || input.closest(".autocomplete")) return;
+    const host = document.createElement("div");
+    host.className = "autocomplete";
+    input.before(host);
+    host.append(input);
+
+    const menu = document.createElement("div");
+    const menuId = makeId("autocomplete");
+    menu.id = menuId;
+    menu.className = "autocomplete-menu";
+    menu.setAttribute("role", "listbox");
+    menu.hidden = true;
+    host.append(menu);
+    input.autocomplete = "off";
+    input.setAttribute("aria-autocomplete", "list");
+    input.setAttribute("aria-controls", menuId);
+    input.setAttribute("aria-expanded", "false");
+
+    let visibleOptions = [];
+    let activeIndex = -1;
+
+    const hide = () => {
+      menu.hidden = true;
+      activeIndex = -1;
+      input.setAttribute("aria-expanded", "false");
+      input.removeAttribute("aria-activedescendant");
+    };
+
+    const markActive = () => {
+      [...menu.children].forEach((option, index) => {
+        const active = index === activeIndex;
+        option.classList.toggle("active", active);
+        option.setAttribute("aria-selected", String(active));
+        if (active) {
+          input.setAttribute("aria-activedescendant", option.id);
+          option.scrollIntoView({ block: "nearest" });
+        }
+      });
+      if (activeIndex < 0) input.removeAttribute("aria-activedescendant");
+    };
+
+    const choose = index => {
+      const value = visibleOptions[index];
+      if (!value) return;
+      input.value = value;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      hide();
+      input.focus();
+    };
+
+    const render = () => {
+      const query = input.value.trim().toLocaleLowerCase("cs-CZ");
+      visibleOptions = [...new Set((getOptions() || [])
+        .map(value => String(value || "").trim())
+        .filter(Boolean))]
+        .filter(value => !query || value.toLocaleLowerCase("cs-CZ").includes(query))
+        .filter(value => value.localeCompare(input.value.trim(), "cs-CZ", { sensitivity: "base" }) !== 0)
+        .sort((first, second) => {
+          const firstStarts = first.toLocaleLowerCase("cs-CZ").startsWith(query);
+          const secondStarts = second.toLocaleLowerCase("cs-CZ").startsWith(query);
+          return Number(secondStarts) - Number(firstStarts) || first.localeCompare(second, "cs-CZ");
+        })
+        .slice(0, 8);
+      activeIndex = -1;
+      menu.replaceChildren();
+      visibleOptions.forEach((value, index) => {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.id = `${menuId}-${index}`;
+        option.className = "autocomplete-option";
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", "false");
+        option.tabIndex = -1;
+        option.textContent = value;
+        option.addEventListener("pointerdown", event => {
+          event.preventDefault();
+          choose(index);
+        });
+        option.addEventListener("pointerenter", () => {
+          activeIndex = index;
+          markActive();
+        });
+        menu.append(option);
+      });
+      menu.hidden = !visibleOptions.length;
+      input.setAttribute("aria-expanded", String(Boolean(visibleOptions.length)));
+    };
+
+    input.addEventListener("focus", render);
+    input.addEventListener("input", render);
+    input.addEventListener("blur", () => setTimeout(hide, 100));
+    input.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        hide();
+        return;
+      }
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        if (menu.hidden) render();
+        if (!visibleOptions.length) return;
+        event.preventDefault();
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        activeIndex = (activeIndex + direction + visibleOptions.length) % visibleOptions.length;
+        markActive();
+        return;
+      }
+      if (event.key === "Enter" && !menu.hidden && activeIndex >= 0) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        choose(activeIndex);
+      }
+    });
+  }
+
   function renderLibrary() {
     const query = elements.songSearch.value.trim().toLocaleLowerCase("cs");
     const selectedAlbum = elements.albumFilter.value;
@@ -650,13 +764,6 @@
     const inSet = new Set(state.draft.songIds);
     const albums = [...new Set(state.songs.map(song => song.album).filter(Boolean))]
       .sort((a, b) => a.localeCompare(b, "cs"));
-
-    elements.albumSuggestions.replaceChildren();
-    albums.forEach(album => {
-      const option = document.createElement("option");
-      option.value = album;
-      elements.albumSuggestions.append(option);
-    });
 
     const currentAlbum = albums.includes(selectedAlbum) ? selectedAlbum : "";
     elements.albumFilter.replaceChildren();
@@ -1174,6 +1281,7 @@
       newInstrument.type = "text";
       newInstrument.maxLength = 80;
       newInstrument.placeholder = "Další nástroj…";
+      newInstrument.autocomplete = "off";
       newInstrument.setAttribute("aria-label", `Další nástroj pro ${member.name || `člena ${index + 1}`}`);
       const add = createIconButton("+", `Přidat nástroj pro ${member.name || `člena ${index + 1}`}`);
       const addInstrumentToMember = () => {
@@ -1189,13 +1297,15 @@
         renderMemberRows();
       };
       add.addEventListener("click", addInstrumentToMember);
+      addInstrument.append(newInstrument, add);
+      setupAutocomplete(newInstrument, () => GENERIC_INSTRUMENTS
+        .filter(instrument => !member.instruments.some(existing => sameInstrument(existing, instrument))));
       newInstrument.addEventListener("keydown", event => {
         if (event.key === "Enter") {
           event.preventDefault();
           addInstrumentToMember();
         }
       });
-      addInstrument.append(newInstrument, add);
       instrumentsWrap.append(instrumentsTitle, instrumentList, addInstrument);
       content.append(nameLabel, instrumentsWrap);
       row.append(number, content);
@@ -1960,6 +2070,10 @@
     showToast(`Přidáno ${added} ${added === 1 ? "nová píseň" : added < 5 ? "nové písně" : "nových písní"}.`);
   });
 
+  setupAutocomplete(elements.songAlbum, () => state.songs.map(song => song.album).filter(Boolean));
+  setupAutocomplete(elements.noteSound, () => state.songs
+    .map(song => normalizeNote(song.memberNotes?.[activeNotesMemberId]).sound)
+    .filter(Boolean));
   renderAll();
   initializeSharedState();
 })();
