@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+- Tisk automaticky využije dostupnou výšku jedné A4 a zvolí největší bezpečnou velikost písma.
+- K0 ani výchozí nástroj se neopakují; nástroj a nenulové kapo se vytisknou jen při skutečné změně.
+- Přepočet dvacetisekundových prostojů je vidět i v souhrnu setu.
+- Opraveno načítání nové verze frontendu po aktualizaci add-onu a favicon nyní používá přímo logo kapely.
+
 ## 0.1.0
 
 - První Home Assistant add-on verze.

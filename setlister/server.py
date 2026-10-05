@@ -77,6 +77,8 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         print(f"{self.log_date_time_string()} {self.address_string()} {format % args}", flush=True)
 
     def end_headers(self) -> None:
+        if not urlparse(self.path).path.startswith("/api/"):
+            self.send_header("Cache-Control", "no-cache")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "same-origin")

@@ -487,9 +487,13 @@
     const entries = entriesFor(container);
     const contentSeconds = entries.reduce((sum, entry) => sum + entry.durationSec, 0);
     if (!container.includeGaps) return contentSeconds;
-    const gapCount = entries.slice(1).filter((entry, index) =>
+    return contentSeconds + gapCountFor(container) * 20;
+  }
+
+  function gapCountFor(container = state.draft) {
+    const entries = entriesFor(container);
+    return entries.slice(1).filter((entry, index) =>
       !isInterlude(entry) && !isInterlude(entries[index])).length;
-    return contentSeconds + gapCount * 20;
   }
 
   function memberById(id) {
@@ -556,7 +560,13 @@
 
   function transitionPlanForMember(songs, member) {
     const profile = profileForMember(member);
-    const plan = songs.map(() => ({ changes: [], instrument: "" }));
+    const plan = songs.map(() => ({
+      changes: [],
+      instrument: "",
+      instrumentChanged: false,
+      capo: "K0",
+      capoChanged: false
+    }));
     const capoByInstrument = new Map();
     let activeInstrument = profile.defaultInstrument;
 
@@ -565,6 +575,9 @@
       const requestedInstrument = note.instrument;
       const currentInstrument = requestedInstrument || activeInstrument || profile.defaultInstrument;
       plan[index].instrument = currentInstrument;
+      plan[index].instrumentChanged = index === 0
+        ? !sameInstrument(currentInstrument, profile.defaultInstrument)
+        : Boolean(requestedInstrument && activeInstrument && !sameInstrument(requestedInstrument, activeInstrument));
       const instrumentKey = currentInstrument
         ? currentInstrument.toLocaleLowerCase("cs-CZ")
         : "__bez_nastroje__";
@@ -580,6 +593,10 @@
 
       if (instrumentUsesCapo(member, currentInstrument)) {
         const previousCapo = capoByInstrument.get(instrumentKey);
+        plan[index].capo = note.capo;
+        plan[index].capoChanged = previousCapo === undefined
+          ? note.capo !== "K0"
+          : previousCapo !== note.capo;
         if (index > 0 && previousCapo !== undefined && previousCapo !== note.capo) {
           plan[index].changes.push(`ladění kytary ${previousCapo} → ${note.capo}`);
         }
@@ -749,7 +766,8 @@
     elements.targetStatus.textContent = targetSeconds ? `z ${formatTime(targetSeconds)}` : "bez cíle";
     elements.progressBar.style.width = `${Math.min(100, ratio * 100)}%`;
     elements.progressBar.classList.toggle("over", difference !== null && difference < 0);
-    elements.setCount.textContent = `${songCountLabel(songs.length)}${entries.length !== songs.length ? ` · ${entries.length - songs.length} pauza/intermezzo` : ""}`;
+    const gapCount = state.draft.includeGaps ? gapCountFor() : 0;
+    elements.setCount.textContent = `${songCountLabel(songs.length)}${entries.length !== songs.length ? ` · ${entries.length - songs.length} pauza/intermezzo` : ""}${state.draft.includeGaps ? ` · ${gapCount}× 20 s` : ""}`;
     elements.timeDifference.className = difference === null ? "" : difference < 0 ? "over" : ratio >= .95 ? "ready" : "";
     elements.timeDifference.textContent = difference === null
       ? "Cílová délka není zadaná"
@@ -824,7 +842,7 @@
         const notes = createIconButton("☷", `Poznámky členů ke skladbě ${entry.title}`, `notes${noteCount ? " has-notes" : ""}`);
         if (noteCount) notes.dataset.count = noteCount;
         notes.addEventListener("click", () => openNotesDialog(entry));
-        const edit = createIconButton("✎", `Upravit ${entry.title}`);
+        const edit = createIconButton("✎", `Upravit čas a album skladby ${entry.title}`, "edit");
         edit.addEventListener("click", () => openSongDialog(entry));
         actions.append(notes, edit);
       }
@@ -1297,9 +1315,17 @@
     const transitionPlan = member && includeNotes ? transitionPlanForMember(songs, member) : [];
     const page = document.createElement("section");
     const transitionCount = transitionPlan.reduce((sum, item) => sum + (item.changes.length ? 1 : 0), 0);
-    const densityScore = entries.length + transitionCount;
-    const density = densityScore > 42 ? " print-ultra" : densityScore > 27 ? " print-dense" : densityScore > 20 ? " print-compact" : "";
-    page.className = `print-page${density}`;
+    const interludeCount = entries.filter(isInterlude).length;
+    const weightedRows = Math.max(1, songs.length + transitionCount * .52 + interludeCount * .68);
+    const rowHeightMm = Math.max(4.7, Math.min(30, 250 / weightedRows));
+    const titleSizePt = Math.max(11.5, Math.min(42, rowHeightMm * 1.82));
+    const sideSizePt = Math.max(7, Math.min(11, rowHeightMm * .72));
+    const transitionSizePt = Math.max(7, Math.min(10, rowHeightMm * .68));
+    page.className = "print-page";
+    page.style.setProperty("--print-row-height", `${rowHeightMm.toFixed(2)}mm`);
+    page.style.setProperty("--print-title-size", `${titleSizePt.toFixed(2)}pt`);
+    page.style.setProperty("--print-side-size", `${sideSizePt.toFixed(2)}pt`);
+    page.style.setProperty("--print-transition-size", `${transitionSizePt.toFixed(2)}pt`);
 
     const header = document.createElement("header");
     header.className = "print-header";
@@ -1346,9 +1372,14 @@
 
       if (member && includeNotes) {
         const note = normalizeNote(entry.memberNotes?.[member.id]);
-        const instrument = transitionPlan[index]?.instrument || note.instrument || profileForMember(member).defaultInstrument;
-        if (instrumentUsesCapo(member, instrument)) appendPrintNote(left, "", note.capo);
-        if (profileForMember(member).instruments.length > 1) appendPrintNote(left, "", instrument, false);
+        const itemPlan = transitionPlan[index] || {};
+        const instrument = itemPlan.instrument || note.instrument || profileForMember(member).defaultInstrument;
+        if (instrumentUsesCapo(member, instrument) && itemPlan.capoChanged && note.capo !== "K0") {
+          appendPrintNote(left, "", note.capo);
+        }
+        if (profileForMember(member).instruments.length > 1 && itemPlan.instrumentChanged) {
+          appendPrintNote(left, "", instrument, false);
+        }
         if (instrumentUsesSound(instrument)) appendPrintNote(right, "", note.sound);
         appendPrintNote(right, "", note.text, false);
       }
@@ -1406,30 +1437,15 @@
       .print-header { position: absolute; top: 6mm; right: 10mm; left: 10mm; margin: 0; text-align: center; }
       .print-member strong { display: inline-block; border-bottom: 2px solid #222; padding: 0 5px 3px; color: #222; font-size: 10pt; font-weight: 800; line-height: 1; letter-spacing: .13em; text-transform: uppercase; }
       .print-list { display: flex; flex: 1; flex-direction: column; justify-content: center; width: 100%; margin: 0; padding: 13mm 0 3mm; list-style: none; counter-reset: print-order; }
-      .print-song { position: relative; display: grid; grid-template-columns: 34mm minmax(0, 1fr) 40mm; gap: 3mm; align-items: center; min-height: 8mm; padding: 1.8mm 0; border-bottom: 1px solid #d2d2d2; counter-increment: print-order; break-inside: avoid; }
+      .print-song { position: relative; display: grid; flex: 1 1 var(--print-row-height, 8mm); grid-template-columns: 34mm minmax(0, 1fr) 40mm; gap: 3mm; align-items: center; min-height: var(--print-row-height, 8mm); padding: .7mm 0; border-bottom: 1px solid #d2d2d2; counter-increment: print-order; break-inside: avoid; }
       .print-song::before { position: absolute; left: -7mm; width: 6mm; content: counter(print-order); color: #777; font-size: 8pt; text-align: right; }
-      .print-song-title { font-size: 18pt; font-weight: 900; line-height: 1.02; text-align: center; }
-      .print-left, .print-right { display: flex; flex-wrap: wrap; gap: 1mm 2mm; align-items: center; color: #222; font-size: 9pt; line-height: 1.05; }
+      .print-song-title { font-size: var(--print-title-size, 18pt); font-weight: 900; line-height: 1.02; text-align: center; }
+      .print-left, .print-right { display: flex; flex-wrap: wrap; gap: 1mm 2mm; align-items: center; color: #222; font-size: var(--print-side-size, 9pt); line-height: 1.05; }
       .print-right { justify-content: flex-end; text-align: right; }
       .print-note-chip { border-radius: 3px; padding: 1px 4px; background: #e7e7e7; font-weight: 900; }
-      .print-transition { padding: 1.2mm 8mm; color: #8b4e00; font-size: 9pt; font-weight: 800; line-height: 1.05; text-align: center; break-inside: avoid; }
+      .print-transition { flex: 0 0 auto; padding: .8mm 8mm; color: #8b4e00; font-size: var(--print-transition-size, 9pt); font-weight: 800; line-height: 1.05; text-align: center; break-inside: avoid; }
       .print-transition::before { content: "↻ "; }
-      .print-interlude { margin: 1mm 12mm; border-block: 1px dashed #888; padding: 1.2mm; color: #444; font-size: 10pt; font-weight: 800; text-align: center; text-transform: uppercase; break-inside: avoid; }
-      .print-compact .print-song { min-height: 6.6mm; padding: 1mm 0; }
-      .print-compact .print-song-title { font-size: 15.5pt; }
-      .print-compact .print-transition, .print-compact .print-left, .print-compact .print-right { font-size: 8pt; }
-      .print-dense .print-list { padding-top: 11mm; }
-      .print-dense .print-song { min-height: 5.8mm; padding: .65mm 0; }
-      .print-dense .print-song-title { font-size: 13.5pt; }
-      .print-dense .print-transition { padding: .7mm 8mm; font-size: 7.5pt; }
-      .print-dense .print-left, .print-dense .print-right { font-size: 7.5pt; }
-      .print-dense .print-interlude { margin-block: .5mm; padding: .7mm; font-size: 8pt; }
-      .print-ultra .print-list { padding-top: 10mm; }
-      .print-ultra .print-song { min-height: 5mm; padding: .35mm 0; }
-      .print-ultra .print-song-title { font-size: 12.5pt; }
-      .print-ultra .print-transition { padding: .35mm 8mm; font-size: 7pt; }
-      .print-ultra .print-left, .print-ultra .print-right { font-size: 7pt; }
-      .print-ultra .print-interlude { margin-block: .3mm; padding: .4mm; font-size: 7.5pt; }
+      .print-interlude { flex: 0 0 auto; margin: .6mm 12mm; border-block: 1px dashed #888; padding: .8mm; color: #444; font-size: var(--print-transition-size, 9pt); font-weight: 800; text-align: center; text-transform: uppercase; break-inside: avoid; }
       @page { size: A4 portrait; margin: 0; }
       @media print {
         body { background: #fff; }
