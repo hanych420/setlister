@@ -1,0 +1,23 @@
+name: Setlister
+version: "0.1.0"
+slug: setlister
+description: Kapelní repertoár, setlisty a individuální tiskové poznámky.
+url: https://github.com/hanych420/setlister
+arch:
+  - aarch64
+  - amd64
+startup: application
+boot: auto
+stage: experimental
+ports:
+  "8110/tcp": 8110
+ports_description:
+  "8110/tcp": Webové rozhraní Setlisteru
+webui: http://[HOST]:[PORT:8110]/
+watchdog: http://[HOST]:[PORT:8110]/api/health
+backup: cold
+environment:
+  SETLISTER_HOST: 0.0.0.0
+  SETLISTER_PORT: "8110"
+  SETLISTER_DATA_DIR: /data
+schema: false

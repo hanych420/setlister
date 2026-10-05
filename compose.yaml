@@ -1,0 +1,15 @@
+services:
+  setlister:
+    build: ./setlister
+    container_name: setlister
+    restart: unless-stopped
+    ports:
+      - "8110:8110"
+    environment:
+      SETLISTER_DATA_DIR: /data
+      SETLISTER_PORT: "8110"
+    volumes:
+      - "${SETLISTER_DATA_PATH:-setlister-data}:/data"
+
+volumes:
+  setlister-data:
