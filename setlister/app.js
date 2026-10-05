@@ -2,6 +2,7 @@
   "use strict";
 
   const STORAGE_KEY = "setlister-v1";
+  const DRAFT_STORAGE_KEY = "setlister-draft-v2";
   const LEGACY_STORAGE_KEY = "kapelnik-setlist-v1";
   const MEMBER_PROFILES = [
     { id: "member-hanych", name: "Hanych", instruments: ["Elektrická kytara", "Akustická kytara"], capoInstruments: ["Elektrická kytara", "Akustická kytara"] },
@@ -36,6 +37,7 @@
   const elements = {
     setName: document.querySelector("#setName"),
     targetMinutes: document.querySelector("#targetMinutes"),
+    includeGaps: document.querySelector("#includeGaps"),
     saveSet: document.querySelector("#saveSet"),
     newSet: document.querySelector("#newSet"),
     songSearch: document.querySelector("#songSearch"),
@@ -57,6 +59,7 @@
     timeDifference: document.querySelector("#timeDifference"),
     unknownDurations: document.querySelector("#unknownDurations"),
     clearSet: document.querySelector("#clearSet"),
+    addInterlude: document.querySelector("#addInterlude"),
     exportSet: document.querySelector("#exportSet"),
     savedSets: document.querySelector("#savedSets"),
     manageMembers: document.querySelector("#manageMembers"),
@@ -72,6 +75,13 @@
     songSeconds: document.querySelector("#songSeconds"),
     songError: document.querySelector("#songError"),
     archiveSong: document.querySelector("#archiveSong"),
+    deleteSong: document.querySelector("#deleteSong"),
+    interludeDialog: document.querySelector("#interludeDialog"),
+    interludeForm: document.querySelector("#interludeForm"),
+    interludeTitle: document.querySelector("#interludeTitle"),
+    interludeMinutes: document.querySelector("#interludeMinutes"),
+    interludeSeconds: document.querySelector("#interludeSeconds"),
+    interludeError: document.querySelector("#interludeError"),
     bulkDialog: document.querySelector("#bulkDialog"),
     bulkForm: document.querySelector("#bulkForm"),
     bulkSongs: document.querySelector("#bulkSongs"),
@@ -141,7 +151,9 @@
         savedId: null,
         name: "",
         targetMinutes: 45,
-        songIds: []
+        songIds: [],
+        interludes: {},
+        includeGaps: false
       },
       savedSetlists: [],
       members: DEFAULT_MEMBERS.map(member => ({ ...member, instruments: [...member.instruments] }))
@@ -195,16 +207,34 @@
         archived: Boolean(song.archived),
         memberNotes: normalizeMemberNotes(song.memberNotes)
       }));
-    value.draft.targetMinutes = Math.max(1, Number(value.draft.targetMinutes) || 45);
+    value.draft.targetMinutes = value.draft.targetMinutes === ""
+      ? ""
+      : Math.max(1, Math.min(600, Number(value.draft.targetMinutes) || 45));
     value.draft.name = String(value.draft.name || "");
-    value.draft.songIds = value.draft.songIds.filter(id => songIds.has(id));
+    value.draft.interludes = normalizeInterludes(value.draft.interludes);
+    value.draft.includeGaps = Boolean(value.draft.includeGaps);
+    value.draft.songIds = value.draft.songIds.filter(id => songIds.has(id) || value.draft.interludes[id]);
     value.savedSetlists = value.savedSetlists.map(set => ({
       ...set,
       name: String(set.name || "Bez názvu"),
-      targetMinutes: Math.max(1, Number(set.targetMinutes) || 45),
-      songIds: Array.isArray(set.songIds) ? set.songIds.filter(id => songIds.has(id)) : []
+      targetMinutes: set.targetMinutes === "" ? "" : Math.max(1, Number(set.targetMinutes) || 45),
+      interludes: normalizeInterludes(set.interludes),
+      includeGaps: Boolean(set.includeGaps),
+      songIds: Array.isArray(set.songIds)
+        ? set.songIds.filter(id => songIds.has(id) || normalizeInterludes(set.interludes)[id])
+        : []
     }));
     return value;
+  }
+
+  function normalizeInterludes(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return Object.fromEntries(Object.entries(value).map(([id, interlude]) => [id, {
+      id,
+      type: "interlude",
+      title: String(interlude?.title || "Pauza").trim() || "Pauza",
+      durationSec: Math.max(0, Number(interlude?.durationSec) || 0)
+    }]));
   }
 
   function loadState() {
@@ -213,19 +243,100 @@
       const stored = JSON.parse(serialized);
       if (isValidState(stored)) {
         const normalized = normalizeState(stored);
+        normalized.draft = loadLocalDraft(normalized.draft);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
         return normalized;
       }
     } catch (error) {
       console.warn("Uložená data se nepodařilo načíst.", error);
     }
-    return createInitialState();
+    const initial = createInitialState();
+    initial.draft = loadLocalDraft(initial.draft);
+    return initial;
+  }
+
+  function emptyDraft() {
+    return { savedId: null, name: "", targetMinutes: 45, songIds: [], interludes: {}, includeGaps: false };
+  }
+
+  function loadLocalDraft(fallback = emptyDraft()) {
+    try {
+      const stored = JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY));
+      if (stored && Array.isArray(stored.songIds)) return { ...fallback, ...stored };
+    } catch (error) {
+      console.warn("Rozpracovaný set se nepodařilo načíst.", error);
+    }
+    return { ...fallback };
+  }
+
+  function sharedStateSnapshot(source = state) {
+    return { ...source, draft: emptyDraft() };
+  }
+
+  function sharedStateSerialized(source = state) {
+    return JSON.stringify(sharedStateSnapshot(source));
   }
 
   function saveState() {
-    const serialized = JSON.stringify(state);
-    localStorage.setItem(STORAGE_KEY, serialized);
-    if (serverSyncEnabled && serialized !== lastSyncedState) scheduleServerSync();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(state.draft));
+    const sharedSerialized = sharedStateSerialized();
+    if (serverSyncEnabled && sharedSerialized !== lastSyncedState) scheduleServerSync();
+  }
+
+  function mergeValue(base, local, remote) {
+    return JSON.stringify(local) !== JSON.stringify(base) ? local : remote;
+  }
+
+  function mergeMemberNotes(base = {}, local = {}, remote = {}) {
+    const result = { ...remote };
+    new Set([...Object.keys(base), ...Object.keys(local), ...Object.keys(remote)]).forEach(memberId => {
+      if (JSON.stringify(local[memberId]) !== JSON.stringify(base[memberId])) {
+        if (local[memberId] === undefined) delete result[memberId];
+        else result[memberId] = local[memberId];
+      }
+    });
+    return result;
+  }
+
+  function mergeEntityArrays(baseItems = [], localItems = [], remoteItems = [], merger = null) {
+    const base = new Map(baseItems.map(item => [item.id, item]));
+    const local = new Map(localItems.map(item => [item.id, item]));
+    const remote = new Map(remoteItems.map(item => [item.id, item]));
+    const result = [];
+    new Set([...base.keys(), ...remote.keys(), ...local.keys()]).forEach(id => {
+      const baseItem = base.get(id);
+      const localItem = local.get(id);
+      const remoteItem = remote.get(id);
+      const locallyChanged = JSON.stringify(localItem) !== JSON.stringify(baseItem);
+      if (!localItem && locallyChanged) return;
+      if (!remoteItem && !locallyChanged) return;
+      if (!baseItem) {
+        result.push(localItem || remoteItem);
+        return;
+      }
+      if (locallyChanged && remoteItem && merger) result.push(merger(baseItem, localItem, remoteItem));
+      else result.push(locallyChanged ? localItem : remoteItem);
+    });
+    return result.filter(Boolean);
+  }
+
+  function mergeSharedStates(base, local, remote) {
+    const mergeSong = (baseSong, localSong, remoteSong) => ({
+      ...remoteSong,
+      title: mergeValue(baseSong.title, localSong.title, remoteSong.title),
+      durationSec: mergeValue(baseSong.durationSec, localSong.durationSec, remoteSong.durationSec),
+      album: mergeValue(baseSong.album, localSong.album, remoteSong.album),
+      archived: mergeValue(baseSong.archived, localSong.archived, remoteSong.archived),
+      memberNotes: mergeMemberNotes(baseSong.memberNotes, localSong.memberNotes, remoteSong.memberNotes)
+    });
+    return normalizeState({
+      ...remote,
+      songs: mergeEntityArrays(base.songs, local.songs, remote.songs, mergeSong),
+      members: mergeEntityArrays(base.members, local.members, remote.members),
+      savedSetlists: mergeEntityArrays(base.savedSetlists, local.savedSetlists, remote.savedSetlists),
+      draft: emptyDraft()
+    });
   }
 
   function setSyncStatus(label, stateName) {
@@ -246,10 +357,13 @@
 
   async function applyServerState(payload, announce = false) {
     if (!payload?.state || !isValidState(payload.state)) return false;
+    const localDraft = state?.draft || loadLocalDraft();
     state = normalizeState(payload.state);
+    state.draft = normalizeState({ ...state, draft: localDraft }).draft;
     serverRevision = Number(payload.revision) || 0;
-    lastSyncedState = JSON.stringify(state);
-    localStorage.setItem(STORAGE_KEY, lastSyncedState);
+    lastSyncedState = sharedStateSerialized();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(state.draft));
     renderAll();
     if (announce) showToast("Načtena novější verze ze sdílené databáze.");
     return true;
@@ -273,7 +387,7 @@
       serverSyncQueued = true;
       return;
     }
-    const serialized = JSON.stringify(state);
+    const serialized = sharedStateSerialized();
     if (serialized === lastSyncedState) return;
     serverSyncInFlight = true;
     setSyncStatus("Ukládám…", "saving");
@@ -287,8 +401,16 @@
         const conflict = await response.json();
         serverRevision = Number(conflict.revision) || serverRevision;
         const latest = await readServerState();
-        await applyServerState(latest);
-        showToast("Setlister se mezitím změnil na jiném zařízení. Načetl jsem novější verzi; poslední úpravu prosím zopakuj.");
+        const localDraft = state.draft;
+        const base = lastSyncedState ? JSON.parse(lastSyncedState) : sharedStateSnapshot(createInitialState());
+        const remote = normalizeState(latest.state);
+        state = mergeSharedStates(base, JSON.parse(serialized), remote);
+        state.draft = localDraft;
+        serverRevision = Number(latest.revision) || serverRevision;
+        lastSyncedState = sharedStateSerialized(remote);
+        saveState();
+        renderAll();
+        showToast("Souběžné změny byly sloučeny. Tvoje rozpracovaná práce zůstala zachovaná.");
         return;
       }
       if (!response.ok) throw new Error(`Server odpověděl ${response.status}.`);
@@ -301,7 +423,7 @@
       setSyncStatus("Neuloženo na server", "offline");
     } finally {
       serverSyncInFlight = false;
-      if (serverSyncQueued || JSON.stringify(state) !== lastSyncedState) {
+      if (serverSyncQueued || sharedStateSerialized() !== lastSyncedState) {
         serverSyncQueued = false;
         scheduleServerSync(150);
       }
@@ -318,7 +440,14 @@
       const payload = await readServerState();
       serverRevision = Number(payload.revision) || 0;
       serverSyncEnabled = true;
+      const legacySharedDraft = Boolean(
+        payload?.state?.draft
+        && (payload.state.draft.songIds?.length || payload.state.draft.name || payload.state.draft.savedId)
+      );
       if (!(await applyServerState(payload))) {
+        lastSyncedState = "";
+        await flushServerState();
+      } else if (legacySharedDraft) {
         lastSyncedState = "";
         await flushServerState();
       }
@@ -340,6 +469,26 @@
 
   function songById(id) {
     return state.songs.find(song => song.id === id);
+  }
+
+  function entryById(id, container = state.draft) {
+    return songById(id) || container?.interludes?.[id] || null;
+  }
+
+  function entriesFor(container = state.draft) {
+    return (container.songIds || []).map(id => entryById(id, container)).filter(Boolean);
+  }
+
+  function isInterlude(entry) {
+    return entry?.type === "interlude";
+  }
+
+  function totalFor(container = state.draft) {
+    const entries = entriesFor(container);
+    const contentSeconds = entries.reduce((sum, entry) => sum + entry.durationSec, 0);
+    if (!container.includeGaps) return contentSeconds;
+    const songs = entries.filter(entry => !isInterlude(entry)).length;
+    return contentSeconds + Math.max(0, songs - 1) * 20;
   }
 
   function memberById(id) {
@@ -583,33 +732,40 @@
   function renderCurrentSet() {
     elements.setName.value = state.draft.name;
     elements.targetMinutes.value = state.draft.targetMinutes;
+    elements.includeGaps.checked = state.draft.includeGaps;
     elements.setList.replaceChildren();
 
-    const songs = state.draft.songIds.map(songById).filter(Boolean);
-    const totalSeconds = songs.reduce((sum, song) => sum + song.durationSec, 0);
-    const targetSeconds = Math.max(60, state.draft.targetMinutes * 60);
-    const difference = targetSeconds - totalSeconds;
-    const unknownCount = songs.filter(song => !song.durationSec).length;
-    const ratio = totalSeconds / targetSeconds;
+    const entries = entriesFor();
+    const songs = entries.filter(entry => !isInterlude(entry));
+    const totalSeconds = totalFor();
+    const parsedTarget = Number(state.draft.targetMinutes);
+    const targetSeconds = parsedTarget > 0 ? parsedTarget * 60 : null;
+    const difference = targetSeconds === null ? null : targetSeconds - totalSeconds;
+    const unknownCount = entries.filter(entry => !entry.durationSec).length;
+    const ratio = targetSeconds ? totalSeconds / targetSeconds : 0;
 
     elements.totalTime.textContent = formatTime(totalSeconds);
-    elements.targetStatus.textContent = `z ${formatTime(targetSeconds)}`;
+    elements.targetStatus.textContent = targetSeconds ? `z ${formatTime(targetSeconds)}` : "bez cíle";
     elements.progressBar.style.width = `${Math.min(100, ratio * 100)}%`;
-    elements.progressBar.classList.toggle("over", difference < 0);
-    elements.setCount.textContent = songCountLabel(songs.length);
-    elements.timeDifference.className = difference < 0 ? "over" : ratio >= .95 ? "ready" : "";
-    elements.timeDifference.textContent = difference < 0
-      ? `Přesahuje o ${formatTime(Math.abs(difference))}`
-      : `Zbývá ${formatTime(difference)}`;
+    elements.progressBar.classList.toggle("over", difference !== null && difference < 0);
+    elements.setCount.textContent = `${songCountLabel(songs.length)}${entries.length !== songs.length ? ` · ${entries.length - songs.length} pauza/intermezzo` : ""}`;
+    elements.timeDifference.className = difference === null ? "" : difference < 0 ? "over" : ratio >= .95 ? "ready" : "";
+    elements.timeDifference.textContent = difference === null
+      ? "Cílová délka není zadaná"
+      : difference < 0
+        ? `Přesahuje o ${formatTime(Math.abs(difference))}`
+        : `Zbývá ${formatTime(difference)}`;
     elements.unknownDurations.textContent = unknownCount
       ? `${unknownCount} ${unknownCount === 1 ? "skladba nemá" : unknownCount < 5 ? "skladby nemají" : "skladeb nemá"} vyplněnou délku.`
       : "";
-    elements.emptySet.classList.toggle("hidden", songs.length > 0);
+    elements.emptySet.classList.toggle("hidden", entries.length > 0);
     const transitionPlans = allTransitionPlans(songs);
+    let songIndex = 0;
 
-    songs.forEach((song, index) => {
-      const transitions = state.members.flatMap(member => {
-        const changes = transitionPlans.get(member.id)?.[index]?.changes || [];
+    entries.forEach((entry, index) => {
+      const musicalIndex = isInterlude(entry) ? -1 : songIndex++;
+      const transitions = musicalIndex < 0 ? [] : state.members.flatMap(member => {
+        const changes = transitionPlans.get(member.id)?.[musicalIndex]?.changes || [];
         return changes.length ? [{ member, changes }] : [];
       });
       if (transitions.length) {
@@ -627,7 +783,7 @@
       }
 
       const item = document.createElement("li");
-      item.className = "set-song";
+      item.className = `set-song${isInterlude(entry) ? " set-interlude" : ""}`;
       item.draggable = true;
       item.dataset.index = index;
 
@@ -639,37 +795,45 @@
       const title = document.createElement("div");
       title.className = "set-song-title";
       const strong = document.createElement("strong");
-      strong.textContent = song.title;
+      strong.textContent = entry.title;
       const small = document.createElement("small");
-      const noteCount = songNoteCount(song);
-      small.textContent = `Pozice ${index + 1}${song.archived ? " · archivovaná" : ""}${noteCount ? ` · ${noteCount}× poznámka` : ""}`;
+      const noteCount = isInterlude(entry) ? 0 : songNoteCount(entry);
+      small.textContent = isInterlude(entry)
+        ? "Pauza / intermezzo"
+        : `Pozice ${musicalIndex + 1}${entry.archived ? " · archivovaná" : ""}${noteCount ? ` · ${noteCount}× poznámka` : ""}`;
       title.append(strong, small);
 
       const duration = document.createElement("span");
       duration.className = "set-duration";
-      duration.textContent = song.durationSec ? formatTime(song.durationSec) : "—:—";
+      duration.textContent = entry.durationSec ? formatTime(entry.durationSec) : "—:—";
 
       const moves = document.createElement("div");
       moves.className = "move-buttons";
       const up = createIconButton("↑", "Posunout nahoru");
       const down = createIconButton("↓", "Posunout dolů");
       up.disabled = index === 0;
-      down.disabled = index === songs.length - 1;
+      down.disabled = index === entries.length - 1;
       up.addEventListener("click", () => moveSetSong(index, index - 1));
       down.addEventListener("click", () => moveSetSong(index, index + 1));
       moves.append(up, down);
 
       const actions = document.createElement("div");
       actions.className = "set-actions";
-      const notes = createIconButton("☷", `Poznámky členů ke skladbě ${song.title}`, `notes${noteCount ? " has-notes" : ""}`);
-      if (noteCount) notes.dataset.count = noteCount;
-      notes.addEventListener("click", () => openNotesDialog(song));
-      const remove = createIconButton("×", `Odebrat ${song.title}`);
+      if (!isInterlude(entry)) {
+        const notes = createIconButton("☷", `Poznámky členů ke skladbě ${entry.title}`, `notes${noteCount ? " has-notes" : ""}`);
+        if (noteCount) notes.dataset.count = noteCount;
+        notes.addEventListener("click", () => openNotesDialog(entry));
+        const edit = createIconButton("✎", `Upravit ${entry.title}`);
+        edit.addEventListener("click", () => openSongDialog(entry));
+        actions.append(notes, edit);
+      }
+      const remove = createIconButton("×", `Odebrat ${entry.title}`);
       remove.addEventListener("click", () => {
-        state.draft.songIds.splice(index, 1);
+        const [removedId] = state.draft.songIds.splice(index, 1);
+        if (state.draft.interludes[removedId]) delete state.draft.interludes[removedId];
         commit({ library: true });
       });
-      actions.append(notes, remove);
+      actions.append(remove);
 
       item.addEventListener("dragstart", event => {
         draggedItem = { type: "setlist", index };
@@ -709,8 +873,9 @@
     }
 
     saved.forEach(set => {
-      const songs = set.songIds.map(songById).filter(Boolean);
-      const totalSeconds = songs.reduce((sum, song) => sum + song.durationSec, 0);
+      const entries = entriesFor(set);
+      const songs = entries.filter(entry => !isInterlude(entry));
+      const totalSeconds = totalFor(set);
       const card = document.createElement("article");
       card.className = `saved-card${state.draft.savedId === set.id ? " active" : ""}`;
 
@@ -724,7 +889,7 @@
       nameWrap.append(title, date);
       const target = document.createElement("span");
       target.className = "count-badge";
-      target.textContent = `${set.targetMinutes} min`;
+      target.textContent = set.targetMinutes === "" ? "bez cíle" : `${set.targetMinutes} min`;
       head.append(nameWrap, target);
 
       const time = document.createElement("div");
@@ -732,7 +897,7 @@
       time.textContent = formatTime(totalSeconds);
       const meta = document.createElement("div");
       meta.className = "saved-card-meta";
-      meta.textContent = `${songCountLabel(songs.length)} · ${songs.filter(song => !song.durationSec).length ? "obsahuje nevyplněné časy" : "všechny časy vyplněné"}`;
+      meta.textContent = `${songCountLabel(songs.length)}${entries.length !== songs.length ? ` · ${entries.length - songs.length} pauza/intermezzo` : ""} · ${entries.filter(entry => !entry.durationSec).length ? "obsahuje nevyplněné časy" : "všechny časy vyplněné"}${set.includeGaps ? " · včetně 20s prostojů" : ""}`;
 
       const actions = document.createElement("div");
       actions.className = "saved-card-actions";
@@ -1126,10 +1291,14 @@
   }
 
   function buildPrintPage(member = null, includeNotes = true) {
-    const songs = state.draft.songIds.map(songById).filter(Boolean);
+    const entries = entriesFor();
+    const songs = entries.filter(entry => !isInterlude(entry));
     const transitionPlan = member && includeNotes ? transitionPlanForMember(songs, member) : [];
     const page = document.createElement("section");
-    page.className = "print-page";
+    const transitionCount = transitionPlan.reduce((sum, item) => sum + (item.changes.length ? 1 : 0), 0);
+    const densityScore = entries.length + transitionCount;
+    const density = densityScore > 42 ? " print-ultra" : densityScore > 27 ? " print-dense" : densityScore > 20 ? " print-compact" : "";
+    page.className = `print-page${density}`;
 
     const header = document.createElement("header");
     header.className = "print-header";
@@ -1142,7 +1311,17 @@
 
     const list = document.createElement("ol");
     list.className = "print-list";
-    songs.forEach((song, index) => {
+    let songIndex = 0;
+    entries.forEach(entry => {
+      if (isInterlude(entry)) {
+        const interlude = document.createElement("li");
+        interlude.className = "print-interlude";
+        interlude.textContent = `${entry.title}${entry.durationSec ? ` · ${formatTime(entry.durationSec)}` : ""}`;
+        list.append(interlude);
+        return;
+      }
+
+      const index = songIndex++;
       if (member && includeNotes && index > 0) {
         const changes = transitionPlan[index]?.changes || [];
         if (changes.length) {
@@ -1155,23 +1334,22 @@
 
       const row = document.createElement("li");
       row.className = "print-song";
+      const left = document.createElement("span");
+      left.className = "print-left";
       const songTitle = document.createElement("span");
       songTitle.className = "print-song-title";
-      songTitle.textContent = song.title;
-      row.append(songTitle);
+      songTitle.textContent = entry.title;
+      const right = document.createElement("span");
+      right.className = "print-right";
+      row.append(left, songTitle, right);
 
       if (member && includeNotes) {
-        const note = normalizeNote(song.memberNotes?.[member.id]);
-        if (noteHasContent(note)) {
-          const notes = document.createElement("div");
-          notes.className = "print-notes";
-          const instrument = transitionPlan[index]?.instrument || note.instrument;
-          if (instrumentUsesCapo(member, instrument)) appendPrintNote(notes, "", note.capo);
-          if (profileForMember(member).instruments.length > 1) appendPrintNote(notes, "", instrument);
-          if (instrumentUsesSound(instrument)) appendPrintNote(notes, "Zvuk", note.sound);
-          appendPrintNote(notes, "", note.text, false);
-          if (notes.childElementCount) row.append(notes);
-        }
+        const note = normalizeNote(entry.memberNotes?.[member.id]);
+        const instrument = transitionPlan[index]?.instrument || note.instrument || profileForMember(member).defaultInstrument;
+        if (instrumentUsesCapo(member, instrument)) appendPrintNote(left, "", note.capo);
+        if (profileForMember(member).instruments.length > 1) appendPrintNote(left, "", instrument, false);
+        if (instrumentUsesSound(instrument)) appendPrintNote(right, "", note.sound);
+        appendPrintNote(right, "", note.text, false);
       }
       list.append(row);
     });
@@ -1222,18 +1400,35 @@
       body { margin: 0; color: #111; background: #e9e9e9; font-family: Arial, sans-serif; }
       .screen-bar { position: sticky; z-index: 5; top: 0; display: flex; justify-content: center; gap: 10px; padding: 12px; background: #171512; box-shadow: 0 3px 18px #0005; }
       .screen-bar button { border: 0; border-radius: 9px; padding: 10px 16px; color: #241708; background: #ffb23f; font: 700 14px Arial, sans-serif; cursor: pointer; }
-      .print-page { position: relative; display: flex; flex-direction: column; width: 210mm; min-height: 297mm; margin: 14px auto; padding: 8mm 10mm; color: #111; background: #fff; box-shadow: 0 10px 35px #0002; break-after: page; page-break-after: always; }
+      .print-page { position: relative; display: flex; flex-direction: column; width: 210mm; height: 297mm; margin: 14px auto; padding: 7mm 10mm; overflow: hidden; color: #111; background: #fff; box-shadow: 0 10px 35px #0002; break-after: page; page-break-after: always; }
       .print-page:last-child { break-after: auto; page-break-after: auto; }
-      .print-header { position: absolute; top: 8mm; right: 10mm; left: 10mm; margin: 0; text-align: center; }
-      .print-member strong { display: inline-block; border: 1px solid #bbb; border-radius: 999px; padding: 3px 8px; color: #555; font-size: 9pt; font-weight: 800; line-height: 1; letter-spacing: .14em; text-transform: uppercase; }
-      .print-list { width: 100%; margin: auto 0; padding: 16mm 0; list-style: none; counter-reset: print-order; }
-      .print-song { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid #ccc; counter-increment: print-order; break-inside: avoid; }
-      .print-song::before { content: counter(print-order, decimal-leading-zero); color: #666; font-size: 11pt; text-align: left; }
-      .print-song-title { font-size: 20pt; font-weight: 900; line-height: 1.08; text-align: center; }
-      .print-notes { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 9px; color: #222; font-size: 10.5pt; text-align: center; }
-      .print-note-chip { border-radius: 4px; padding: 2px 6px; background: #eee; font-weight: 800; }
-      .print-transition { padding: 5px 12px; color: #8b4e00; font-size: 10.5pt; font-weight: 800; text-align: center; break-inside: avoid; }
+      .print-header { position: absolute; top: 6mm; right: 10mm; left: 10mm; margin: 0; text-align: center; }
+      .print-member strong { display: inline-block; border-bottom: 2px solid #222; padding: 0 5px 3px; color: #222; font-size: 10pt; font-weight: 800; line-height: 1; letter-spacing: .13em; text-transform: uppercase; }
+      .print-list { display: flex; flex: 1; flex-direction: column; justify-content: center; width: 100%; margin: 0; padding: 13mm 0 3mm; list-style: none; counter-reset: print-order; }
+      .print-song { position: relative; display: grid; grid-template-columns: 34mm minmax(0, 1fr) 40mm; gap: 3mm; align-items: center; min-height: 8mm; padding: 1.8mm 0; border-bottom: 1px solid #d2d2d2; counter-increment: print-order; break-inside: avoid; }
+      .print-song::before { position: absolute; left: -7mm; width: 6mm; content: counter(print-order); color: #777; font-size: 8pt; text-align: right; }
+      .print-song-title { font-size: 18pt; font-weight: 900; line-height: 1.02; text-align: center; }
+      .print-left, .print-right { display: flex; flex-wrap: wrap; gap: 1mm 2mm; align-items: center; color: #222; font-size: 9pt; line-height: 1.05; }
+      .print-right { justify-content: flex-end; text-align: right; }
+      .print-note-chip { border-radius: 3px; padding: 1px 4px; background: #e7e7e7; font-weight: 900; }
+      .print-transition { padding: 1.2mm 8mm; color: #8b4e00; font-size: 9pt; font-weight: 800; line-height: 1.05; text-align: center; break-inside: avoid; }
       .print-transition::before { content: "↻ "; }
+      .print-interlude { margin: 1mm 12mm; border-block: 1px dashed #888; padding: 1.2mm; color: #444; font-size: 10pt; font-weight: 800; text-align: center; text-transform: uppercase; break-inside: avoid; }
+      .print-compact .print-song { min-height: 6.6mm; padding: 1mm 0; }
+      .print-compact .print-song-title { font-size: 15.5pt; }
+      .print-compact .print-transition, .print-compact .print-left, .print-compact .print-right { font-size: 8pt; }
+      .print-dense .print-list { padding-top: 11mm; }
+      .print-dense .print-song { min-height: 5.8mm; padding: .65mm 0; }
+      .print-dense .print-song-title { font-size: 13.5pt; }
+      .print-dense .print-transition { padding: .7mm 8mm; font-size: 7.5pt; }
+      .print-dense .print-left, .print-dense .print-right { font-size: 7.5pt; }
+      .print-dense .print-interlude { margin-block: .5mm; padding: .7mm; font-size: 8pt; }
+      .print-ultra .print-list { padding-top: 10mm; }
+      .print-ultra .print-song { min-height: 5mm; padding: .35mm 0; }
+      .print-ultra .print-song-title { font-size: 12.5pt; }
+      .print-ultra .print-transition { padding: .35mm 8mm; font-size: 7pt; }
+      .print-ultra .print-left, .print-ultra .print-right { font-size: 7pt; }
+      .print-ultra .print-interlude { margin-block: .3mm; padding: .4mm; font-size: 7.5pt; }
       @page { size: A4 portrait; margin: 0; }
       @media print {
         body { background: #fff; }
@@ -1241,7 +1436,7 @@
         .print-page { margin: 0; box-shadow: none; }
       }
       @media screen and (max-width: 800px) {
-        .print-page { width: 100%; min-height: 0; margin: 0; padding: 18px; }
+        .print-page { width: 100%; height: auto; min-height: 0; margin: 0; padding: 18px; overflow: visible; }
       }
     `;
   }
@@ -1284,6 +1479,7 @@
     elements.songMinutes.value = song ? Math.floor(song.durationSec / 60) : 3;
     elements.songSeconds.value = song ? song.durationSec % 60 : 30;
     elements.archiveSong.hidden = !song;
+    elements.deleteSong.hidden = !song;
     elements.archiveSong.textContent = song?.archived ? "Obnovit píseň" : "Archivovat píseň";
     elements.archiveSong.classList.toggle("button-danger", !song?.archived);
     elements.archiveSong.classList.toggle("button-ghost", Boolean(song?.archived));
@@ -1332,6 +1528,49 @@
     showToast(song.archived ? `Píseň „${song.title}“ byla archivována.` : `Píseň „${song.title}“ je znovu aktivní.`);
   }
 
+  function deleteSongPermanently() {
+    const song = songById(editingSongId);
+    if (!song || !confirm(`Opravdu trvale smazat píseň „${song.title}“? Zmizí také ze všech uložených setlistů.`)) return;
+    state.songs = state.songs.filter(candidate => candidate.id !== song.id);
+    state.draft.songIds = state.draft.songIds.filter(id => id !== song.id);
+    state.savedSetlists.forEach(set => {
+      set.songIds = set.songIds.filter(id => id !== song.id);
+    });
+    commit({ library: true, saved: true });
+    elements.songDialog.close();
+    showToast(`Píseň „${song.title}“ byla trvale smazána.`);
+  }
+
+  function openInterludeDialog() {
+    elements.interludeTitle.value = "Pauza";
+    elements.interludeMinutes.value = 1;
+    elements.interludeSeconds.value = 0;
+    elements.interludeError.textContent = "";
+    elements.interludeDialog.showModal();
+    requestAnimationFrame(() => elements.interludeTitle.select());
+  }
+
+  function addInterludeFromDialog() {
+    const title = elements.interludeTitle.value.trim();
+    const minutes = Number(elements.interludeMinutes.value);
+    const seconds = Number(elements.interludeSeconds.value);
+    if (!title) {
+      elements.interludeError.textContent = "Doplň název pauzy nebo intermezza.";
+      return false;
+    }
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 59 || !Number.isInteger(seconds) || seconds < 0 || seconds > 59) {
+      elements.interludeError.textContent = "Čas musí být v rozsahu 0:00 až 59:59.";
+      return false;
+    }
+    const id = makeId("interlude");
+    state.draft.interludes[id] = { id, type: "interlude", title, durationSec: minutes * 60 + seconds };
+    state.draft.songIds.push(id);
+    commit();
+    elements.interludeDialog.close();
+    showToast(`„${title}“ bylo přidáno do setu.`);
+    return true;
+  }
+
   function saveCurrentSet() {
     const name = state.draft.name.trim();
     if (!name) {
@@ -1355,6 +1594,8 @@
       name,
       targetMinutes: state.draft.targetMinutes,
       songIds: [...state.draft.songIds],
+      interludes: JSON.parse(JSON.stringify(state.draft.interludes)),
+      includeGaps: state.draft.includeGaps,
       updatedAt: now
     });
     commit({ saved: true });
@@ -1363,7 +1604,7 @@
 
   function startNewSet() {
     if (state.draft.songIds.length && !confirm("Začít nový set? Aktuální rozpracovaná podoba zůstane jen tehdy, pokud jsi ji uložil.")) return;
-    state.draft = { savedId: null, name: "", targetMinutes: 45, songIds: [] };
+    state.draft = emptyDraft();
     commit({ library: true, saved: true });
     elements.setName.focus();
   }
@@ -1375,7 +1616,9 @@
       savedId: saved.id,
       name: saved.name,
       targetMinutes: saved.targetMinutes,
-      songIds: [...saved.songIds]
+      songIds: [...saved.songIds],
+      interludes: JSON.parse(JSON.stringify(saved.interludes || {})),
+      includeGaps: Boolean(saved.includeGaps)
     };
     commit({ library: true, saved: true });
     window.scrollTo({ top: elements.setName.getBoundingClientRect().top + window.scrollY - 18, behavior: "smooth" });
@@ -1390,7 +1633,9 @@
       savedId: null,
       name: copyName,
       targetMinutes: saved.targetMinutes,
-      songIds: [...saved.songIds]
+      songIds: [...saved.songIds],
+      interludes: JSON.parse(JSON.stringify(saved.interludes || {})),
+      includeGaps: Boolean(saved.includeGaps)
     };
     commit({ library: true, saved: true });
     showToast("Kopie je připravená. Ulož ji jako nový set.");
@@ -1575,7 +1820,14 @@
     saveState();
   });
   elements.targetMinutes.addEventListener("input", event => {
-    state.draft.targetMinutes = Math.max(1, Math.min(600, Number(event.target.value) || 45));
+    state.draft.targetMinutes = event.target.value === ""
+      ? ""
+      : Math.max(1, Math.min(600, Number(event.target.value) || 1));
+    saveState();
+    renderCurrentSet();
+  });
+  elements.includeGaps.addEventListener("change", event => {
+    state.draft.includeGaps = event.target.checked;
     saveState();
     renderCurrentSet();
   });
@@ -1586,9 +1838,11 @@
   elements.clearSet.addEventListener("click", () => {
     if (!state.draft.songIds.length || confirm("Opravdu vyprázdnit aktuální set?")) {
       state.draft.songIds = [];
+      state.draft.interludes = {};
       commit({ library: true });
     }
   });
+  elements.addInterlude.addEventListener("click", openInterludeDialog);
   elements.exportData.addEventListener("click", exportData);
   elements.importData.addEventListener("change", event => {
     const [file] = event.target.files;
@@ -1622,6 +1876,11 @@
       toggleSongArchive();
       return;
     }
+    if (event.submitter?.value === "delete") {
+      event.preventDefault();
+      deleteSongPermanently();
+      return;
+    }
     event.preventDefault();
     if (saveSongFromDialog()) elements.songDialog.close();
   });
@@ -1632,6 +1891,12 @@
     saveMemberNotes();
   });
   elements.noteInstrument.addEventListener("change", updateActiveMemberNoteFields);
+
+  elements.interludeForm.addEventListener("submit", event => {
+    if (event.submitter?.value === "cancel") return;
+    event.preventDefault();
+    addInterludeFromDialog();
+  });
 
   elements.addMember.addEventListener("click", addMemberRow);
   elements.membersForm.addEventListener("submit", event => {

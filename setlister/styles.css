@@ -117,7 +117,7 @@ h2 { margin-bottom: 0; font-size: 1.23rem; letter-spacing: -.025em; }
 
 .set-controls {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 125px auto;
+  grid-template-columns: minmax(160px, 1fr) 112px minmax(145px, auto) auto;
   align-items: end;
   gap: 16px;
   margin: 21px 0 0;
@@ -126,6 +126,7 @@ h2 { margin-bottom: 0; font-size: 1.23rem; letter-spacing: -.025em; }
   border-radius: 14px;
   background: rgb(10 9 8 / 23%);
 }
+.gap-control { align-self: center; padding-bottom: 2px; }
 
 .field { display: grid; gap: 7px; }
 .field > span:first-child { color: var(--muted); font-size: .7rem; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
@@ -296,6 +297,9 @@ select {
   transition: transform .15s ease, border-color .15s ease, opacity .15s ease;
 }
 .set-song::before { content: counter(set-order, decimal-leading-zero); color: #81786c; font-size: .72rem; font-variant-numeric: tabular-nums; text-align: center; }
+.set-interlude { border-style: dashed; border-color: #72624c; background: rgb(255 178 63 / 5%); }
+.set-interlude::before { content: "—"; color: var(--accent); }
+.set-interlude .set-song-title strong { color: var(--accent-light); }
 .set-song.dragging, .library-song.dragging { opacity: .3; }
 .set-song.drop-before { border-top-color: var(--accent); box-shadow: 0 -4px 0 -2px var(--accent); }
 .set-song .drag-handle { text-align: center; }
@@ -508,6 +512,7 @@ code { color: var(--accent-light); }
   .page-shell { padding: 42px 0 68px; }
   h1 { font-size: clamp(2.75rem, 15vw, 4.7rem); }
   .set-controls { grid-template-columns: 1fr 110px; }
+  .gap-control { grid-column: 1 / -1; }
   .toolbar-buttons { grid-column: 1 / -1; }
   .toolbar-buttons .button { flex: 1; }
   .current-set, .library { padding: 14px; }
@@ -536,16 +541,33 @@ code { color: var(--accent-light); }
   body { color: #111; background: #fff; font-family: Arial, sans-serif; }
   body > *:not(#printArea) { display: none !important; }
   #printArea { display: block !important; }
-  .print-page { position: relative; display: flex; flex-direction: column; min-height: 281mm; break-after: page; page-break-after: always; color: #111; }
+  .print-page { position: relative; display: flex; flex-direction: column; height: 281mm; overflow: hidden; break-after: page; page-break-after: always; color: #111; }
   .print-page:last-child { break-after: auto; page-break-after: auto; }
   .print-header { position: absolute; top: 0; right: 0; left: 0; margin: 0; text-align: center; }
-  .print-member strong { display: inline-block; border: 1px solid #bbb; border-radius: 999px; padding: 3px 8px; color: #555; font-size: 9pt; font-weight: 800; line-height: 1; letter-spacing: .14em; text-transform: uppercase; }
-  .print-list { width: 100%; margin: auto 0; padding: 16mm 0; list-style: none; counter-reset: print-order; }
-  .print-song { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid #ccc; counter-increment: print-order; break-inside: avoid; }
-  .print-song::before { content: counter(print-order, decimal-leading-zero); color: #666; font-size: 11pt; text-align: left; }
-  .print-song-title { font-size: 20pt; font-weight: 900; line-height: 1.08; text-align: center; }
-  .print-notes { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 9px; color: #222; font-size: 10.5pt; text-align: center; }
-  .print-note-chip { border-radius: 4px; padding: 2px 6px; background: #eee; font-weight: 800; }
-  .print-transition { padding: 5px 12px; color: #8b4e00; font-size: 10.5pt; font-weight: 800; text-align: center; break-inside: avoid; }
+  .print-member strong { display: inline-block; border-bottom: 2px solid #222; padding: 0 5px 3px; color: #222; font-size: 10pt; font-weight: 800; line-height: 1; letter-spacing: .13em; text-transform: uppercase; }
+  .print-list { display: flex; flex: 1; flex-direction: column; justify-content: center; width: 100%; margin: 0; padding: 13mm 0 3mm; list-style: none; counter-reset: print-order; }
+  .print-song { position: relative; display: grid; grid-template-columns: 34mm minmax(0, 1fr) 40mm; gap: 3mm; align-items: center; min-height: 8mm; padding: 1.8mm 0; border-bottom: 1px solid #d2d2d2; counter-increment: print-order; break-inside: avoid; }
+  .print-song::before { position: absolute; left: -7mm; width: 6mm; content: counter(print-order); color: #777; font-size: 8pt; text-align: right; }
+  .print-song-title { font-size: 18pt; font-weight: 900; line-height: 1.02; text-align: center; }
+  .print-left, .print-right { display: flex; flex-wrap: wrap; gap: 1mm 2mm; align-items: center; color: #222; font-size: 9pt; line-height: 1.05; }
+  .print-right { justify-content: flex-end; text-align: right; }
+  .print-note-chip { border-radius: 3px; padding: 1px 4px; background: #e7e7e7; font-weight: 900; }
+  .print-transition { padding: 1.2mm 8mm; color: #8b4e00; font-size: 9pt; font-weight: 800; line-height: 1.05; text-align: center; break-inside: avoid; }
   .print-transition::before { content: "↻ "; }
+  .print-interlude { margin: 1mm 12mm; border-block: 1px dashed #888; padding: 1.2mm; color: #444; font-size: 10pt; font-weight: 800; text-align: center; text-transform: uppercase; break-inside: avoid; }
+  .print-compact .print-song { min-height: 6.6mm; padding: 1mm 0; }
+  .print-compact .print-song-title { font-size: 15.5pt; }
+  .print-compact .print-transition, .print-compact .print-left, .print-compact .print-right { font-size: 8pt; }
+  .print-dense .print-list { padding-top: 11mm; }
+  .print-dense .print-song { min-height: 5.8mm; padding: .65mm 0; }
+  .print-dense .print-song-title { font-size: 13.5pt; }
+  .print-dense .print-transition { padding: .7mm 8mm; font-size: 7.5pt; }
+  .print-dense .print-left, .print-dense .print-right { font-size: 7.5pt; }
+  .print-dense .print-interlude { margin-block: .5mm; padding: .7mm; font-size: 8pt; }
+  .print-ultra .print-list { padding-top: 10mm; }
+  .print-ultra .print-song { min-height: 5mm; padding: .35mm 0; }
+  .print-ultra .print-song-title { font-size: 12.5pt; }
+  .print-ultra .print-transition { padding: .35mm 8mm; font-size: 7pt; }
+  .print-ultra .print-left, .print-ultra .print-right { font-size: 7pt; }
+  .print-ultra .print-interlude { margin-block: .3mm; padding: .4mm; font-size: 7.5pt; }
 }

@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#12110f">
   <meta name="description" content="Lokální plánovač koncertních setlistů.">
   <title>Setlister — plánovač setlistů</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -97,6 +98,10 @@
               <b>min</b>
             </span>
           </label>
+          <label class="check-field gap-control">
+            <input id="includeGaps" type="checkbox">
+            <span>Počítat 20 s mezi písněmi</span>
+          </label>
           <div class="toolbar-buttons">
             <button class="button button-ghost" id="newSet" type="button">Nový set</button>
             <button class="button button-primary" id="saveSet" type="button">Uložit set</button>
@@ -122,6 +127,7 @@
         <div class="set-footer">
           <p id="unknownDurations"></p>
           <div class="set-footer-actions">
+            <button class="button button-small button-ghost" id="addInterlude" type="button">＋ Pauza / intermezzo</button>
             <button class="text-button danger" id="clearSet" type="button">Vyprázdnit set</button>
             <button class="button button-small button-ghost" id="exportSet" type="button">Tisk / PDF pro kapelu</button>
           </div>
@@ -172,9 +178,42 @@
       </div>
       <p class="form-error" id="songError" role="alert"></p>
       <div class="modal-actions">
+        <button class="button button-danger" id="deleteSong" value="delete" type="submit" hidden>Smazat píseň</button>
         <button class="button button-danger archive-song-button" id="archiveSong" value="archive" type="submit" hidden>Archivovat píseň</button>
         <button class="button button-ghost" value="cancel" type="submit">Zrušit</button>
         <button class="button button-primary" id="confirmSong" value="default" type="submit">Uložit píseň</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="interludeDialog" class="modal">
+    <form method="dialog" id="interludeForm">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">Průběh koncertu</p>
+          <h2>Přidat pauzu / intermezzo</h2>
+        </div>
+        <button class="modal-close" value="cancel" aria-label="Zavřít" type="submit">×</button>
+      </div>
+      <label class="field">
+        <span>Název</span>
+        <input id="interludeTitle" type="text" maxlength="100" value="Pauza" placeholder="Např. Moderování, výměna nástrojů">
+      </label>
+      <div class="duration-fields">
+        <label class="field">
+          <span>Minuty</span>
+          <input id="interludeMinutes" type="number" min="0" max="59" value="1" inputmode="numeric" required>
+        </label>
+        <span class="duration-separator">:</span>
+        <label class="field">
+          <span>Sekundy</span>
+          <input id="interludeSeconds" type="number" min="0" max="59" value="0" inputmode="numeric" required>
+        </label>
+      </div>
+      <p class="form-error" id="interludeError" role="alert"></p>
+      <div class="modal-actions">
+        <button class="button button-ghost" value="cancel" type="submit">Zrušit</button>
+        <button class="button button-primary" value="default" type="submit">Přidat do setu</button>
       </div>
     </form>
   </dialog>
