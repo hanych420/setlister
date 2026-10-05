@@ -6,6 +6,10 @@
 - Sdílená SQLite databáze v trvalém `/data`.
 - Synchronizace mezi zařízeními a historie posledních 200 verzí.
 - Repertoár, archivace, alba, XLSX import a tisk individuálních poznámek.
+## 0.2.1
+
+- Automatický dvacetisekundový prostoj se nepřičítá přes ručně vloženou pauzu nebo intermezzo.
+
 ## 0.2.0
 
 - Rozpracovaný setlist je nově soukromý pro každý prohlížeč a obnoví se po znovunačtení stránky.

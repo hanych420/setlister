@@ -487,8 +487,9 @@
     const entries = entriesFor(container);
     const contentSeconds = entries.reduce((sum, entry) => sum + entry.durationSec, 0);
     if (!container.includeGaps) return contentSeconds;
-    const songs = entries.filter(entry => !isInterlude(entry)).length;
-    return contentSeconds + Math.max(0, songs - 1) * 20;
+    const gapCount = entries.slice(1).filter((entry, index) =>
+      !isInterlude(entry) && !isInterlude(entries[index])).length;
+    return contentSeconds + gapCount * 20;
   }
 
   function memberById(id) {
