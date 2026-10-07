@@ -21,10 +21,21 @@
     saveFeedback: document.querySelector("#saveFeedback"),
     closeFeedback: document.querySelector("#closeFeedback"),
     cancelFeedback: document.querySelector("#cancelFeedback"),
+    adminSettings: document.querySelector("#adminSettings"),
+    adminModal: document.querySelector("#adminModal"),
+    closeAdmin: document.querySelector("#closeAdmin"),
+    adminUnlock: document.querySelector("#adminUnlock"),
+    adminHistory: document.querySelector("#adminHistory"),
+    adminPinForm: document.querySelector("#adminPinForm"),
+    adminPin: document.querySelector("#adminPin"),
+    adminPinError: document.querySelector("#adminPinError"),
+    unlockAdmin: document.querySelector("#unlockAdmin"),
+    historyList: document.querySelector("#historyList"),
     toast: document.querySelector("#toast")
   };
 
   const conversation = [];
+  const chatSessionId = (crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`).replace(/[^A-Za-z0-9_-]/g, "");
   let statusTimer = null;
   let toastTimer = null;
   let waiting = false;
@@ -110,8 +121,14 @@
     try {
       const status = await api("/api/gmail/status");
       renderAccounts(status);
-      if (!quiet) elements.connectionStatus.textContent = status.accounts.length
-        ? `Připojeno ${status.accounts.length} ze 2 účtů` : "Čekám na první účet";
+      if (!quiet) {
+        let text = status.accounts.length ? `Připojeno ${status.accounts.length} ze 2 účtů` : "Čekám na první účet";
+        const index = status.concertIndex;
+        if (index?.complete) text += ` · PropBot eviduje ${index.concertCount} koncertů`;
+        else if (index?.gmailReady) text += ` · PropBot zpracovává koncerty (${index.pendingThreads} zbývá)`;
+        else if (status.accounts.length) text += " · evidence koncertů čeká na dokončení Gmailu";
+        elements.connectionStatus.textContent = text;
+      }
     } catch (error) {
       elements.connectionStatus.textContent = error.message;
       if (!quiet) showToast(error.message, true);
@@ -163,7 +180,7 @@
   function addLoadingMessage() {
     const message = create("article", "chat-message assistant-message loading-message");
     message.dataset.loading = "true";
-    message.append(create("span", "assistant-mark", "?"));
+    message.append(create("span", "assistant-mark", "P"));
     const bubble = create("div", "message-bubble");
     bubble.append(create("span", "typing-dot"), create("span", "typing-dot"), create("span", "typing-dot"));
     message.append(bubble);
@@ -189,7 +206,7 @@
 
   function addAssistantMessage(answer, sources = [], feedbackQuestion = "") {
     const message = create("article", "chat-message assistant-message");
-    message.append(create("span", "assistant-mark", "?"));
+    message.append(create("span", "assistant-mark", "P"));
     const content = create("div", "assistant-content");
     content.append(create("div", "message-bubble answer-text", answer));
     if (sources.length) {
@@ -240,7 +257,7 @@
     try {
       const result = await api("/api/ask", {
         method: "POST",
-        body: JSON.stringify({ question, history: conversation.slice(-6) })
+        body: JSON.stringify({ question, history: conversation.slice(-6), sessionId: chatSessionId })
       });
       loading.remove();
       addAssistantMessage(result.answer, result.sources || [], question);
@@ -256,6 +273,66 @@
     }
   }
 
+  function showAdminUnlock(message = "") {
+    elements.adminUnlock.hidden = false;
+    elements.adminHistory.hidden = true;
+    elements.adminPinError.textContent = message;
+    elements.adminPin.value = "";
+    elements.unlockAdmin.disabled = false;
+    elements.unlockAdmin.textContent = "Odemknout";
+    requestAnimationFrame(() => elements.adminPin.focus());
+  }
+
+  function renderHistory(sessions) {
+    elements.historyList.replaceChildren();
+    if (!sessions.length) {
+      elements.historyList.append(create("p", "history-empty", "Zatím není uložená žádná konverzace."));
+      return;
+    }
+    sessions.forEach(session => {
+      const card = create("article", "history-session");
+      const heading = create("div", "history-session-heading");
+      const firstQuestion = session.messages.find(message => message.role === "user")?.content || "Konverzace";
+      heading.append(create("strong", "", firstQuestion));
+      heading.append(create("small", "", `${formatDate(session.last_activity_at)} · ${session.user_email}`));
+      card.append(heading);
+      const messages = create("div", "history-messages");
+      session.messages.forEach(item => {
+        const row = create("div", `history-message ${item.role === "user" ? "history-user" : "history-assistant"}`);
+        row.append(create("span", "", item.role === "user" ? "Dotaz" : "PropBot"));
+        row.append(create("p", "", item.content));
+        if (item.sources?.length) row.append(create("small", "", `${item.sources.length} zdrojových e-mailů`));
+        messages.append(row);
+      });
+      card.append(messages);
+      elements.historyList.append(card);
+    });
+  }
+
+  async function loadAdminHistory() {
+    const result = await api("/api/admin/chat-history");
+    renderHistory(result.sessions || []);
+    elements.adminUnlock.hidden = true;
+    elements.adminHistory.hidden = false;
+  }
+
+  async function openAdmin() {
+    elements.adminUnlock.hidden = true;
+    elements.adminHistory.hidden = true;
+    elements.adminModal.showModal();
+    elements.historyList.replaceChildren();
+    try {
+      await loadAdminHistory();
+    } catch (error) {
+      showAdminUnlock(error.message.includes("PIN") || error.message.includes("vypršelo") ? "" : error.message);
+    }
+  }
+
+  function closeAdmin() {
+    elements.adminModal.close();
+    elements.adminPinError.textContent = "";
+  }
+
   elements.toggleConnections.addEventListener("click", () => {
     elements.connectionPanel.hidden = !elements.connectionPanel.hidden;
     elements.toggleConnections.classList.toggle("active", !elements.connectionPanel.hidden);
@@ -263,6 +340,26 @@
   });
   elements.connectGmail.addEventListener("click", connectGmail);
   elements.syncGmail.addEventListener("click", syncGmail);
+  elements.adminSettings.addEventListener("click", openAdmin);
+  elements.closeAdmin.addEventListener("click", closeAdmin);
+  elements.adminModal.addEventListener("click", event => {
+    if (event.target === elements.adminModal) closeAdmin();
+  });
+  elements.adminPinForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    elements.unlockAdmin.disabled = true;
+    elements.unlockAdmin.textContent = "Ověřuji…";
+    elements.adminPinError.textContent = "";
+    try {
+      await api("/api/admin/unlock", {method: "POST", body: JSON.stringify({pin: elements.adminPin.value})});
+      await loadAdminHistory();
+    } catch (error) {
+      elements.adminPinError.textContent = error.message;
+      elements.unlockAdmin.disabled = false;
+      elements.unlockAdmin.textContent = "Zkusit znovu";
+      elements.adminPin.select();
+    }
+  });
   elements.chatForm.addEventListener("submit", event => {
     event.preventDefault();
     ask(elements.questionInput.value.trim());

@@ -2,6 +2,14 @@
 
 Přehled všech publikovaných verzí aplikace Setlister od prvního veřejného vydání.
 
+## 0.4.0 — PropBot a interní evidence koncertů
+
+- Kapelní asistent dostal jméno **PropBot**.
+- Koncertní e-mailová vlákna se jednorázově vytěží do strukturované SQLite evidence a po změně se automaticky přezpracují.
+- Dotazy na nejbližší koncert pracují s chronologicky seřazenými potvrzenými termíny a zachovávají odkazy na zdrojové e-maily.
+- Dokud není prvotní evidence kompletní, PropBot nesmí tvrdit, že žádný koncert neexistuje.
+- Historie konverzací je uložená lokálně a schovaná pod ozubeným kolečkem za konfigurovatelným PINem.
+
 ## 0.3.1 — Veřejné informace pro Google OAuth
 
 - Přidány veřejné stránky O aplikaci, Ochrana soukromí a Podmínky používání.

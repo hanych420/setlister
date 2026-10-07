@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#12110f">
-  <meta name="description" content="Read-only kapelní asistent nad připojenými Gmaily.">
-  <title>Zeptej se — Setlister</title>
+  <meta name="description" content="PropBot — read-only kapelní asistent nad připojenými Gmaily.">
+  <title>PropBot — Setlister</title>
   <link rel="icon" href="assets/favicon.svg?v=0.3.1" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.3.5">
+  <link rel="stylesheet" href="styles.css?v=0.4.0">
 </head>
 <body class="ask-page">
   <div class="stage-light" aria-hidden="true"></div>
@@ -19,12 +19,13 @@
     </a>
     <nav class="main-nav" aria-label="Hlavní navigace">
       <a href="index.html">Setlisty</a>
-      <a href="ask.html" class="active" aria-current="page">Zeptej se</a>
+      <a href="ask.html" class="active" aria-current="page">PropBot</a>
     </nav>
     <div class="top-actions assistant-top-actions">
       <span class="readonly-badge" title="Setlister nemá oprávnění zapisovat do Gmailu">
         <span aria-hidden="true">◉</span> Gmail pouze ke čtení
       </span>
+      <button class="admin-gear" id="adminSettings" type="button" aria-label="Administrace PropBota" title="Administrace PropBota">⚙</button>
       <button class="button button-ghost" id="toggleConnections" type="button">Připojené účty</button>
     </div>
   </header>
@@ -32,8 +33,8 @@
   <main class="ask-shell">
     <section class="assistant-intro">
       <p class="eyebrow">Kapelní asistent</p>
-      <h1>Zeptej se mailů</h1>
-      <p>Odpověď hledám v obou kapelních schránkách a vždy ukážu, ze kterých zpráv vychází.</p>
+      <h1>PropBot</h1>
+      <p>Odpověď hledám v obou kapelních schránkách a v interní evidenci koncertů a vždy ukážu, ze kterých zpráv vychází.</p>
     </section>
 
     <section class="connection-panel panel" id="connectionPanel" hidden aria-labelledby="connectionTitle">
@@ -63,9 +64,9 @@
 
       <div class="chat-messages" id="chatMessages" aria-live="polite">
         <div class="welcome-message">
-          <span class="assistant-mark" aria-hidden="true">?</span>
+          <span class="assistant-mark" aria-hidden="true">P</span>
           <div>
-            <strong>Na co se chceš zeptat?</strong>
+            <strong>Na co se chceš PropBota zeptat?</strong>
             <p>Třeba „V kolik máme arrival v Olomouci?“ nebo použij některou z rychlých otázek.</p>
           </div>
         </div>
@@ -104,7 +105,34 @@
     </form>
   </dialog>
 
+  <dialog class="modal modal-wide history-modal" id="adminModal">
+    <div class="admin-modal-body">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">PropBot</p>
+          <h2>Historie konverzací</h2>
+        </div>
+        <button class="modal-close" id="closeAdmin" type="button" aria-label="Zavřít">×</button>
+      </div>
+      <section id="adminUnlock" hidden>
+        <p class="modal-help">Historie je chráněná administračním PINem. Odemčení platí 30 minut.</p>
+        <form id="adminPinForm">
+          <label for="adminPin">PIN</label>
+          <input id="adminPin" type="password" inputmode="numeric" autocomplete="off" maxlength="32" required>
+          <p class="form-error" id="adminPinError" role="alert"></p>
+          <div class="modal-actions">
+            <button class="button button-primary" id="unlockAdmin" type="submit">Odemknout</button>
+          </div>
+        </form>
+      </section>
+      <section id="adminHistory" hidden>
+        <p class="modal-help">Ukládají se pouze otázky, odpovědi a odkazy na zdroje. Obsah e-mailů se do historie nekopíruje.</p>
+        <div class="history-list" id="historyList"></div>
+      </section>
+    </div>
+  </dialog>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="ask.js?v=0.3.5"></script>
+  <script src="ask.js?v=0.4.0"></script>
 </body>
 </html>

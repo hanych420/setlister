@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0
+
+- Kapelní asistent se nově jmenuje **PropBot**.
+- Po dokončení Gmail synchronizace se koncertní vlákna jednorázově vytěží do strukturované lokální evidence; změněná vlákna se přezpracují automaticky.
+- Evidence rozlišuje poptávku, opci, potvrzený a zrušený koncert a ukládá datum, místo, arrival, zvukovou zkoušku, čas hraní, kontakt, jistotu a zdrojové e-maily.
+- Koncertní dotazy používají chronologicky seřazenou evidenci; dokud není prvotní index hotový, PropBot nesmí tvrdit, že žádný koncert neexistuje.
+- Nedokončená prvotní Gmail synchronizace po restartu přeskakuje již uložené zprávy.
+- Konverzace se ukládají lokálně bez kopírování obsahu e-mailů a lze je zobrazit pod nenápadným ozubeným kolečkem.
+- Historie je chráněna konfigurovatelným PINem, pěti pokusy za deset minut a 30minutovou HttpOnly administrační relací.
+
 ## 0.3.5
 
 - První indexace Gmailu už nedrží SQLite zamčenou během síťových požadavků, takže neblokuje ukládání setlistů ani poučení asistenta.
