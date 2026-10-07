@@ -177,6 +177,7 @@
     elements.feedbackInput.value = "";
     elements.feedbackError.textContent = "";
     elements.saveFeedback.disabled = false;
+    elements.saveFeedback.textContent = "Uložit poučení";
     elements.feedbackModal.showModal();
     requestAnimationFrame(() => elements.feedbackInput.focus());
   }
@@ -294,6 +295,7 @@
     }
     const feedback = activeFeedback;
     elements.saveFeedback.disabled = true;
+    elements.saveFeedback.textContent = "Ukládám…";
     elements.feedbackError.textContent = "";
     try {
       await api("/api/assistant/lessons", {
@@ -307,6 +309,7 @@
     } catch (error) {
       elements.feedbackError.textContent = error.message;
       elements.saveFeedback.disabled = false;
+      elements.saveFeedback.textContent = "Zkusit znovu";
     }
   });
 

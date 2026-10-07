@@ -372,11 +372,13 @@ def _sync_account(account_email: str, *, force_full: bool = False) -> None:
                                 if message_id:
                                     upsert_gmail_message(database, account_email,
                                                          gmail_get(token, f"messages/{message_id}", {"format": "full"}))
+                                    database.commit()
                             for item in event.get("messagesDeleted") or []:
                                 message_id = (item.get("message") or {}).get("id")
                                 if message_id:
                                     database.execute("DELETE FROM gmail_messages WHERE account_email=? AND message_id=?", (account_email, message_id))
                                     database.execute("DELETE FROM gmail_messages_fts WHERE account_email=? AND message_id=?", (account_email, message_id))
+                                    database.commit()
                         page_token = str(response.get("nextPageToken") or "")
                         latest_history = str(response.get("historyId") or latest_history)
                         if not page_token:
@@ -393,6 +395,7 @@ def _sync_account(account_email: str, *, force_full: bool = False) -> None:
                 if force_full:
                     database.execute("DELETE FROM gmail_messages WHERE account_email=?", (account_email,))
                     database.execute("DELETE FROM gmail_messages_fts WHERE account_email=?", (account_email,))
+                    database.commit()
                 page_token, fetched = "", 0
                 while fetched < MAX_INDEXED_MESSAGES:
                     response = gmail_get(token, "messages", {"q": f"newer_than:{options['lookback_days']}d",
@@ -400,6 +403,9 @@ def _sync_account(account_email: str, *, force_full: bool = False) -> None:
                     for item in response.get("messages") or []:
                         upsert_gmail_message(database, account_email,
                                              gmail_get(token, f"messages/{item['id']}", {"format": "full"}))
+                        # Never hold SQLite's single writer lock while waiting for the next Gmail request.
+                        # This keeps setlist edits and assistant lessons responsive during the first index.
+                        database.commit()
                         fetched += 1
                         if fetched >= MAX_INDEXED_MESSAGES:
                             break
@@ -815,6 +821,8 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                 self.send_json(HTTPStatus.CREATED, {"ok": True, "lessonId": cursor.lastrowid,
                     "createdAt": timestamp})
             except ValueError as error: self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            except Exception as error: self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR,
+                                                       {"error": f"Poučení se nepodařilo uložit: {error}"})
             return
         if path == "/api/gmail/sync":
             if not self.require_assistant_access(admin=True): return

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.5
+
+- První indexace Gmailu už nedrží SQLite zamčenou během síťových požadavků, takže neblokuje ukládání setlistů ani poučení asistenta.
+- Tlačítko pro uložení poučení nyní zobrazuje průběh a případnou chybu lze zopakovat.
+
 ## 0.3.4
 
 - Ke každé odpovědi přibylo tlačítko **Poučit asistenta** pro uložení opravy nebo kapelního pojmu.
