@@ -74,6 +74,8 @@ PropBot po dokončení Gmail synchronizace zpracuje koncertní vlákna do intern
 
 Záměr dotazu se vyhodnocuje strukturovaně a přenáší se i do navazujících otázek. Požadavky na všechny koncerty, města nebo termíny se sestavují přímo z databáze, nikoliv volným opisem modelu. Díky tomu odpověď obsahuje každý odpovídající záznam.
 
+Přehled budoucích koncertů obsahuje pouze potvrzené záznamy se známým datem od dnešního dne dál. Historické faktury, lístky nebo komunikace po akci se za budoucí koncert nepovažují. Při změně pravidel extrakce se odvozená koncertní evidence jednorázově přestaví; e-mailový index a Gmail tokeny zůstávají zachované.
+
 Historie úspěšných konverzací se ukládá lokálně bez textů zdrojových e-mailů. Je dostupná pod ozubeným kolečkem po zadání hodnoty `admin_history_pin`; odemčení trvá 30 minut.
 
 ## Ukládání dat

@@ -2,6 +2,15 @@
 
 Přehled všech publikovaných verzí aplikace Setlister od prvního veřejného vydání.
 
+## 0.4.2 — Čistá evidence nadcházejících koncertů
+
+- Nadcházející koncert musí mít známé datum, které není v minulosti; nedatované záznamy se do budoucího přehledu nepočítají.
+- Faktury, lístky, vyúčtování, komunikace o penězích a materiály po akci se nepovažují za důkaz budoucího koncertu.
+- Potvrzený koncert bez data se při extrakci automaticky sníží na nejasný stav.
+- Místo konání už nelze nahrazovat názvem akce a vybrané varianty měst se sjednocují, například Prague na Praha.
+- Po aktualizaci se koncertní evidence jednorázově znovu vytvoří podle přísnějších pravidel.
+- Duplicitní seznam zdrojových e-mailů pod odpovědí byl odstraněn; zůstávají odkazy přímo u jednotlivých tvrzení.
+
 ## 0.4.1 — Spolehlivé seznamy a čitelné odpovědi
 
 - PropBot rozpoznává koncertní záměr pomocí strukturované AI klasifikace a zachovává téma, rok i místo v navazujících otázkách.

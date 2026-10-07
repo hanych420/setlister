@@ -310,24 +310,6 @@
     const renderedAnswer = renderAnswer(answer, sources);
     renderedAnswer.classList.add("message-bubble", "answer-text");
     content.append(renderedAnswer);
-    if (sources.length) {
-      const sourceWrap = create("div", "answer-sources");
-      sourceWrap.append(create("strong", "source-heading", "Zdrojové e-maily"));
-      sources.forEach((source, index) => {
-        const link = create("a", "source-card");
-        link.href = source.url;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        link.append(create("span", "source-ref", `E-mail ${index + 1}`));
-        const details = create("span", "source-details");
-        details.append(create("strong", "", source.subject || "Bez předmětu"));
-        details.append(create("small", "", `${source.sender || source.account} · ${formatDate(source.date)}`));
-        if (source.attachments?.length) details.append(create("small", "source-attachment", `Příloha: ${source.attachments.join(", ")}`));
-        link.append(details, create("span", "source-open", "↗"));
-        sourceWrap.append(link);
-      });
-      content.append(sourceWrap);
-    }
     if (feedbackQuestion) {
       const actions = create("div", "answer-actions");
       const feedbackButton = create("button", "answer-feedback", "Poučit asistenta");

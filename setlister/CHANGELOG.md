@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.2
+
+- Budoucí přehledy vyžadují známé datum od dneška dál a nepřipouštějí nedatované záznamy.
+- Extraktor rozlišuje historické a administrativní doklady od budoucích koncertů a zpřísňuje status confirmed.
+- Venue obsahuje pouze skutečné místo konání a město Prague se normalizuje na Praha.
+- Nová verze extrakčního indexu při prvním startu bezpečně přestaví odvozenou evidenci koncertů z lokálních e-mailů.
+- Odstraněny duplicitní karty zdrojových e-mailů pod odpovědí.
+
 ## 0.4.1
 
 - Přidána strukturovaná AI klasifikace záměru dotazu s lokální bezpečnostní zálohou.

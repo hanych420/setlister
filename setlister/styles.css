@@ -594,17 +594,6 @@ code { color: var(--accent-light); }
 .answer-table th, .answer-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 .answer-table th { color: var(--accent-light); background: rgb(255 178 63 / 5%); font-size: .67rem; letter-spacing: .035em; text-transform: uppercase; }
 .answer-table tbody tr:last-child td { border-bottom: 0; }
-.answer-sources { display: grid; gap: 7px; margin-top: 11px; }
-.source-heading { color: var(--muted); font-size: .65rem; letter-spacing: .08em; text-transform: uppercase; }
-.source-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 11px; padding: 9px 10px; color: var(--text); background: rgb(255 255 255 / 2%); text-decoration: none; }
-.source-card:hover { border-color: var(--accent); background: rgb(255 178 63 / 4%); }
-.source-ref { color: var(--accent); font-size: .67rem; font-weight: 900; }
-.source-details { min-width: 0; }
-.source-details strong, .source-details small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.source-details strong { font-size: .72rem; }
-.source-details small { margin-top: 2px; color: var(--muted); font-size: .62rem; }
-.source-details .source-attachment { color: var(--accent-light); }
-.source-open { color: var(--muted); }
 .answer-actions { display: flex; margin-top: 8px; }
 .answer-feedback { border: 0; padding: 4px 2px; color: var(--muted); background: none; font-size: .67rem; font-weight: 750; }
 .answer-feedback::before { margin-right: 5px; content: "↳"; color: var(--accent); }

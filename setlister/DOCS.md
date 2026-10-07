@@ -30,6 +30,8 @@ Po restartu otevři **PropBot → Připojené účty** a autorizuj postupně oba
 
 Po první synchronizaci PropBot na pozadí vytvoří interní evidenci koncertů. Průběh je vidět v panelu připojených účtů; samostatná obrazovka evidence se nezobrazuje. Historii konverzací otevře ozubené kolečko po zadání `admin_history_pin` z konfigurace add-onu.
 
+Při změně pravidel extrakce se pouze odvozená evidence koncertů jednorázově přestaví z již uloženého lokálního indexu e-mailů. Gmail účty, OAuth tokeny, e-mailový index, poučení ani historie konverzací se tím nemažou.
+
 Cloudflare Access team domain a AUD jsou povinné pro produkční provoz. Backend díky nim odmítne Gmail a chat API také při přímém otevření portu `8110` z lokální sítě bez platného Access tokenu.
 
 Pro Google OAuth Branding použij veřejné adresy `https://setlister.cz/about.html`, `https://setlister.cz/privacy.html` a `https://setlister.cz/terms.html`. Tyto tři cesty musí mít v Cloudflare Access samostatnou politiku **Bypass → Everyone**, zatímco zbytek aplikace zůstane chráněný.
