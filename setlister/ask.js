@@ -13,6 +13,14 @@
     questionInput: document.querySelector("#questionInput"),
     chatMessages: document.querySelector("#chatMessages"),
     quickPrompts: document.querySelector(".quick-prompts"),
+    feedbackModal: document.querySelector("#feedbackModal"),
+    feedbackForm: document.querySelector("#feedbackForm"),
+    feedbackQuestion: document.querySelector("#feedbackQuestion"),
+    feedbackInput: document.querySelector("#feedbackInput"),
+    feedbackError: document.querySelector("#feedbackError"),
+    saveFeedback: document.querySelector("#saveFeedback"),
+    closeFeedback: document.querySelector("#closeFeedback"),
+    cancelFeedback: document.querySelector("#cancelFeedback"),
     toast: document.querySelector("#toast")
   };
 
@@ -20,6 +28,7 @@
   let statusTimer = null;
   let toastTimer = null;
   let waiting = false;
+  let activeFeedback = null;
 
   function showToast(message, error = false) {
     clearTimeout(toastTimer);
@@ -162,7 +171,22 @@
     return message;
   }
 
-  function addAssistantMessage(answer, sources = []) {
+  function openFeedback(question, button) {
+    activeFeedback = { question, button };
+    elements.feedbackQuestion.textContent = question;
+    elements.feedbackInput.value = "";
+    elements.feedbackError.textContent = "";
+    elements.saveFeedback.disabled = false;
+    elements.feedbackModal.showModal();
+    requestAnimationFrame(() => elements.feedbackInput.focus());
+  }
+
+  function closeFeedback() {
+    elements.feedbackModal.close();
+    activeFeedback = null;
+  }
+
+  function addAssistantMessage(answer, sources = [], feedbackQuestion = "") {
     const message = create("article", "chat-message assistant-message");
     message.append(create("span", "assistant-mark", "?"));
     const content = create("div", "assistant-content");
@@ -184,6 +208,15 @@
         sourceWrap.append(link);
       });
       content.append(sourceWrap);
+    }
+    if (feedbackQuestion) {
+      const actions = create("div", "answer-actions");
+      const feedbackButton = create("button", "answer-feedback", "Poučit asistenta");
+      feedbackButton.type = "button";
+      feedbackButton.title = "Napiš, co asistent pochopil špatně";
+      feedbackButton.addEventListener("click", () => openFeedback(feedbackQuestion, feedbackButton));
+      actions.append(feedbackButton);
+      content.append(actions);
     }
     message.append(content);
     elements.chatMessages.append(message);
@@ -209,7 +242,7 @@
         body: JSON.stringify({ question, history: conversation.slice(-6) })
       });
       loading.remove();
-      addAssistantMessage(result.answer, result.sources || []);
+      addAssistantMessage(result.answer, result.sources || [], question);
       conversation.push({ role: "user", content: question }, { role: "assistant", content: result.answer });
     } catch (error) {
       loading.remove();
@@ -246,6 +279,35 @@
   elements.quickPrompts.addEventListener("click", event => {
     const button = event.target.closest("[data-prompt]");
     if (button) ask(button.dataset.prompt);
+  });
+  elements.closeFeedback.addEventListener("click", closeFeedback);
+  elements.cancelFeedback.addEventListener("click", closeFeedback);
+  elements.feedbackModal.addEventListener("click", event => {
+    if (event.target === elements.feedbackModal) closeFeedback();
+  });
+  elements.feedbackForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    const correction = elements.feedbackInput.value.trim();
+    if (!activeFeedback || correction.length < 3) {
+      elements.feedbackError.textContent = "Napiš prosím konkrétní opravu.";
+      return;
+    }
+    const feedback = activeFeedback;
+    elements.saveFeedback.disabled = true;
+    elements.feedbackError.textContent = "";
+    try {
+      await api("/api/assistant/lessons", {
+        method: "POST",
+        body: JSON.stringify({ question: feedback.question, correction })
+      });
+      feedback.button.textContent = "✓ Poučení uloženo";
+      feedback.button.disabled = true;
+      closeFeedback();
+      showToast("Poučení je uložené. Použiju ho u dalších dotazů.");
+    } catch (error) {
+      elements.feedbackError.textContent = error.message;
+      elements.saveFeedback.disabled = false;
+    }
   });
 
   loadStatus(true);

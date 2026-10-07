@@ -68,6 +68,8 @@ OAuth aplikace žádá výhradně scope `https://www.googleapis.com/auth/gmail.r
 
 První synchronizace indexuje zprávy za posledních 730 dní do SQLite. Další běhy používají Gmail History API a stahují pouze změněné zprávy. Gmail refresh tokeny jsou v databázi šifrované klíčem uloženým s právy pouze pro uživatele add-onu.
 
+Tlačítkem **Poučit asistenta** pod odpovědí lze uložit kapelní pojmy a opravy. Setlister je uchovává lokálně v SQLite a relevantní poučení použije k rozšíření vyhledávání i jako kontext pro další odpovědi.
+
 ## Ukládání dat
 
 Písně, rozpracovaný set i uložené setlisty se ukládají do `localStorage` aktuálního prohlížeče. Tlačítkem **Exportovat data** lze stáhnout kompletní JSON zálohu a později ji znovu importovat.

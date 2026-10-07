@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4
+
+- Ke každé odpovědi přibylo tlačítko **Poučit asistenta** pro uložení opravy nebo kapelního pojmu.
+- Poučení se ukládají lokálně do SQLite a používají se při hledání relevantních e-mailů i při tvorbě odpovědi.
+- Ukládá se pouze původní otázka a napsaná oprava; funkce nijak nezapisuje do Gmailu.
+
 ## 0.3.3
 
 - První indexace Gmailu respektuje limit požadavků a při dočasném omezení automaticky opakuje volání s exponenciální prodlevou.

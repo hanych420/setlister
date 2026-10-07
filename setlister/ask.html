@@ -7,7 +7,7 @@
   <meta name="description" content="Read-only kapelní asistent nad připojenými Gmaily.">
   <title>Zeptej se — Setlister</title>
   <link rel="icon" href="assets/favicon.svg?v=0.3.1" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.3.1">
+  <link rel="stylesheet" href="styles.css?v=0.3.4">
 </head>
 <body class="ask-page">
   <div class="stage-light" aria-hidden="true"></div>
@@ -80,7 +80,31 @@
     </section>
   </main>
 
+  <dialog class="modal modal-wide feedback-modal" id="feedbackModal">
+    <form id="feedbackForm">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">Lokální paměť Setlisteru</p>
+          <h2>Poučit asistenta</h2>
+        </div>
+        <button class="modal-close" id="closeFeedback" type="button" aria-label="Zavřít">×</button>
+      </div>
+      <p class="modal-help">Napiš stručné obecné pravidlo, které má platit i příště. Například: „Culter systém oznamuje nový koncert.“ Poučení se uloží pouze do Setlisteru, Gmail nijak nezmění.</p>
+      <div class="feedback-question">
+        <span>Původní otázka</span>
+        <strong id="feedbackQuestion"></strong>
+      </div>
+      <label for="feedbackInput">Co bylo špatně a jak to má chápat příště?</label>
+      <textarea id="feedbackInput" rows="5" maxlength="2000" placeholder="Např. Culter systém je zdroj oznámení o nových koncertech, proto tyto e-maily zahrň do hledání koncertů." required></textarea>
+      <p class="form-error" id="feedbackError" role="alert"></p>
+      <div class="modal-actions">
+        <button class="button button-ghost" id="cancelFeedback" type="button">Zrušit</button>
+        <button class="button button-primary" id="saveFeedback" type="submit">Uložit poučení</button>
+      </div>
+    </form>
+  </dialog>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="ask.js?v=0.3.1"></script>
+  <script src="ask.js?v=0.3.4"></script>
 </body>
 </html>
