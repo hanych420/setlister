@@ -753,7 +753,10 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
 
     @staticmethod
     def public_path(path: str) -> bool:
-        return ".." not in Path(path).parts and (path in {"/", "/index.html", "/ask.html", "/styles.css", "/app.js", "/ask.js"} or path.startswith("/assets/"))
+        return ".." not in Path(path).parts and (path in {
+            "/", "/index.html", "/ask.html", "/about.html", "/privacy.html", "/terms.html",
+            "/styles.css", "/app.js", "/ask.js"
+        } or path.startswith("/assets/"))
 
 
 def main() -> None:

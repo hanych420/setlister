@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Přidána veřejná informační stránka aplikace, zásady ochrany soukromí a podmínky používání pro Google OAuth.
+- Chat obsahuje viditelný odkaz na informace o zpracování Gmail dat.
+
 ## 0.3.0
 
 - Přidána samostatná stránka **Zeptej se** s chatem nad dvěma kapelními Gmaily.

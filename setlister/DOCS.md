@@ -30,6 +30,8 @@ Po restartu otevři **Zeptej se → Připojené účty** a autorizuj postupně o
 
 Cloudflare Access team domain a AUD jsou povinné pro produkční provoz. Backend díky nim odmítne Gmail a chat API také při přímém otevření portu `8110` z lokální sítě bez platného Access tokenu.
 
+Pro Google OAuth Branding použij veřejné adresy `https://setlister.cz/about.html`, `https://setlister.cz/privacy.html` a `https://setlister.cz/terms.html`. Tyto tři cesty musí mít v Cloudflare Access samostatnou politiku **Bypass → Everyone**, zatímco zbytek aplikace zůstane chráněný.
+
 ## Lokální síť
 
 Pokud je port `8110` v nastavení add-onu povolený, aplikace je dostupná také na:

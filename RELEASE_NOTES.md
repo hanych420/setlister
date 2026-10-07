@@ -2,6 +2,12 @@
 
 Přehled všech publikovaných verzí aplikace Setlister od prvního veřejného vydání.
 
+## 0.3.1 — Veřejné informace pro Google OAuth
+
+- Přidány veřejné stránky O aplikaci, Ochrana soukromí a Podmínky používání.
+- Zásady transparentně popisují read-only přístup ke Gmailu, lokální ukládání a použití vybraných úryvků v OpenAI API.
+- Chat odkazuje na zásady ochrany soukromí přímo v rozhraní.
+
 ## 0.3.0 — Read-only kapelní asistent
 
 - Nová stránka **Zeptej se** propojená s maximálně dvěma kapelními Gmaily.

@@ -7,7 +7,7 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-COPY server.py index.html ask.html styles.css app.js ask.js README.md /app/
+COPY server.py index.html ask.html about.html privacy.html terms.html styles.css app.js ask.js README.md /app/
 COPY assets /app/assets
 COPY run.sh /run.sh
 
