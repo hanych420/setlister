@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2
+
+- Opraveno ověření Cloudflare Access JWT proti X.509 certifikátům poskytovaným Cloudflare.
+
 ## 0.3.1
 
 - Přidána veřejná informační stránka aplikace, zásady ochrany soukromí a podmínky používání pro Google OAuth.

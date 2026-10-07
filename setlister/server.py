@@ -22,8 +22,9 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlencode, unquote, urlparse
 from urllib.request import Request, urlopen
 
+from cryptography import x509
 from cryptography.fernet import Fernet, InvalidToken
-from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
 
@@ -519,8 +520,10 @@ def cloudflare_identity(jwt: str, options: dict[str, Any]) -> str | None:
             return None
         if CF_CERT_CACHE["team"] != team or CF_CERT_CACHE["expires"] < time.time():
             certs = json_request(f"https://{team}/cdn-cgi/access/certs")
-            keys = {item["kid"]: serialization.load_pem_public_key(item["cert"].encode("ascii"))
-                    for item in certs.get("public_certs") or []}
+            keys = {
+                item["kid"]: x509.load_pem_x509_certificate(item["cert"].encode("ascii")).public_key()
+                for item in certs.get("public_certs") or []
+            }
             CF_CERT_CACHE.update({"team": team, "expires": time.time() + 3600, "keys": keys})
         public_key = CF_CERT_CACHE["keys"].get(header.get("kid"))
         if not public_key:
