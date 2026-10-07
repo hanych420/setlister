@@ -2,6 +2,11 @@
 
 Přehled všech publikovaných verzí aplikace Setlister od prvního veřejného vydání.
 
+## 0.4.3 — Když PropBot neví
+
+- Když odpověď není doložená e-maily ani koncertní evidencí, PropBot nehádá a odkáže uživatele na Bruna.
+- Pokud zná jen část odpovědi, sdělí doloženou část a na Bruna odkáže pouze u chybějící informace.
+
 ## 0.4.2 — Čistá evidence nadcházejících koncertů
 
 - Nadcházející koncert musí mít známé datum, které není v minulosti; nedatované záznamy se do budoucího přehledu nepočítají.

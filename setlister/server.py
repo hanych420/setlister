@@ -1154,7 +1154,8 @@ def deterministic_concert_list(concerts: list[dict[str, Any]], messages: list[di
     year = int(query_plan.get("year") or 0)
     year_label = f" pro rok {year}" if year else ""
     if not concerts:
-        return {"answer": warning + f"V evidenci nejsou žádné odpovídající koncerty{year_label}.", "sources": []}
+        return {"answer": warning + f"V evidenci nejsou žádné odpovídající koncerty{year_label}. "
+                "Tak to netuším, zeptej se Bruna.", "sources": []}
 
     city_only = (query_plan.get("include_city") and not query_plan.get("include_date")
                  and not query_plan.get("include_venue") and not query_plan.get("include_times"))
@@ -1235,6 +1236,9 @@ komunikace o penězích nebo materiály po akci samy o sobě nedokládají budou
 Rozlišuj přijaté a odeslané zprávy a časovou posloupnost. Požadavek je nezodpovězený jen tehdy,
 pokud po něm nenásleduje relevantní odchozí zpráva. U faktur rozlišuj žádost od důkazu o odeslání;
 důkaz je pozdější odchozí zpráva nebo příloha. Když důkaz nestačí, řekni to. Nevymýšlej.
+Když odpověď neznáš nebo ji dodaná evidence nedokládá, řekni přirozeně „Tak to netuším, zeptej se Bruna.“
+Pokud znáš jen část odpovědi, odpověz doloženou část a u chybějící informace odkaž na Bruna. Nikdy tuto větu
+nepoužívej místo odpovědi, kterou evidence skutečně obsahuje.
 Odpověď strukturuj přehledně: krátký úvod a podle potřeby odrážky nebo jednoduchou tabulku. Nepoužívej zbytečné nadpisy.
 Každé faktické tvrzení opatři přesným odkazem na zdrojový e-mail, například [M1]. Každý odkaz napiš samostatně;
 nikdy nepoužívej rozsahy jako [M1]–[M4]. Samostatný seznam zdrojů nepřidávej. Buď stručný."""
@@ -1361,7 +1365,7 @@ def cloudflare_identity(jwt: str, options: dict[str, Any]) -> str | None:
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.4.2"
+    server_version = "Setlister/0.4.3"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(APP_DIR), **kwargs)

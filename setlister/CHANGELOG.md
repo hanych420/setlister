@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.3
+
+- PropBot při chybějící nebo nedostatečné evidenci nehádá a odpoví „Tak to netuším, zeptej se Bruna.“
+- U částečně doložené odpovědi odkazuje na Bruna jen u chybějících údajů.
+
 ## 0.4.2
 
 - Budoucí přehledy vyžadují známé datum od dneška dál a nepřipouštějí nedatované záznamy.
