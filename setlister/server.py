@@ -39,12 +39,18 @@ MAX_BODY_BYTES = 5 * 1024 * 1024
 HISTORY_LIMIT = 200
 SYNC_INTERVAL_SECONDS = 300
 MAX_INDEXED_MESSAGES = 10_000
+GMAIL_MIN_REQUEST_INTERVAL_SECONDS = 0.25
+GMAIL_MAX_RETRIES = 7
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 CF_CERT_CACHE: dict[str, Any] = {"team": None, "expires": 0.0, "keys": {}}
+GMAIL_REQUEST_LOCK = threading.Lock()
+GMAIL_SYNC_LOCKS: dict[str, threading.Lock] = {}
+GMAIL_SYNC_LOCKS_GUARD = threading.Lock()
+GMAIL_LAST_REQUEST_AT = 0.0
 
 
 def utc_now() -> str:
@@ -253,7 +259,32 @@ def gmail_get(token: str, endpoint: str, params: dict[str, Any] | None = None) -
     url = f"{GMAIL_API}/{endpoint.lstrip('/')}"
     if params:
         url += "?" + urlencode({key: value for key, value in params.items() if value not in (None, "")})
-    return json_request(url, headers={"Authorization": f"Bearer {token}"})
+    global GMAIL_LAST_REQUEST_AT
+    for attempt in range(GMAIL_MAX_RETRIES + 1):
+        with GMAIL_REQUEST_LOCK:
+            remaining = GMAIL_MIN_REQUEST_INTERVAL_SECONDS - (time.monotonic() - GMAIL_LAST_REQUEST_AT)
+            if remaining > 0:
+                time.sleep(remaining)
+            GMAIL_LAST_REQUEST_AT = time.monotonic()
+        try:
+            return json_request(url, headers={"Authorization": f"Bearer {token}"})
+        except RuntimeError as error:
+            detail = str(error).lower()
+            retryable = any(marker in detail for marker in (
+                "rate_limit_exceeded", "ratelimitexceeded", "userratelimitexceeded",
+                "quota exceeded", "quotaexceeded",
+                "chybou 429", "chybou 500", "chybou 502", "chybou 503", "chybou 504",
+            ))
+            if not retryable or attempt >= GMAIL_MAX_RETRIES:
+                raise
+            delay = min((2 ** attempt) + (secrets.randbelow(1000) / 1000), 64)
+            time.sleep(delay)
+    raise RuntimeError("Gmail API se nepodařilo načíst.")
+
+
+def gmail_sync_lock(account_email: str) -> threading.Lock:
+    with GMAIL_SYNC_LOCKS_GUARD:
+        return GMAIL_SYNC_LOCKS.setdefault(account_email, threading.Lock())
 
 
 def upsert_gmail_message(database: sqlite3.Connection, account_email: str, raw: dict[str, Any]) -> None:
@@ -296,9 +327,22 @@ def upsert_gmail_message(database: sqlite3.Connection, account_email: str, raw: 
 
 
 def sync_account(account_email: str, *, force_full: bool = False) -> None:
+    lock = gmail_sync_lock(account_email)
+    if not lock.acquire(blocking=False):
+        return
+    try:
+        _sync_account(account_email, force_full=force_full)
+    finally:
+        lock.release()
+
+
+def _sync_account(account_email: str, *, force_full: bool = False) -> None:
     options = load_options()
     with connect_db() as database:
         account = database.execute("SELECT * FROM gmail_accounts WHERE email = ?", (account_email,)).fetchone()
+        if account:
+            database.execute("UPDATE gmail_accounts SET last_sync_error=NULL WHERE email=?", (account_email,))
+            database.commit()
     if not account:
         return
     try:
@@ -372,7 +416,6 @@ def start_sync(account_email: str, *, force_full: bool = False) -> None:
 
 def sync_loop() -> None:
     while True:
-        time.sleep(SYNC_INTERVAL_SECONDS)
         try:
             with connect_db() as database:
                 accounts = [row["email"] for row in database.execute("SELECT email FROM gmail_accounts")]
@@ -380,6 +423,7 @@ def sync_loop() -> None:
                 sync_account(account)
         except Exception as error:
             print(f"Synchronizace Gmailu selhala: {error}", flush=True)
+        time.sleep(SYNC_INTERVAL_SECONDS)
 
 
 STOPWORDS = {"aby", "ale", "ani", "asi", "byl", "byla", "co", "do", "email", "emailu", "ho", "i", "jako",
@@ -484,7 +528,7 @@ Každé faktické tvrzení opatři odkazem [M1]. Samostatný seznam zdrojů nep�
         headers={"Authorization": f"Bearer {options['openai_api_key']}"}, timeout=90,
         data={"model": options["openai_model"], "instructions": instructions,
               "input": f"Předchozí konverzace:\n{conversation or '(žádná)'}\n\nAktuální otázka:\n{question}\n\nRelevantní e-maily:\n\n" + "\n---\n".join(blocks),
-              "max_output_tokens": 900})
+              "max_output_tokens": 900, "store": False})
     answer = openai_text(response)
     if not answer:
         raise RuntimeError("Model nevrátil odpověď.")

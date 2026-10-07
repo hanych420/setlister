@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3
+
+- První indexace Gmailu respektuje limit požadavků a při dočasném omezení automaticky opakuje volání s exponenciální prodlevou.
+- Zabráněno souběžné synchronizaci stejného Gmail účtu.
+- Nedokončená synchronizace se po restartu add-onu automaticky obnoví.
+- OpenAI Responses API nyní dostává `store: false`.
+
 ## 0.3.2
 
 - Opraveno ověření Cloudflare Access JWT proti X.509 certifikátům poskytovaným Cloudflare.
