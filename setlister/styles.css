@@ -580,7 +580,20 @@ code { color: var(--accent-light); }
 .message-bubble { border-radius: 15px; padding: 12px 15px; font-size: .88rem; line-height: 1.55; white-space: pre-wrap; }
 .user-message .message-bubble { color: var(--accent-ink); background: var(--accent); font-weight: 650; }
 .assistant-message .message-bubble { border: 1px solid var(--line); background: #171512; }
-.answer-text { overflow-wrap: anywhere; }
+.answer-text { overflow-wrap: anywhere; white-space: normal; }
+.answer-rich { display: grid; gap: 10px; }
+.answer-rich p, .answer-rich ul, .answer-rich ol { margin: 0; }
+.answer-rich ul, .answer-rich ol { display: grid; gap: 6px; padding-left: 20px; }
+.answer-rich li::marker { color: var(--accent); font-weight: 900; }
+.answer-rich h3 { margin: 3px 0 0; color: var(--accent-light); font-size: .82rem; letter-spacing: .01em; }
+.answer-citation { display: inline-flex; align-items: center; margin: 0 2px; border: 1px solid rgb(255 178 63 / 28%); border-radius: 999px; padding: 1px 6px; color: var(--accent-light); background: rgb(255 178 63 / 7%); font-size: .62rem; font-weight: 850; line-height: 1.45; text-decoration: none; vertical-align: .08em; white-space: nowrap; }
+.answer-citation:hover { border-color: var(--accent); background: rgb(255 178 63 / 14%); }
+.answer-citation.missing { border-color: var(--line); color: var(--muted); background: transparent; }
+.answer-table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+.answer-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+.answer-table th, .answer-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.answer-table th { color: var(--accent-light); background: rgb(255 178 63 / 5%); font-size: .67rem; letter-spacing: .035em; text-transform: uppercase; }
+.answer-table tbody tr:last-child td { border-bottom: 0; }
 .answer-sources { display: grid; gap: 7px; margin-top: 11px; }
 .source-heading { color: var(--muted); font-size: .65rem; letter-spacing: .08em; text-transform: uppercase; }
 .source-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 11px; padding: 9px 10px; color: var(--text); background: rgb(255 255 255 / 2%); text-decoration: none; }
@@ -620,6 +633,7 @@ code { color: var(--accent-light); }
 .history-message.history-user { border-left-color: var(--accent); }
 .history-message > span { color: var(--muted); font-size: .59rem; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; }
 .history-message p { margin: 3px 0 0; font-size: .75rem; line-height: 1.45; white-space: pre-wrap; }
+.history-answer { margin-top: 4px; font-size: .75rem; line-height: 1.45; }
 .history-message small { display: block; margin-top: 4px; color: var(--accent-light); font-size: .6rem; }
 .history-empty { margin: 25px 0; color: var(--muted); text-align: center; }
 .typing-dot { display: inline-block; width: 6px; height: 6px; margin: 0 2px; border-radius: 50%; background: var(--muted); animation: typing 1s infinite ease-in-out; }

@@ -609,8 +609,28 @@ CONCERT_FTS_QUERY = " OR ".join((
 ))
 CONCERT_QUESTION_RE = re.compile(
     r"\b(koncert\w*|hran[ií]\w*|hraj\w*|vystoupen\w*|festival\w*|arrival\w*|"
-    r"soundcheck\w*|zvukov\w*|příjezd\w*|prijezd\w*|venue\w*|culter\w*|akce\w*)\b", re.IGNORECASE
+    r"soundcheck\w*|zvukov\w*|příjezd\w*|prijezd\w*|venue\w*|culter\w*|akce\w*|"
+    r"turn[eé]\w*|tour\w*|obj[ií]žd\w*|klub\w*|term[ií]n\w*)\b", re.IGNORECASE
 )
+COMPLETE_LIST_RE = re.compile(r"\b(všechn\w*|vsechn\w*|vyjmenuj\w*|seznam\w*|přehled\w*|prehled\w*)\b", re.IGNORECASE)
+CONCERT_QUERY_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "topic": {"type": "string", "enum": ["concerts", "urgent_email", "invoices", "general_email"]},
+        "operation": {"type": "string", "enum": ["list", "single", "summary", "other"]},
+        "year": {"type": "integer", "minimum": 0, "maximum": 2100},
+        "location": {"type": "string"},
+        "status": {"type": "string", "enum": ["confirmed", "active", "all", "cancelled", "unspecified"]},
+        "include_city": {"type": "boolean"},
+        "include_date": {"type": "boolean"},
+        "include_venue": {"type": "boolean"},
+        "include_times": {"type": "boolean"},
+        "complete_list": {"type": "boolean"},
+    },
+    "required": ["topic", "operation", "year", "location", "status", "include_city", "include_date",
+                 "include_venue", "include_times", "complete_list"],
+    "additionalProperties": False,
+}
 CONCERT_EXTRACTION_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -648,6 +668,76 @@ CONCERT_EXTRACTION_SCHEMA: dict[str, Any] = {
 def normalize_label(value: str) -> str:
     ascii_value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode().lower()
     return re.sub(r"[^a-z0-9]+", " ", ascii_value).strip()
+
+
+def fallback_query_plan(question: str, history: list[dict[str, str]] | None = None) -> dict[str, Any]:
+    conversation = " ".join([*(item.get("content", "") for item in (history or []) if item.get("role") == "user"), question])
+    normalized = normalize_label(conversation)
+    years = re.findall(r"\b(20\d{2})\b", conversation)
+    concert_hint = is_concert_question(conversation) or any(term in normalized for term in (
+        "objizd", "turne", "tour", "klub", "roxy", "mesta budeme", "terminy",
+    ))
+    current_complete = bool(COMPLETE_LIST_RE.search(question))
+    confirmed_hint = any(term in normalized for term in ("potvrzen", "domluven", "budeme", "hrajeme", "yes"))
+    return {
+        "topic": "concerts" if concert_hint else "general_email",
+        "operation": "list" if current_complete else "other",
+        "year": int(years[-1]) if years else 0,
+        "location": "",
+        "status": "confirmed" if confirmed_hint else "unspecified",
+        "include_city": bool(re.search(r"\b(měst\w*|mest\w*)\b", question, re.IGNORECASE)),
+        "include_date": bool(re.search(r"\b(datum\w*|term[ií]n\w*|kdy)\b", question, re.IGNORECASE)),
+        "include_venue": bool(re.search(r"\b(klub\w*|m[ií]st\w*|venue\w*)\b", question, re.IGNORECASE)),
+        "include_times": bool(re.search(r"\b(v kolik|arrival\w*|příjezd\w*|zvukov\w*|čas\w*)\b", question, re.IGNORECASE)),
+        "complete_list": current_complete,
+    }
+
+
+def classify_query(question: str, history: list[dict[str, str]] | None = None) -> dict[str, Any]:
+    """Turn natural Czech follow-ups into a small validated database query plan."""
+    fallback = fallback_query_plan(question, history)
+    options = load_options()
+    if not options["openai_api_key"]:
+        return fallback
+    conversation = "\n".join(
+        f"{'Uživatel' if item.get('role') == 'user' else 'PropBot'}: {str(item.get('content') or '')[:1200]}"
+        for item in (history or [])[-6:]
+    )
+    instructions = """Rozpoznej záměr aktuálního českého dotazu pro read-only kapelní aplikaci.
+Použij i předchozí konverzaci: krátká navazující otázka přebírá téma, rok a místo, pokud je uživatel nezměnil.
+Dotazy na města, která kapela objede, turné, termíny, kluby, Roxy, arrival nebo kde/kdy kapela hraje patří do concerts,
+i když neobsahují slovo koncert. „Budeme“, „hrajeme“, „domluvené“ a termíny označené YES znamenají confirmed.
+„Všechna“, „vyjmenuj“, „seznam“ nebo „přehled“ znamená operation=list a complete_list=true.
+Rok z navazující otázky zděď z konverzace. location obsahuje pouze hledané město nebo klub, jinak je prázdný řetězec.
+Příznaky include_* vyjadřují sloupce, které uživatel výslovně chce ve výsledku."""
+    try:
+        response = json_request(OPENAI_RESPONSES_URL, method="POST",
+            headers={"Authorization": f"Bearer {options['openai_api_key']}"}, timeout=45,
+            data={"model": options["openai_model"], "instructions": instructions,
+                  "input": f"Předchozí konverzace:\n{conversation or '(žádná)'}\n\nAktuální dotaz:\n{question}",
+                  "text": {"format": {"type": "json_schema", "name": "propbot_query_plan",
+                                        "strict": True, "schema": CONCERT_QUERY_SCHEMA}},
+                  "max_output_tokens": 350, "store": False})
+        plan = json.loads(openai_text(response))
+        if not isinstance(plan, dict):
+            return fallback
+    except Exception as error:
+        print(f"Klasifikace dotazu selhala, používám lokální pravidla: {error}", flush=True)
+        return fallback
+    # High-recall local guards prevent an AI classification slip from disabling deterministic completeness.
+    if fallback["topic"] == "concerts":
+        plan["topic"] = "concerts"
+    if fallback["complete_list"]:
+        plan["operation"] = "list"
+        plan["complete_list"] = True
+    if not plan.get("year") and fallback["year"]:
+        plan["year"] = fallback["year"]
+    if plan.get("status") == "unspecified" and fallback["status"] == "confirmed":
+        plan["status"] = "confirmed"
+    for field in ("include_city", "include_date", "include_venue", "include_times"):
+        if fallback[field]:
+            plan[field] = True
+    return {**fallback, **plan}
 
 
 def gmail_sync_in_progress() -> bool:
@@ -909,9 +999,10 @@ def is_concert_question(question: str) -> bool:
     return bool(CONCERT_QUESTION_RE.search(question))
 
 
-def retrieve_concert_context(question: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+def retrieve_concert_context(question: str, query_plan: dict[str, Any] | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     status = concert_index_status()
-    if not is_concert_question(question):
+    query_plan = query_plan or {}
+    if query_plan.get("topic") != "concerts" and not is_concert_question(question):
         return [], [], status
     today = prague_now().date().isoformat()
     lowered = question.lower()
@@ -919,20 +1010,33 @@ def retrieve_concert_context(question: str) -> tuple[list[dict[str, Any]], list[
     wants_past = any(term in lowered for term in ("minul", "odehr", "hráli"))
     confirmed_only = any(term in lowered for term in ("domluven", "potvrzen", "další", "nejbližš"))
     clauses, params = [], []
-    if wants_past:
+    requested_year = int(query_plan.get("year") or 0)
+    if requested_year:
+        clauses.append("event_date LIKE ?"); params.append(f"{requested_year:04d}-%")
+        order = "event_date ASC"
+    elif wants_past:
         clauses.append("event_date<>'' AND event_date<?"); params.append(today)
         order = "event_date DESC"
     else:
         clauses.append("(event_date='' OR event_date>=?)"); params.append(today)
         order = "CASE WHEN event_date='' THEN 1 ELSE 0 END, event_date ASC"
-    if wants_cancelled:
+    requested_status = str(query_plan.get("status") or "unspecified")
+    if wants_cancelled or requested_status == "cancelled":
         clauses.append("status='cancelled'")
-    elif confirmed_only:
+    elif confirmed_only or requested_status == "confirmed":
         clauses.append("status='confirmed'")
+    elif requested_status == "all":
+        pass
     else:
         clauses.append("status<>'cancelled'")
     with connect_db() as database:
-        rows = database.execute(f"SELECT * FROM concerts WHERE {' AND '.join(clauses)} ORDER BY {order} LIMIT 50", params).fetchall()
+        rows = database.execute(f"SELECT * FROM concerts WHERE {' AND '.join(clauses)} ORDER BY {order} LIMIT 500", params).fetchall()
+        location = normalize_label(str(query_plan.get("location") or ""))
+        if location:
+            location_terms = location.split()
+            rows = [row for row in rows if all(
+                term in normalize_label(f"{row['city']} {row['venue']} {row['title']}") for term in location_terms
+            )]
         concerts = []
         source_rows: list[sqlite3.Row] = []
         for rank, row in enumerate(rows, 1):
@@ -944,6 +1048,79 @@ def retrieve_concert_context(question: str) -> tuple[list[dict[str, Any]], list[
                 "sourceKeys": [(source["account_email"], source["message_id"]) for source in sources]})
     unique_sources = {(row["account_email"], row["message_id"]): row for row in source_rows}
     return concerts, [message_dict(row) for row in unique_sources.values()], status
+
+
+def source_payload(ref: str, message: dict[str, Any]) -> dict[str, Any]:
+    return {"id": ref, "subject": message["subject"], "sender": message["sender"],
+            "date": message["date"], "account": message["account"], "url": message["url"],
+            "attachments": [item.get("filename") for item in message["attachments"] if item.get("filename")]}
+
+
+def format_concert_date(value: str) -> str:
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%d")
+        return f"{parsed.day}. {parsed.month}. {parsed.year}"
+    except ValueError:
+        return value or "datum neuvedeno"
+
+
+def deterministic_concert_list(concerts: list[dict[str, Any]], messages: list[dict[str, Any]],
+                               query_plan: dict[str, Any], index_status: dict[str, Any]) -> dict[str, Any]:
+    """Render exhaustive database results without asking the language model to copy every row."""
+    message_refs = {(message["account"], message["messageId"]): (f"M{index}", message)
+                    for index, message in enumerate(messages, 1)}
+    used_refs: dict[str, dict[str, Any]] = {}
+
+    def refs_for(items: list[dict[str, Any]]) -> str:
+        refs: list[str] = []
+        for concert in items:
+            for key in concert.get("sourceKeys") or []:
+                if key in message_refs:
+                    ref, message = message_refs[key]
+                    if ref not in used_refs:
+                        used_refs[ref] = source_payload(ref, message)
+                    refs.append(f"[{ref}]")
+                    break
+        return " ".join(dict.fromkeys(refs))
+
+    warning = ""
+    if not index_status.get("complete"):
+        warning = "Pozor: evidence koncertů se ještě zpracovává, takže tento seznam zatím nemusí být úplný.\n\n"
+    year = int(query_plan.get("year") or 0)
+    year_label = f" pro rok {year}" if year else ""
+    if not concerts:
+        return {"answer": warning + f"V evidenci nejsou žádné odpovídající koncerty{year_label}.", "sources": []}
+
+    city_only = (query_plan.get("include_city") and not query_plan.get("include_date")
+                 and not query_plan.get("include_venue") and not query_plan.get("include_times"))
+    if city_only:
+        by_city: dict[str, list[dict[str, Any]]] = {}
+        for concert in concerts:
+            city = concert["city"] or "Město neuvedeno"
+            by_city.setdefault(city, []).append(concert)
+        lines = [f"• {city} {refs_for(items)}".rstrip() for city, items in sorted(
+            by_city.items(), key=lambda item: normalize_label(item[0])
+        )]
+        label = "Potvrzená města" if query_plan.get("status") == "confirmed" else "Města"
+        answer = warning + f"{label}{year_label} ({len(by_city)}):\n" + "\n".join(lines)
+    else:
+        show_status = query_plan.get("status") in ("all", "active", "unspecified")
+        lines = []
+        for concert in concerts:
+            parts = [format_concert_date(concert["event_date"]),
+                     concert["city"] or "město neuvedeno",
+                     concert["venue"] or concert["title"] or "místo neuvedeno"]
+            if query_plan.get("include_times"):
+                if concert["arrival_time"]: parts.append(f"arrival {concert['arrival_time']}")
+                if concert["soundcheck_time"]: parts.append(f"zvukovka {concert['soundcheck_time']}")
+                if concert["show_time"]: parts.append(f"hraní {concert['show_time']}")
+            if show_status:
+                parts.append({"confirmed": "potvrzeno", "option": "opce", "inquiry": "poptávka",
+                              "cancelled": "zrušeno", "unknown": "stav nejasný"}.get(concert["status"], concert["status"]))
+            reference = refs_for([concert])
+            lines.append(f"• {' — '.join(parts)}{' ' + reference if reference else ''}")
+        answer = warning + f"Koncerty{year_label} ({len(concerts)}):\n" + "\n".join(lines)
+    return {"answer": answer, "sources": list(used_refs.values())}
 
 
 def ask_openai(question: str, messages: list[dict[str, Any]], history: list[dict[str, str]] | None = None,
@@ -991,7 +1168,9 @@ Stav inquiry znamená poptávku, option předběžnou opci, confirmed potvrzený
 Rozlišuj přijaté a odeslané zprávy a časovou posloupnost. Požadavek je nezodpovězený jen tehdy,
 pokud po něm nenásleduje relevantní odchozí zpráva. U faktur rozlišuj žádost od důkazu o odeslání;
 důkaz je pozdější odchozí zpráva nebo příloha. Když důkaz nestačí, řekni to. Nevymýšlej.
-Každé faktické tvrzení opatři odkazem na zdrojový e-mail [M1]. Samostatný seznam zdrojů nepřidávej. Buď stručný."""
+Odpověď strukturuj přehledně: krátký úvod a podle potřeby odrážky nebo jednoduchou tabulku. Nepoužívej zbytečné nadpisy.
+Každé faktické tvrzení opatři přesným odkazem na zdrojový e-mail, například [M1]. Každý odkaz napiš samostatně;
+nikdy nepoužívej rozsahy jako [M1]–[M4]. Samostatný seznam zdrojů nepřidávej. Buď stručný."""
     conversation = ""
     for item in (history or [])[-6:]:
         role = "Uživatel" if item.get("role") == "user" else "Asistent"
@@ -1115,7 +1294,7 @@ def cloudflare_identity(jwt: str, options: dict[str, Any]) -> str | None:
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.4"
+    server_version = "Setlister/0.4.1"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(APP_DIR), **kwargs)
@@ -1307,17 +1486,21 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                 history = [{"role": str(item.get("role") or ""), "content": str(item.get("content") or "")}
                            for item in raw_history[-6:] if isinstance(item, dict) and item.get("role") in ("user", "assistant")]
                 search_context = " ".join(item["content"] for item in history if item["role"] == "user")
+                query_plan = classify_query(question, history)
                 lessons = retrieve_lessons(f"{question} {search_context}".strip())
                 lesson_search_context = " ".join(item["correction"] for item in lessons)
                 concert_query = f"{question} {search_context}".strip()
-                concert_intent = is_concert_question(concert_query)
-                concerts, concert_messages, index_status = retrieve_concert_context(concert_query)
+                concert_intent = query_plan.get("topic") == "concerts" or is_concert_question(concert_query)
+                concerts, concert_messages, index_status = retrieve_concert_context(concert_query, query_plan)
                 searched_messages = retrieve_messages(f"{question} {lesson_search_context} {search_context}".strip())
                 combined = concert_messages + searched_messages
                 messages = list({(message["account"], message["messageId"]): message for message in combined}.values())
-                if not messages:
+                if concert_intent and query_plan.get("complete_list"):
+                    result = deterministic_concert_list(concerts, concert_messages, query_plan, index_status)
+                elif not messages:
                     self.send_json(HTTPStatus.PRECONDITION_FAILED, {"error": "Nejdřív připoj a synchronizuj alespoň jeden Gmail."}); return
-                result = ask_openai(question, messages, history, lessons, concerts, index_status, concert_intent)
+                else:
+                    result = ask_openai(question, messages, history, lessons, concerts, index_status, concert_intent)
                 save_chat_exchange(session_id, identity, question, result)
                 self.send_json(HTTPStatus.OK, result)
             except ValueError as error: self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})

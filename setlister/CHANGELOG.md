@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1
+
+- Přidána strukturovaná AI klasifikace záměru dotazu s lokální bezpečnostní zálohou.
+- Koncertní kontext se zachovává i pro přirozené formulace a navazující otázky bez slova koncert.
+- Úplné seznamy koncertů a měst se generují deterministicky z SQLite podle roku a stavu.
+- Odpovědi bezpečně vykreslují základní Markdown jako odstavce, odrážky a tabulky.
+- Inline citace i karty zdrojů odkazují přímo na Gmail a nezobrazují interní označení `M…`.
+
 ## 0.4.0
 
 - Kapelní asistent se nově jmenuje **PropBot**.

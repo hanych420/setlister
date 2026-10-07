@@ -72,6 +72,8 @@ Tlačítkem **Poučit asistenta** pod odpovědí lze uložit kapelní pojmy a op
 
 PropBot po dokončení Gmail synchronizace zpracuje koncertní vlákna do interní strukturované evidence. Běžné dotazy na koncerty pak řadí podle uloženého data a e-maily používají jako dohledatelné zdroje. Změna e-mailového vlákna automaticky vyvolá novou extrakci.
 
+Záměr dotazu se vyhodnocuje strukturovaně a přenáší se i do navazujících otázek. Požadavky na všechny koncerty, města nebo termíny se sestavují přímo z databáze, nikoliv volným opisem modelu. Díky tomu odpověď obsahuje každý odpovídající záznam.
+
 Historie úspěšných konverzací se ukládá lokálně bez textů zdrojových e-mailů. Je dostupná pod ozubeným kolečkem po zadání hodnoty `admin_history_pin`; odemčení trvá 30 minut.
 
 ## Ukládání dat

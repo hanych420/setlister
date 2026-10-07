@@ -2,6 +2,15 @@
 
 Přehled všech publikovaných verzí aplikace Setlister od prvního veřejného vydání.
 
+## 0.4.1 — Spolehlivé seznamy a čitelné odpovědi
+
+- PropBot rozpoznává koncertní záměr pomocí strukturované AI klasifikace a zachovává téma, rok i místo v navazujících otázkách.
+- Výrazy jako „objíždět města“, „turné“, „termíny“ nebo „klub“ fungují i bez slova koncert.
+- Požadavky „všechny“, „vyjmenuj“, „seznam“ a „přehled“ sestavuje přímo z databáze, takže model nemůže některý koncert vynechat.
+- Úplné seznamy se filtrují podle roku a stavu přímo v databázi a zobrazují počet nalezených položek.
+- Markdown odpovědi se zobrazují jako čitelné odstavce, seznamy a tabulky namísto hvězdiček a svislítek.
+- Citace zdrojů jsou skutečné odkazy na Gmail a interní značky typu `[M25]` se už uživateli nezobrazují.
+
 ## 0.4.0 — PropBot a interní evidence koncertů
 
 - Kapelní asistent dostal jméno **PropBot**.

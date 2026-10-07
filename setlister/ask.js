@@ -75,6 +75,105 @@
     return node;
   }
 
+  function appendInline(parent, text, sourceMap) {
+    const pattern = /\*\*([^*]+)\*\*|\[(M\d+)\]/g;
+    let cursor = 0;
+    for (const match of text.matchAll(pattern)) {
+      if (match.index > cursor) parent.append(document.createTextNode(text.slice(cursor, match.index)));
+      if (match[1] !== undefined) {
+        parent.append(create("strong", "", match[1]));
+      } else {
+        const source = sourceMap.get(match[2]);
+        if (source?.url) {
+          const link = create("a", "answer-citation", "e-mail ↗");
+          link.href = source.url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.title = source.subject || "Otevřít zdrojový e-mail";
+          parent.append(link);
+        } else {
+          const missing = create("span", "answer-citation missing", "zdroj");
+          missing.title = "Zdrojový e-mail není v této odpovědi dostupný";
+          parent.append(missing);
+        }
+      }
+      cursor = match.index + match[0].length;
+    }
+    if (cursor < text.length) parent.append(document.createTextNode(text.slice(cursor)));
+  }
+
+  function tableCells(line) {
+    return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(cell => cell.trim());
+  }
+
+  function isTableDivider(line) {
+    const cells = tableCells(line);
+    return cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell));
+  }
+
+  function renderAnswer(answer, sources = []) {
+    const root = create("div", "answer-rich");
+    const sourceMap = new Map(sources.map(source => [source.id, source]));
+    const lines = String(answer || "").replace(/\r/g, "").split("\n");
+    let index = 0;
+    while (index < lines.length) {
+      const line = lines[index].trim();
+      if (!line) { index += 1; continue; }
+
+      if (line.includes("|") && index + 1 < lines.length && isTableDivider(lines[index + 1])) {
+        const wrapper = create("div", "answer-table-wrap");
+        const table = create("table", "answer-table");
+        const head = create("thead");
+        const headRow = create("tr");
+        tableCells(lines[index]).forEach(cell => {
+          const th = create("th"); appendInline(th, cell, sourceMap); headRow.append(th);
+        });
+        head.append(headRow); table.append(head);
+        const body = create("tbody");
+        index += 2;
+        while (index < lines.length && lines[index].includes("|") && lines[index].trim()) {
+          const row = create("tr");
+          tableCells(lines[index]).forEach(cell => {
+            const td = create("td"); appendInline(td, cell, sourceMap); row.append(td);
+          });
+          body.append(row); index += 1;
+        }
+        table.append(body); wrapper.append(table); root.append(wrapper);
+        continue;
+      }
+
+      const bullet = line.match(/^(?:[-*•]|\d+[.)])\s+(.+)$/);
+      if (bullet) {
+        const ordered = /^\d/.test(line);
+        const list = create(ordered ? "ol" : "ul");
+        while (index < lines.length) {
+          const item = lines[index].trim().match(ordered ? /^\d+[.)]\s+(.+)$/ : /^(?:[-*•])\s+(.+)$/);
+          if (!item) break;
+          const li = create("li"); appendInline(li, item[1], sourceMap); list.append(li); index += 1;
+        }
+        root.append(list);
+        continue;
+      }
+
+      const heading = line.match(/^#{1,4}\s+(.+)$/);
+      if (heading) {
+        const title = create("h3"); appendInline(title, heading[1], sourceMap); root.append(title); index += 1;
+        continue;
+      }
+
+      const paragraphLines = [line];
+      index += 1;
+      while (index < lines.length && lines[index].trim()
+             && !/^(?:[-*•]|\d+[.)])\s+/.test(lines[index].trim())
+             && !/^#{1,4}\s+/.test(lines[index].trim())
+             && !(lines[index].includes("|") && index + 1 < lines.length && isTableDivider(lines[index + 1]))) {
+        paragraphLines.push(lines[index].trim()); index += 1;
+      }
+      const paragraph = create("p"); appendInline(paragraph, paragraphLines.join(" "), sourceMap); root.append(paragraph);
+    }
+    return root;
+  }
+
   function renderAccounts(status) {
     elements.accountList.replaceChildren();
     elements.configurationWarning.hidden = status.configured && status.accessVerificationConfigured;
@@ -208,16 +307,18 @@
     const message = create("article", "chat-message assistant-message");
     message.append(create("span", "assistant-mark", "P"));
     const content = create("div", "assistant-content");
-    content.append(create("div", "message-bubble answer-text", answer));
+    const renderedAnswer = renderAnswer(answer, sources);
+    renderedAnswer.classList.add("message-bubble", "answer-text");
+    content.append(renderedAnswer);
     if (sources.length) {
       const sourceWrap = create("div", "answer-sources");
       sourceWrap.append(create("strong", "source-heading", "Zdrojové e-maily"));
-      sources.forEach(source => {
+      sources.forEach((source, index) => {
         const link = create("a", "source-card");
         link.href = source.url;
         link.target = "_blank";
         link.rel = "noopener noreferrer";
-        link.append(create("span", "source-ref", `[${source.id}]`));
+        link.append(create("span", "source-ref", `E-mail ${index + 1}`));
         const details = create("span", "source-details");
         details.append(create("strong", "", source.subject || "Bez předmětu"));
         details.append(create("small", "", `${source.sender || source.account} · ${formatDate(source.date)}`));
@@ -300,7 +401,13 @@
       session.messages.forEach(item => {
         const row = create("div", `history-message ${item.role === "user" ? "history-user" : "history-assistant"}`);
         row.append(create("span", "", item.role === "user" ? "Dotaz" : "PropBot"));
-        row.append(create("p", "", item.content));
+        if (item.role === "assistant") {
+          const rendered = renderAnswer(item.content, item.sources || []);
+          rendered.classList.add("history-answer");
+          row.append(rendered);
+        } else {
+          row.append(create("p", "", item.content));
+        }
         if (item.sources?.length) row.append(create("small", "", `${item.sources.length} zdrojových e-mailů`));
         messages.append(row);
       });
