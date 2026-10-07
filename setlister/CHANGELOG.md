@@ -1,8 +1,14 @@
 # Changelog
 
+## 0.4.4
+
+- Kapelní asistent se v celém rozhraní nově jmenuje PropsBot.
+- Přidána instalační PWA ikona s logem Propadleeku pro plochu Androidu, iOS a podporovaných počítačů.
+- Opraveno mobilní rozložení chatu a jeho vstupního pole.
+
 ## 0.4.3
 
-- PropBot při chybějící nebo nedostatečné evidenci nehádá a odpoví „Tak to netuším, zeptej se Bruna.“
+- PropsBot při chybějící nebo nedostatečné evidenci nehádá a odpoví „Tak to netuším, zeptej se Bruna.“
 - U částečně doložené odpovědi odkazuje na Bruna jen u chybějících údajů.
 
 ## 0.4.2
@@ -23,10 +29,10 @@
 
 ## 0.4.0
 
-- Kapelní asistent se nově jmenuje **PropBot**.
+- Kapelní asistent se nově jmenuje **PropsBot**.
 - Po dokončení Gmail synchronizace se koncertní vlákna jednorázově vytěží do strukturované lokální evidence; změněná vlákna se přezpracují automaticky.
 - Evidence rozlišuje poptávku, opci, potvrzený a zrušený koncert a ukládá datum, místo, arrival, zvukovou zkoušku, čas hraní, kontakt, jistotu a zdrojové e-maily.
-- Koncertní dotazy používají chronologicky seřazenou evidenci; dokud není prvotní index hotový, PropBot nesmí tvrdit, že žádný koncert neexistuje.
+- Koncertní dotazy používají chronologicky seřazenou evidenci; dokud není prvotní index hotový, PropsBot nesmí tvrdit, že žádný koncert neexistuje.
 - Nedokončená prvotní Gmail synchronizace po restartu přeskakuje již uložené zprávy.
 - Konverzace se ukládají lokálně bez kopírování obsahu e-mailů a lze je zobrazit pod nenápadným ozubeným kolečkem.
 - Historie je chráněna konfigurovatelným PINem, pěti pokusy za deset minut a 30minutovou HttpOnly administrační relací.

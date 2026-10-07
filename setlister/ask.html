@@ -4,28 +4,33 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#12110f">
-  <meta name="description" content="PropBot — read-only kapelní asistent nad připojenými Gmaily.">
-  <title>PropBot — Setlister</title>
-  <link rel="icon" href="assets/favicon.svg?v=0.3.1" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.4.2">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Setlister">
+  <meta name="description" content="PropsBot — read-only kapelní asistent nad připojenými Gmaily.">
+  <title>PropsBot — Setlister</title>
+  <link rel="icon" href="assets/favicon.svg?v=0.4.4" type="image/svg+xml">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=0.4.4">
+  <link rel="manifest" href="manifest.webmanifest?v=0.4.4">
+  <link rel="stylesheet" href="styles.css?v=0.4.4">
 </head>
 <body class="ask-page">
   <div class="stage-light" aria-hidden="true"></div>
 
   <header class="topbar">
     <a class="brand" href="index.html" aria-label="Setlister — setlisty">
-      <img class="brand-logo" src="assets/logo.svg?v=0.3.1" alt="Logo kapely">
+      <img class="brand-logo" src="assets/logo.svg?v=0.4.4" alt="Logo kapely">
       <span><strong>Setlister</strong><small>Kapelní studio</small></span>
     </a>
     <nav class="main-nav" aria-label="Hlavní navigace">
       <a href="index.html">Setlisty</a>
-      <a href="ask.html" class="active" aria-current="page">PropBot</a>
+      <a href="ask.html" class="active" aria-current="page">PropsBot</a>
     </nav>
     <div class="top-actions assistant-top-actions">
       <span class="readonly-badge" title="Setlister nemá oprávnění zapisovat do Gmailu">
         <span aria-hidden="true">◉</span> Gmail pouze ke čtení
       </span>
-      <button class="admin-gear" id="adminSettings" type="button" aria-label="Administrace PropBota" title="Administrace PropBota">⚙</button>
+      <button class="admin-gear" id="adminSettings" type="button" aria-label="Administrace PropsBota" title="Administrace PropsBota">⚙</button>
       <button class="button button-ghost" id="toggleConnections" type="button">Připojené účty</button>
     </div>
   </header>
@@ -33,7 +38,7 @@
   <main class="ask-shell">
     <section class="assistant-intro">
       <p class="eyebrow">Kapelní asistent</p>
-      <h1>PropBot</h1>
+      <h1>PropsBot</h1>
       <p>Odpověď hledám v obou kapelních schránkách a v interní evidenci koncertů a vždy ukážu, ze kterých zpráv vychází.</p>
     </section>
 
@@ -66,7 +71,7 @@
         <div class="welcome-message">
           <span class="assistant-mark" aria-hidden="true">P</span>
           <div>
-            <strong>Na co se chceš PropBota zeptat?</strong>
+            <strong>Na co se chceš PropsBota zeptat?</strong>
             <p>Třeba „V kolik máme arrival v Olomouci?“ nebo použij některou z rychlých otázek.</p>
           </div>
         </div>
@@ -109,7 +114,7 @@
     <div class="admin-modal-body">
       <div class="modal-heading">
         <div>
-          <p class="eyebrow">PropBot</p>
+          <p class="eyebrow">PropsBot</p>
           <h2>Historie konverzací</h2>
         </div>
         <button class="modal-close" id="closeAdmin" type="button" aria-label="Zavřít">×</button>
@@ -133,6 +138,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="ask.js?v=0.4.2"></script>
+  <script src="ask.js?v=0.4.4"></script>
 </body>
 </html>

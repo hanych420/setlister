@@ -2,9 +2,15 @@
 
 Přehled všech publikovaných verzí aplikace Setlister od prvního veřejného vydání.
 
-## 0.4.3 — Když PropBot neví
+## 0.4.4 — PropsBot a mobilní instalace
 
-- Když odpověď není doložená e-maily ani koncertní evidencí, PropBot nehádá a odkáže uživatele na Bruna.
+- Kapelní asistent se v celém Setlisteru nově jmenuje **PropsBot**.
+- Při přidání Setlisteru na plochu se použije logo Propadleeku na Androidu, iOS i podporovaných počítačích.
+- Mobilní chat a pole pro otázku se vždy vejdou do šířky obrazovky; delší nápověda se zobrazí celá.
+
+## 0.4.3 — Když PropsBot neví
+
+- Když odpověď není doložená e-maily ani koncertní evidencí, PropsBot nehádá a odkáže uživatele na Bruna.
 - Pokud zná jen část odpovědi, sdělí doloženou část a na Bruna odkáže pouze u chybějící informace.
 
 ## 0.4.2 — Čistá evidence nadcházejících koncertů
@@ -18,19 +24,19 @@ Přehled všech publikovaných verzí aplikace Setlister od prvního veřejného
 
 ## 0.4.1 — Spolehlivé seznamy a čitelné odpovědi
 
-- PropBot rozpoznává koncertní záměr pomocí strukturované AI klasifikace a zachovává téma, rok i místo v navazujících otázkách.
+- PropsBot rozpoznává koncertní záměr pomocí strukturované AI klasifikace a zachovává téma, rok i místo v navazujících otázkách.
 - Výrazy jako „objíždět města“, „turné“, „termíny“ nebo „klub“ fungují i bez slova koncert.
 - Požadavky „všechny“, „vyjmenuj“, „seznam“ a „přehled“ sestavuje přímo z databáze, takže model nemůže některý koncert vynechat.
 - Úplné seznamy se filtrují podle roku a stavu přímo v databázi a zobrazují počet nalezených položek.
 - Markdown odpovědi se zobrazují jako čitelné odstavce, seznamy a tabulky namísto hvězdiček a svislítek.
 - Citace zdrojů jsou skutečné odkazy na Gmail a interní značky typu `[M25]` se už uživateli nezobrazují.
 
-## 0.4.0 — PropBot a interní evidence koncertů
+## 0.4.0 — PropsBot a interní evidence koncertů
 
-- Kapelní asistent dostal jméno **PropBot**.
+- Kapelní asistent dostal jméno **PropsBot**.
 - Koncertní e-mailová vlákna se jednorázově vytěží do strukturované SQLite evidence a po změně se automaticky přezpracují.
 - Dotazy na nejbližší koncert pracují s chronologicky seřazenými potvrzenými termíny a zachovávají odkazy na zdrojové e-maily.
-- Dokud není prvotní evidence kompletní, PropBot nesmí tvrdit, že žádný koncert neexistuje.
+- Dokud není prvotní evidence kompletní, PropsBot nesmí tvrdit, že žádný koncert neexistuje.
 - Historie konverzací je uložená lokálně a schovaná pod ozubeným kolečkem za konfigurovatelným PINem.
 
 ## 0.3.1 — Veřejné informace pro Google OAuth

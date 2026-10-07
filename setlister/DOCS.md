@@ -26,9 +26,9 @@ Nový tunnel ani další token nejsou potřeba. Pro `setlister.cz` musí zůstat
 
 V konfiguraci add-onu doplň Google OAuth Client ID a Client Secret, OpenAI API klíč, Cloudflare Access team domain a Application Audience tag. Přesměrovací adresa Google OAuth klienta musí být `https://setlister.cz/oauth/google/callback`.
 
-Po restartu otevři **PropBot → Připojené účty** a autorizuj postupně oba kapelní Gmaily. Setlister žádá pouze `gmail.readonly` a nemůže do Gmailu zapisovat. První synchronizace může podle velikosti schránky trvat několik minut; další synchronizace už načítají jen změny.
+Po restartu otevři **PropsBot → Připojené účty** a autorizuj postupně oba kapelní Gmaily. Setlister žádá pouze `gmail.readonly` a nemůže do Gmailu zapisovat. První synchronizace může podle velikosti schránky trvat několik minut; další synchronizace už načítají jen změny.
 
-Po první synchronizaci PropBot na pozadí vytvoří interní evidenci koncertů. Průběh je vidět v panelu připojených účtů; samostatná obrazovka evidence se nezobrazuje. Historii konverzací otevře ozubené kolečko po zadání `admin_history_pin` z konfigurace add-onu.
+Po první synchronizaci PropsBot na pozadí vytvoří interní evidenci koncertů. Průběh je vidět v panelu připojených účtů; samostatná obrazovka evidence se nezobrazuje. Historii konverzací otevře ozubené kolečko po zadání `admin_history_pin` z konfigurace add-onu.
 
 Při změně pravidel extrakce se pouze odvozená evidence koncertů jednorázově přestaví z již uloženého lokálního indexu e-mailů. Gmail účty, OAuth tokeny, e-mailový index, poučení ani historie konverzací se tím nemažou.
 

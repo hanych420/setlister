@@ -223,8 +223,8 @@
       if (!quiet) {
         let text = status.accounts.length ? `Připojeno ${status.accounts.length} ze 2 účtů` : "Čekám na první účet";
         const index = status.concertIndex;
-        if (index?.complete) text += ` · PropBot eviduje ${index.concertCount} koncertů`;
-        else if (index?.gmailReady) text += ` · PropBot zpracovává koncerty (${index.pendingThreads} zbývá)`;
+        if (index?.complete) text += ` · PropsBot eviduje ${index.concertCount} koncertů`;
+        else if (index?.gmailReady) text += ` · PropsBot zpracovává koncerty (${index.pendingThreads} zbývá)`;
         else if (status.accounts.length) text += " · evidence koncertů čeká na dokončení Gmailu";
         elements.connectionStatus.textContent = text;
       }
@@ -382,7 +382,7 @@
       const messages = create("div", "history-messages");
       session.messages.forEach(item => {
         const row = create("div", `history-message ${item.role === "user" ? "history-user" : "history-assistant"}`);
-        row.append(create("span", "", item.role === "user" ? "Dotaz" : "PropBot"));
+        row.append(create("span", "", item.role === "user" ? "Dotaz" : "PropsBot"));
         if (item.role === "assistant") {
           const rendered = renderAnswer(item.content, item.sources || []);
           rendered.classList.add("history-answer");

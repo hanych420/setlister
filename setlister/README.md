@@ -64,13 +64,13 @@ V Google OAuth klientovi musí být jako redirect URI přesně:
 https://setlister.cz/oauth/google/callback
 ```
 
-OAuth aplikace žádá výhradně scope `https://www.googleapis.com/auth/gmail.readonly`. Setlister neobsahuje Gmail endpoint pro odesílání, koncepty, úpravy štítků, přesouvání ani mazání. Oba účty se připojují samostatně na stránce **PropBot → Připojené účty**.
+OAuth aplikace žádá výhradně scope `https://www.googleapis.com/auth/gmail.readonly`. Setlister neobsahuje Gmail endpoint pro odesílání, koncepty, úpravy štítků, přesouvání ani mazání. Oba účty se připojují samostatně na stránce **PropsBot → Připojené účty**.
 
 První synchronizace indexuje zprávy za posledních 730 dní do SQLite. Další běhy používají Gmail History API a stahují pouze změněné zprávy. Gmail refresh tokeny jsou v databázi šifrované klíčem uloženým s právy pouze pro uživatele add-onu.
 
 Tlačítkem **Poučit asistenta** pod odpovědí lze uložit kapelní pojmy a opravy. Setlister je uchovává lokálně v SQLite a relevantní poučení použije k rozšíření vyhledávání i jako kontext pro další odpovědi.
 
-PropBot po dokončení Gmail synchronizace zpracuje koncertní vlákna do interní strukturované evidence. Běžné dotazy na koncerty pak řadí podle uloženého data a e-maily používají jako dohledatelné zdroje. Změna e-mailového vlákna automaticky vyvolá novou extrakci.
+PropsBot po dokončení Gmail synchronizace zpracuje koncertní vlákna do interní strukturované evidence. Běžné dotazy na koncerty pak řadí podle uloženého data a e-maily používají jako dohledatelné zdroje. Změna e-mailového vlákna automaticky vyvolá novou extrakci.
 
 Záměr dotazu se vyhodnocuje strukturovaně a přenáší se i do navazujících otázek. Požadavky na všechny koncerty, města nebo termíny se sestavují přímo z databáze, nikoliv volným opisem modelu. Díky tomu odpověď obsahuje každý odpovídající záznam.
 
