@@ -8,6 +8,15 @@ services:
     environment:
       SETLISTER_DATA_DIR: /data
       SETLISTER_PORT: "8110"
+      SETLISTER_BASE_URL: "${SETLISTER_BASE_URL:-http://localhost:8110}"
+      SETLISTER_ADMIN_EMAIL: "${SETLISTER_ADMIN_EMAIL:-propadleek@gmail.com}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-6-luna}"
+      CF_ACCESS_TEAM_DOMAIN: "${CF_ACCESS_TEAM_DOMAIN:-}"
+      CF_ACCESS_AUD: "${CF_ACCESS_AUD:-}"
+      GMAIL_LOOKBACK_DAYS: "${GMAIL_LOOKBACK_DAYS:-730}"
     volumes:
       - "${SETLISTER_DATA_PATH:-setlister-data}:/data"
 

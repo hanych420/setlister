@@ -4,7 +4,10 @@ ARG BUILD_VERSION=dev
 ARG BUILD_ARCH
 
 WORKDIR /app
-COPY server.py index.html styles.css app.js README.md /app/
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+COPY server.py index.html ask.html styles.css app.js ask.js README.md /app/
 COPY assets /app/assets
 COPY run.sh /run.sh
 

@@ -1,7 +1,7 @@
 name: Setlister
-version: "0.2.4"
+version: "0.3.0"
 slug: setlister
-description: Kapelní repertoár, setlisty a individuální tiskové poznámky.
+description: Kapelní repertoár, setlisty, tisk a read-only asistent nad kapelními Gmaily.
 url: https://github.com/hanych420/setlister
 arch:
   - aarch64
@@ -20,4 +20,23 @@ environment:
   SETLISTER_HOST: 0.0.0.0
   SETLISTER_PORT: "8110"
   SETLISTER_DATA_DIR: /data
-schema: false
+options:
+  base_url: https://setlister.cz
+  admin_email: propadleek@gmail.com
+  google_client_id: ""
+  google_client_secret: ""
+  openai_api_key: ""
+  openai_model: gpt-6-luna
+  cloudflare_access_team: ""
+  cloudflare_access_aud: ""
+  gmail_lookback_days: 730
+schema:
+  base_url: str
+  admin_email: str
+  google_client_id: str
+  google_client_secret: password
+  openai_api_key: password
+  openai_model: str
+  cloudflare_access_team: str
+  cloudflare_access_aud: str
+  gmail_lookback_days: int(30,3650)

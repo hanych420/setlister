@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#12110f">
+  <meta name="description" content="Read-only kapelní asistent nad připojenými Gmaily.">
+  <title>Zeptej se — Setlister</title>
+  <link rel="icon" href="assets/favicon.svg?v=0.3.0" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css?v=0.3.0">
+</head>
+<body class="ask-page">
+  <div class="stage-light" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="index.html" aria-label="Setlister — setlisty">
+      <img class="brand-logo" src="assets/logo.svg?v=0.3.0" alt="Logo kapely">
+      <span><strong>Setlister</strong><small>Kapelní studio</small></span>
+    </a>
+    <nav class="main-nav" aria-label="Hlavní navigace">
+      <a href="index.html">Setlisty</a>
+      <a href="ask.html" class="active" aria-current="page">Zeptej se</a>
+    </nav>
+    <div class="top-actions assistant-top-actions">
+      <span class="readonly-badge" title="Setlister nemá oprávnění zapisovat do Gmailu">
+        <span aria-hidden="true">◉</span> Gmail pouze ke čtení
+      </span>
+      <button class="button button-ghost" id="toggleConnections" type="button">Připojené účty</button>
+    </div>
+  </header>
+
+  <main class="ask-shell">
+    <section class="assistant-intro">
+      <p class="eyebrow">Kapelní asistent</p>
+      <h1>Zeptej se mailů</h1>
+      <p>Odpověď hledám v obou kapelních schránkách a vždy ukážu, ze kterých zpráv vychází.</p>
+    </section>
+
+    <section class="connection-panel panel" id="connectionPanel" hidden aria-labelledby="connectionTitle">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Read-only integrace</p>
+          <h2 id="connectionTitle">Připojené Gmaily</h2>
+        </div>
+        <button class="button button-small button-primary" id="connectGmail" type="button">＋ Připojit Gmail</button>
+      </div>
+      <p class="connection-help">Setlister žádá pouze oprávnění ke čtení. Nemůže odesílat, upravovat ani mazat zprávy.</p>
+      <div class="configuration-warning" id="configurationWarning" hidden></div>
+      <div class="account-list" id="accountList"></div>
+      <div class="connection-actions">
+        <button class="button button-small button-ghost" id="syncGmail" type="button">Synchronizovat nyní</button>
+        <span id="connectionStatus" role="status"></span>
+      </div>
+    </section>
+
+    <section class="chat-panel panel" aria-label="Chat s kapelními e-maily">
+      <div class="quick-prompts" aria-label="Rychlé otázky">
+        <button type="button" data-prompt="Je v e-mailech něco urgentního, na co jsme ještě neodpověděli?">Co je urgentní?</button>
+        <button type="button" data-prompt="Jsou poslané všechny vyžádané faktury, nebo někde chybí důkaz o odeslání faktury?">Chybějící faktury</button>
+        <button type="button" data-prompt="Na které organizační dotazy pořadatelů jsme ještě neodpověděli?">Nezodpovězené dotazy</button>
+        <button type="button" data-prompt="U kterých nejbližších koncertů nám podle e-mailů chybí důležité organizační informace?">Co chybí ke koncertům?</button>
+      </div>
+
+      <div class="chat-messages" id="chatMessages" aria-live="polite">
+        <div class="welcome-message">
+          <span class="assistant-mark" aria-hidden="true">?</span>
+          <div>
+            <strong>Na co se chceš zeptat?</strong>
+            <p>Třeba „V kolik máme arrival v Olomouci?“ nebo použij některou z rychlých otázek.</p>
+          </div>
+        </div>
+      </div>
+
+      <form class="chat-composer" id="chatForm">
+        <label class="sr-only" for="questionInput">Otázka pro kapelního asistenta</label>
+        <textarea id="questionInput" rows="1" maxlength="1000" placeholder="Zeptej se na koncert, domluvu nebo nezodpovězený e-mail…" required></textarea>
+        <button class="button button-primary ask-submit" type="submit" aria-label="Odeslat otázku">Zeptat se <span aria-hidden="true">↑</span></button>
+      </form>
+      <p class="chat-disclaimer">Setlister může udělat chybu. Důležité informace si ověř v přiložených zdrojových e-mailech.</p>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="ask.js?v=0.3.0"></script>
+</body>
+</html>

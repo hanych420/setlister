@@ -6,20 +6,24 @@
   <meta name="theme-color" content="#12110f">
   <meta name="description" content="Lokální plánovač koncertních setlistů.">
   <title>Setlister — plánovač setlistů</title>
-  <link rel="icon" href="assets/favicon.svg?v=0.2.4" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.2.4">
+  <link rel="icon" href="assets/favicon.svg?v=0.3.0" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css?v=0.3.0">
 </head>
 <body>
   <div class="stage-light" aria-hidden="true"></div>
 
   <header class="topbar">
-    <a class="brand" href="#" aria-label="Setlister — domů">
-      <img class="brand-logo" src="assets/logo.svg?v=0.2.4" alt="Logo kapely">
+    <a class="brand" href="index.html" aria-label="Setlister — domů">
+      <img class="brand-logo" src="assets/logo.svg?v=0.3.0" alt="Logo kapely">
       <span>
         <strong>Setlister</strong>
         <small>Setlist studio</small>
       </span>
     </a>
+    <nav class="main-nav" aria-label="Hlavní navigace">
+      <a href="index.html" class="active" aria-current="page">Setlisty</a>
+      <a href="ask.html">Zeptej se</a>
+    </nav>
     <div class="top-actions">
       <span class="sync-status" id="syncStatus" data-state="connecting">Připojuji…</span>
       <button class="button button-ghost" id="manageMembers" type="button">Členové kapely</button>
@@ -356,7 +360,7 @@
   <div id="printArea" aria-hidden="true"></div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/vendor/spreadsheet-reader.js?v=0.2.4"></script>
-  <script src="app.js?v=0.2.4"></script>
+  <script src="assets/vendor/spreadsheet-reader.js?v=0.3.0"></script>
+  <script src="app.js?v=0.3.0"></script>
 </body>
 </html>

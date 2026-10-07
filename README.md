@@ -1,6 +1,6 @@
 # Setlister pro Home Assistant
 
-Repozitář obsahuje Home Assistant add-on **Setlister** pro správu repertoáru, skládání setlistů a tisk individuálních poznámek členů kapely.
+Repozitář obsahuje Home Assistant add-on **Setlister** pro správu repertoáru, skládání setlistů, tisk individuálních poznámek a read-only dotazy nad kapelními Gmaily.
 
 ## Instalace z repozitáře
 

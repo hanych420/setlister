@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+- Přidána samostatná stránka **Zeptej se** s chatem nad dvěma kapelními Gmaily.
+- Gmail integrace používá výhradně scope `gmail.readonly`; backend neobsahuje žádnou zapisovací Gmail operaci.
+- První synchronizace vytvoří lokální fulltextový index na SSD, další synchronizace stahují pouze změny přes Gmail History API.
+- Chat umí pracovat s návaznými dotazy a u odpovědí zobrazuje zdrojové e-maily.
+- Přidány rychlé dotazy na urgentní zprávy, nezodpovězené požadavky, faktury a chybějící informace ke koncertům.
+- Refresh tokeny Gmailu jsou v databázi šifrované a přístup k asistentovi umí backend ověřit pomocí Cloudflare Access JWT.
+- Konfigurace Google OAuth, OpenAI a Cloudflare Access je dostupná v nastavení Home Assistant add-onu.
+
 ## 0.2.4
 
 - V individuálním tisku se skrývá pouze `K0`; hodnoty `K1` až `K12` jsou vidět u každé příslušné skladby.

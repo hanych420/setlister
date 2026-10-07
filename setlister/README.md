@@ -1,6 +1,6 @@
 # Setlister — plánovač setlistů
 
-Kapelní aplikace pro skládání a tisk setlistů. Při otevření přímo ze souboru funguje lokálně. Při spuštění přes přiložený server používá sdílenou SQLite databázi.
+Kapelní aplikace pro skládání a tisk setlistů a read-only dotazy nad kapelními Gmaily. Při otevření přímo ze souboru funguje setlistová část lokálně. Sdílená databáze a Gmail asistent vyžadují přiložený server.
 
 ## Spuštění
 
@@ -15,6 +15,7 @@ Potom otevřít `http://localhost:8080`.
 Tento jednoduchý statický server slouží jen pro lokální prohlížení. Sdílenou databázi spustíš příkazem:
 
 ```bash
+python3 -m pip install -r requirements.txt
 python3 server.py
 ```
 
@@ -46,7 +47,26 @@ Pro existující Cloudflare Tunnel se nepřidává nový token ani další tunne
 setlister.cz -> http://IP_RASPBERRY_PI:8110
 ```
 
-Před veřejným spuštěním je nutné chránit hostname pomocí Cloudflare Access, protože aplikace zatím nemá vlastní přihlašování.
+Před veřejným spuštěním je nutné chránit hostname pomocí Cloudflare Access. Gmail API a chat navíc ověřují podepsaný Access JWT přímo v backendu, pokud jsou vyplněné volby `cloudflare_access_team` a `cloudflare_access_aud`.
+
+## Read-only Gmail asistent
+
+V nastavení Home Assistant add-onu vyplň:
+
+- `google_client_id` a `google_client_secret` z OAuth klienta typu Web application,
+- `openai_api_key`,
+- `cloudflare_access_team`, například `propadleek.cloudflareaccess.com`,
+- `cloudflare_access_aud`, tedy Application Audience tag aplikace Setlister v Cloudflare Access.
+
+V Google OAuth klientovi musí být jako redirect URI přesně:
+
+```text
+https://setlister.cz/oauth/google/callback
+```
+
+OAuth aplikace žádá výhradně scope `https://www.googleapis.com/auth/gmail.readonly`. Setlister neobsahuje Gmail endpoint pro odesílání, koncepty, úpravy štítků, přesouvání ani mazání. Oba účty se připojují samostatně na stránce **Zeptej se → Připojené účty**.
+
+První synchronizace indexuje zprávy za posledních 730 dní do SQLite. Další běhy používají Gmail History API a stahují pouze změněné zprávy. Gmail refresh tokeny jsou v databázi šifrované klíčem uloženým s právy pouze pro uživatele add-onu.
 
 ## Ukládání dat
 
@@ -77,3 +97,5 @@ Při spuštění přes `server.py` nebo Docker se data synchronizují mezi zař�
 - stažení samostatné tiskové HTML sestavy jako záloha pro prohlížeče, které neotevřou systémový tisk,
 - export a import lokální zálohy.
 - sdílená SQLite databáze s detekcí souběžných změn a historií posledních 200 verzí.
+- chat nad dvěma kapelními Gmaily s rychlými dotazy a odkazy na zdrojové zprávy,
+- průběžná lokální indexace Gmailu pouze pro čtení.

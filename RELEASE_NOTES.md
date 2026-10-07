@@ -2,6 +2,16 @@
 
 Přehled všech publikovaných verzí aplikace Setlister od prvního veřejného vydání.
 
+## 0.3.0 — Read-only kapelní asistent
+
+- Nová stránka **Zeptej se** propojená s maximálně dvěma kapelními Gmaily.
+- Chat odpovídá na dotazy o koncertech, časech příjezdu, nevyřízených požadavcích a fakturách.
+- Rychlé štítky předvyplní nejčastější kontrolní otázky, ale rozhraní zůstává čistě konverzační.
+- Odpovědi obsahují odkazy na konkrétní zdrojové e-maily a podporují návazné otázky.
+- Zprávy se jednorázově zaindexují do SQLite na Raspberry Pi; poté se každých pět minut načítají pouze změny.
+- Integrace má pouze oprávnění `gmail.readonly`. Nemůže vytvořit koncept, odeslat, upravit, přesunout ani smazat zprávu.
+- Gmail refresh tokeny jsou uložené šifrovaně a citlivá API umí ověřovat podepsaný Cloudflare Access token i při přímém přístupu z domácí sítě.
+
 ## 0.2.4 — Přehlednější kapodastr v tisku
 
 - `K0` se v individuálním výtisku nezobrazuje.
