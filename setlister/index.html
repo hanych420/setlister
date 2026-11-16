@@ -9,17 +9,17 @@
   <meta name="apple-mobile-web-app-title" content="Setlister">
   <meta name="description" content="Lokální plánovač koncertních setlistů.">
   <title>Setlister — plánovač setlistů</title>
-  <link rel="icon" href="assets/favicon.svg?v=0.5.0" type="image/svg+xml">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=0.5.0">
-  <link rel="manifest" href="manifest.webmanifest?v=0.5.0">
-  <link rel="stylesheet" href="styles.css?v=0.5.0">
+  <link rel="icon" href="assets/favicon.svg?v=0.5.1" type="image/svg+xml">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=0.5.1">
+  <link rel="manifest" href="manifest.webmanifest?v=0.5.1">
+  <link rel="stylesheet" href="styles.css?v=0.5.1">
 </head>
 <body>
   <div class="stage-light" aria-hidden="true"></div>
 
   <header class="topbar">
     <a class="brand" href="index.html" aria-label="Setlister — domů">
-      <img class="brand-logo" src="assets/logo.svg?v=0.5.0" alt="Logo kapely">
+      <img class="brand-logo" src="assets/logo.svg?v=0.5.1" alt="Logo kapely">
       <span>
         <strong>Setlister</strong>
         <small>Setlist studio</small>
@@ -205,10 +205,10 @@
             <option value="5">5 — maximum</option>
           </select>
         </label>
-        <label class="field">
-          <span>Kdo skladbu otevírá</span>
-          <select id="songStarter"><option value="">Neuvedeno</option></select>
-        </label>
+        <fieldset class="song-starters-fieldset">
+          <legend>Kdo skladbu otevírá</legend>
+          <div class="starter-member-list" id="songStarters"></div>
+        </fieldset>
       </div>
       <fieldset class="vibe-role-fieldset">
         <legend>Role v setlistu</legend>
@@ -405,7 +405,7 @@
   <div id="printArea" aria-hidden="true"></div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/vendor/spreadsheet-reader.js?v=0.5.0"></script>
-  <script src="app.js?v=0.5.0"></script>
+  <script src="assets/vendor/spreadsheet-reader.js?v=0.5.1"></script>
+  <script src="app.js?v=0.5.1"></script>
 </body>
 </html>

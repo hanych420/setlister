@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1
+
+- Jednu skladbu teď může otevírat více členů kapely.
+- Volba „Bez osobních poznámek“ skryje také změny kapa, nástrojů a další přechodové pokyny.
+
 ## 0.5.0
 
 - Písně mají energii 1–5, role otevírací / na závěr / přídavek a určeného člena, který je otevírá.

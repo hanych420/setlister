@@ -1365,7 +1365,7 @@ def cloudflare_identity(jwt: str, options: dict[str, Any]) -> str | None:
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.5.0"
+    server_version = "Setlister/0.5.1"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
     def __init__(self, *args, **kwargs):

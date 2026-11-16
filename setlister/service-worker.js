@@ -1,18 +1,18 @@
 "use strict";
 
-const CACHE_NAME = "setlister-shell-v0.5.0";
+const CACHE_NAME = "setlister-shell-v0.5.1";
 const APP_SHELL = [
   "/",
   "/index.html",
-  "/styles.css?v=0.5.0",
-  "/app.js?v=0.5.0",
-  "/manifest.webmanifest?v=0.5.0",
-  "/assets/logo.svg?v=0.5.0",
-  "/assets/favicon.svg?v=0.5.0",
-  "/assets/icon-192.png?v=0.5.0",
-  "/assets/icon-512.png?v=0.5.0",
-  "/assets/apple-touch-icon.png?v=0.5.0",
-  "/assets/vendor/spreadsheet-reader.js?v=0.5.0"
+  "/styles.css?v=0.5.1",
+  "/app.js?v=0.5.1",
+  "/manifest.webmanifest?v=0.5.1",
+  "/assets/logo.svg?v=0.5.1",
+  "/assets/favicon.svg?v=0.5.1",
+  "/assets/icon-192.png?v=0.5.1",
+  "/assets/icon-512.png?v=0.5.1",
+  "/assets/apple-touch-icon.png?v=0.5.1",
+  "/assets/vendor/spreadsheet-reader.js?v=0.5.1"
 ];
 
 self.addEventListener("install", event => {

@@ -79,7 +79,7 @@
     songMinutes: document.querySelector("#songMinutes"),
     songSeconds: document.querySelector("#songSeconds"),
     songEnergy: document.querySelector("#songEnergy"),
-    songStarter: document.querySelector("#songStarter"),
+    songStarters: document.querySelector("#songStarters"),
     songRoleOpener: document.querySelector("#songRoleOpener"),
     songRoleCloser: document.querySelector("#songRoleCloser"),
     songRoleEncore: document.querySelector("#songRoleEncore"),
@@ -161,7 +161,7 @@
         album: "",
         energy: 3,
         vibeRoles: [],
-        starterMemberId: "",
+        starterMemberIds: [],
         archived: false,
         memberNotes: {}
       })),
@@ -224,9 +224,7 @@
         album: String(song.album || "").trim(),
         energy: normalizeEnergy(song.energy),
         vibeRoles: normalizeVibeRoles(song.vibeRoles),
-        starterMemberId: value.members.some(member => member.id === song.starterMemberId)
-          ? song.starterMemberId
-          : "",
+        starterMemberIds: normalizeStarterMemberIds(song, value.members),
         archived: Boolean(song.archived),
         memberNotes: normalizeMemberNotes(song.memberNotes)
       }));
@@ -352,7 +350,7 @@
       album: mergeValue(baseSong.album, localSong.album, remoteSong.album),
       energy: mergeValue(baseSong.energy, localSong.energy, remoteSong.energy),
       vibeRoles: mergeValue(baseSong.vibeRoles, localSong.vibeRoles, remoteSong.vibeRoles),
-      starterMemberId: mergeValue(baseSong.starterMemberId, localSong.starterMemberId, remoteSong.starterMemberId),
+      starterMemberIds: mergeValue(baseSong.starterMemberIds, localSong.starterMemberIds, remoteSong.starterMemberIds),
       archived: mergeValue(baseSong.archived, localSong.archived, remoteSong.archived),
       memberNotes: mergeMemberNotes(baseSong.memberNotes, localSong.memberNotes, remoteSong.memberNotes)
     });
@@ -602,6 +600,28 @@
   function normalizeVibeRoles(value) {
     const roles = Array.isArray(value) ? value : [];
     return [...new Set(roles.filter(role => VIBE_ROLES.includes(role)))];
+  }
+
+  function normalizeStarterMemberIds(song, members = state.members) {
+    const savedIds = Array.isArray(song?.starterMemberIds)
+      ? song.starterMemberIds
+      : song?.starterMemberId ? [song.starterMemberId] : [];
+    const validIds = new Set(members.map(member => member.id));
+    return [...new Set(savedIds.filter(id => validIds.has(id)))];
+  }
+
+  function starterMembers(song) {
+    return normalizeStarterMemberIds(song).map(memberById).filter(Boolean);
+  }
+
+  function starterNames(song) {
+    return starterMembers(song).map(member => member.name).join(" + ");
+  }
+
+  function starterDescription(song) {
+    const members = starterMembers(song);
+    if (!members.length) return "";
+    return `${members.length === 1 ? "otevírá" : "otevírají"} ${members.map(member => member.name).join(" + ")}`;
   }
 
   function vibeLabel(song) {
@@ -981,8 +1001,8 @@
       title.textContent = song.title;
       const duration = document.createElement("small");
       const durationText = song.durationSec ? formatTime(song.durationSec) : "Délka nezadaná";
-      const starter = memberById(song.starterMemberId);
-      duration.textContent = `${song.album || "Bez alba"} · ${durationText} · ${vibeLabel(song)}${starter ? ` · otevírá ${starter.name}` : ""}`;
+      const starter = starterDescription(song);
+      duration.textContent = `${song.album || "Bez alba"} · ${durationText} · ${vibeLabel(song)}${starter ? ` · ${starter}` : ""}`;
       info.append(title, duration);
       if (song.archived) {
         const archived = document.createElement("small");
@@ -1055,7 +1075,7 @@
 
     entries.forEach((entry, index) => {
       const musicalIndex = isInterlude(entry) ? -1 : songIndex++;
-      const visibleMembers = viewMember ? [viewMember] : state.members;
+      const visibleMembers = viewMember ? [viewMember] : [];
       const transitions = musicalIndex < 0 ? [] : visibleMembers.flatMap(member => {
         const changes = transitionPlans.get(member.id)?.[musicalIndex]?.changes || [];
         return changes.length ? [{ member, changes }] : [];
@@ -1092,13 +1112,13 @@
         : null;
       strong.textContent = personalNote?.alias || entry.title;
       const small = document.createElement("small");
-      const noteCount = isInterlude(entry)
+      const noteCount = isInterlude(entry) || !viewMember
         ? 0
-        : viewMember ? Number(noteHasContent(personalNote)) : songNoteCount(entry);
-      const starter = isInterlude(entry) ? null : memberById(entry.starterMemberId);
+        : Number(noteHasContent(personalNote));
+      const starter = isInterlude(entry) ? "" : starterDescription(entry);
       small.textContent = isInterlude(entry)
         ? "Pauza / intermezzo"
-        : `${personalNote?.alias ? `Oficiálně: ${entry.title} · ` : ""}pozice ${musicalIndex + 1} · ${vibeLabel(entry)}${starter ? ` · otevírá ${starter.name}` : ""}${entry.archived ? " · archivovaná" : ""}${noteCount ? ` · ${noteCount}× poznámka` : ""}`;
+        : `${personalNote?.alias ? `Oficiálně: ${entry.title} · ` : ""}pozice ${musicalIndex + 1} · ${vibeLabel(entry)}${starter ? ` · ${starter}` : ""}${entry.archived ? " · archivovaná" : ""}${noteCount ? " · vlastní poznámka" : ""}`;
       title.append(strong, small);
 
       if (personalNote && viewMember) {
@@ -1777,8 +1797,8 @@
         if (instrumentUsesSound(instrument)) appendPrintNote(right, "", note.sound);
         appendPrintNote(right, "", note.text, false);
       }
-      const starter = memberById(entry.starterMemberId);
-      if (starter) appendPrintNote(right, "START", starter.name, false);
+      const starters = starterNames(entry);
+      if (starters) appendPrintNote(right, "START", starters, false);
       list.append(row);
     });
 
@@ -1903,18 +1923,20 @@
     elements.songRoleOpener.checked = roles.includes("opener");
     elements.songRoleCloser.checked = roles.includes("closer");
     elements.songRoleEncore.checked = roles.includes("encore");
-    elements.songStarter.replaceChildren();
-    const nobody = document.createElement("option");
-    nobody.value = "";
-    nobody.textContent = "Neuvedeno";
-    elements.songStarter.append(nobody);
+    elements.songStarters.replaceChildren();
+    const selectedStarters = new Set(normalizeStarterMemberIds(song));
     state.members.forEach(member => {
-      const option = document.createElement("option");
-      option.value = member.id;
-      option.textContent = member.name;
-      elements.songStarter.append(option);
+      const label = document.createElement("label");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.name = "songStarter";
+      checkbox.value = member.id;
+      checkbox.checked = selectedStarters.has(member.id);
+      const name = document.createElement("span");
+      name.textContent = member.name;
+      label.append(checkbox, name);
+      elements.songStarters.append(label);
     });
-    elements.songStarter.value = song?.starterMemberId || "";
     elements.archiveSong.hidden = !song;
     elements.deleteSong.hidden = !song;
     elements.archiveSong.textContent = song?.archived ? "Obnovit píseň" : "Archivovat píseň";
@@ -1936,7 +1958,9 @@
       elements.songRoleCloser.checked ? "closer" : "",
       elements.songRoleEncore.checked ? "encore" : ""
     ].filter(Boolean);
-    const starterMemberId = memberById(elements.songStarter.value)?.id || "";
+    const starterMemberIds = [...elements.songStarters.querySelectorAll('input[name="songStarter"]:checked')]
+      .map(input => input.value)
+      .filter(id => memberById(id));
     if (!title) {
       elements.songError.textContent = "Doplň název písně.";
       return false;
@@ -1953,10 +1977,10 @@
     const durationSec = minutes * 60 + seconds;
     if (editingSongId) {
       const song = songById(editingSongId);
-      if (song) Object.assign(song, { title, durationSec, album, energy, vibeRoles, starterMemberId });
+      if (song) Object.assign(song, { title, durationSec, album, energy, vibeRoles, starterMemberIds });
       showToast("Píseň byla upravena.");
     } else {
-      state.songs.push({ id: makeId("song"), title, durationSec, album, energy, vibeRoles, starterMemberId, archived: false, memberNotes: {} });
+      state.songs.push({ id: makeId("song"), title, durationSec, album, energy, vibeRoles, starterMemberIds, archived: false, memberNotes: {} });
       showToast("Píseň byla přidána do knihovny.");
     }
     commit({ library: true, saved: true });
@@ -2196,7 +2220,7 @@
           return;
         }
         knownTitles.add(key);
-        state.songs.push({ id: makeId("song"), energy: 3, vibeRoles: [], starterMemberId: "", memberNotes: {}, ...candidate });
+        state.songs.push({ id: makeId("song"), energy: 3, vibeRoles: [], starterMemberIds: [], memberNotes: {}, ...candidate });
         added += 1;
       });
       commit({ library: true });
@@ -2401,7 +2425,7 @@
     result.forEach(candidate => {
       const exists = state.songs.some(song => song.title.localeCompare(candidate.title, "cs", { sensitivity: "base" }) === 0);
       if (!exists) {
-        state.songs.push({ id: makeId("song"), energy: 3, vibeRoles: [], starterMemberId: "", memberNotes: {}, ...candidate });
+        state.songs.push({ id: makeId("song"), energy: 3, vibeRoles: [], starterMemberIds: [], memberNotes: {}, ...candidate });
         added += 1;
       }
     });

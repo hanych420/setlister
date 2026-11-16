@@ -2,6 +2,11 @@
 
 Přehled všech publikovaných verzí aplikace Setlister od prvního veřejného vydání.
 
+## 0.5.1 — Společné otevírání skladeb
+
+- U skladby lze označit více členů, kteří ji otevírají.
+- Čistý pohled na aktuální set už nezobrazuje osobní přechodové pokyny.
+
 ## 0.5.0 — Chytrá kostra setu a osobní pohled
 
 - U každé skladby lze nastavit energii 1–5, roli otevírací / na závěr / přídavek a člena, který ji otevírá.
