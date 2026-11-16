@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0
+
+- Písně mají energii 1–5, role otevírací / na závěr / přídavek a určeného člena, který je otevírá.
+- Nová funkce **Navrhnout kostru** seřadí aktuální set podle energetického oblouku a omezuje změny kapa a nástrojů.
+- Setlister si v prohlížeči pamatuje naposledy zvoleného člena a hlavní seznam umí zobrazit pouze jeho poznámky.
+- Každý člen si může uložit vlastní název písničky a u skladby zvolit **Bez nástroje**.
+- Přidán samostatný export pro ladiče, který ukazuje volné kytary a okamžik jejich přípravy na další skladbu.
+- Doplněn service worker a PWA metadata pro spolehlivou instalaci z Chromu na Androidu.
+
 ## 0.4.4
 
 - Kapelní asistent se v celém rozhraní nově jmenuje PropsBot.

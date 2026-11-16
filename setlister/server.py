@@ -1365,7 +1365,7 @@ def cloudflare_identity(jwt: str, options: dict[str, Any]) -> str | None:
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.4.4"
+    server_version = "Setlister/0.5.0"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
     def __init__(self, *args, **kwargs):
@@ -1689,7 +1689,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def public_path(path: str) -> bool:
         return ".." not in Path(path).parts and (path in {
             "/", "/index.html", "/ask.html", "/about.html", "/privacy.html", "/terms.html",
-            "/styles.css", "/app.js", "/ask.js", "/manifest.webmanifest"
+            "/styles.css", "/app.js", "/ask.js", "/manifest.webmanifest", "/service-worker.js"
         } or path.startswith("/assets/"))
 
 

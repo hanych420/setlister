@@ -4,6 +4,9 @@
   const STORAGE_KEY = "setlister-v1";
   const DRAFT_STORAGE_KEY = "setlister-draft-v2";
   const LEGACY_STORAGE_KEY = "kapelnik-setlist-v1";
+  const ACTIVE_MEMBER_STORAGE_KEY = "setlister-active-member-v1";
+  const NO_INSTRUMENT = "Bez nástroje";
+  const VIBE_ROLES = ["opener", "closer", "encore"];
   const MEMBER_PROFILES = [
     { id: "member-hanych", name: "Hanych", instruments: ["Elektrická kytara", "Akustická kytara"], capoInstruments: ["Elektrická kytara", "Akustická kytara"] },
     { id: "member-jachym", name: "Jáchym", instruments: ["Bicí"], capoInstruments: [] },
@@ -38,6 +41,8 @@
     setName: document.querySelector("#setName"),
     targetMinutes: document.querySelector("#targetMinutes"),
     includeGaps: document.querySelector("#includeGaps"),
+    personalView: document.querySelector("#personalView"),
+    suggestOrder: document.querySelector("#suggestOrder"),
     saveSet: document.querySelector("#saveSet"),
     newSet: document.querySelector("#newSet"),
     songSearch: document.querySelector("#songSearch"),
@@ -62,6 +67,7 @@
     addInterlude: document.querySelector("#addInterlude"),
     exportSet: document.querySelector("#exportSet"),
     savedSets: document.querySelector("#savedSets"),
+    installApp: document.querySelector("#installApp"),
     manageMembers: document.querySelector("#manageMembers"),
     exportData: document.querySelector("#exportData"),
     importData: document.querySelector("#importData"),
@@ -72,6 +78,11 @@
     songAlbum: document.querySelector("#songAlbum"),
     songMinutes: document.querySelector("#songMinutes"),
     songSeconds: document.querySelector("#songSeconds"),
+    songEnergy: document.querySelector("#songEnergy"),
+    songStarter: document.querySelector("#songStarter"),
+    songRoleOpener: document.querySelector("#songRoleOpener"),
+    songRoleCloser: document.querySelector("#songRoleCloser"),
+    songRoleEncore: document.querySelector("#songRoleEncore"),
     songError: document.querySelector("#songError"),
     archiveSong: document.querySelector("#archiveSong"),
     deleteSong: document.querySelector("#deleteSong"),
@@ -91,6 +102,7 @@
     memberTabs: document.querySelector("#memberTabs"),
     noteCapoField: document.querySelector("#noteCapoField"),
     noteCapo: document.querySelector("#noteCapo"),
+    noteAlias: document.querySelector("#noteAlias"),
     noteInstrumentField: document.querySelector("#noteInstrumentField"),
     noteInstrument: document.querySelector("#noteInstrument"),
     noteSoundField: document.querySelector("#noteSoundField"),
@@ -107,6 +119,7 @@
     exportMembersFieldset: document.querySelector("#exportMembersFieldset"),
     exportMemberList: document.querySelector("#exportMemberList"),
     cleanCopyCount: document.querySelector("#cleanCopyCount"),
+    cleanCopyControl: document.querySelector("#cleanCopyControl"),
     exportError: document.querySelector("#exportError"),
     downloadPrintFile: document.querySelector("#downloadPrintFile"),
     printArea: document.querySelector("#printArea"),
@@ -129,6 +142,9 @@
   let pendingMemberNotes = {};
   let membersDraft = [];
   let exportCleanCopiesEdited = false;
+  let preferredMemberId = localStorage.getItem(ACTIVE_MEMBER_STORAGE_KEY) || "";
+  let personalViewMemberId = preferredMemberId;
+  let deferredInstallPrompt = null;
 
   function makeId(prefix = "id") {
     const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -143,6 +159,9 @@
         title,
         durationSec: 0,
         album: "",
+        energy: 3,
+        vibeRoles: [],
+        starterMemberId: "",
         archived: false,
         memberNotes: {}
       })),
@@ -188,9 +207,9 @@
       const instruments = [...new Set((Array.isArray(member.instruments) && member.instruments.length
         ? member.instruments
         : configured?.instruments || ["Zpěv"])
-        .map(instrument => String(instrument || "").trim())
+        .map(normalizeInstrument)
         .filter(Boolean))];
-      const savedDefault = String(member.defaultInstrument || "").trim();
+      const savedDefault = normalizeInstrument(member.defaultInstrument);
       const defaultInstrument = instruments.find(instrument => sameInstrument(instrument, savedDefault)) || instruments[0];
       return { ...member, instruments, defaultInstrument };
     }).sort((a, b) =>
@@ -203,6 +222,11 @@
         ...song,
         durationSec: Math.max(0, Number(song.durationSec) || 0),
         album: String(song.album || "").trim(),
+        energy: normalizeEnergy(song.energy),
+        vibeRoles: normalizeVibeRoles(song.vibeRoles),
+        starterMemberId: value.members.some(member => member.id === song.starterMemberId)
+          ? song.starterMemberId
+          : "",
         archived: Boolean(song.archived),
         memberNotes: normalizeMemberNotes(song.memberNotes)
       }));
@@ -326,6 +350,9 @@
       title: mergeValue(baseSong.title, localSong.title, remoteSong.title),
       durationSec: mergeValue(baseSong.durationSec, localSong.durationSec, remoteSong.durationSec),
       album: mergeValue(baseSong.album, localSong.album, remoteSong.album),
+      energy: mergeValue(baseSong.energy, localSong.energy, remoteSong.energy),
+      vibeRoles: mergeValue(baseSong.vibeRoles, localSong.vibeRoles, remoteSong.vibeRoles),
+      starterMemberId: mergeValue(baseSong.starterMemberId, localSong.starterMemberId, remoteSong.starterMemberId),
       archived: mergeValue(baseSong.archived, localSong.archived, remoteSong.archived),
       memberNotes: mergeMemberNotes(baseSong.memberNotes, localSong.memberNotes, remoteSong.memberNotes)
     });
@@ -499,6 +526,44 @@
     return state.members.find(member => member.id === id);
   }
 
+  function activeMember() {
+    return memberById(preferredMemberId) || state.members[0] || null;
+  }
+
+  function selectPreferredMember(memberId, { rerender = true } = {}) {
+    const member = memberById(memberId) || state.members[0] || null;
+    preferredMemberId = member?.id || "";
+    personalViewMemberId = preferredMemberId;
+    if (preferredMemberId) localStorage.setItem(ACTIVE_MEMBER_STORAGE_KEY, preferredMemberId);
+    else localStorage.removeItem(ACTIVE_MEMBER_STORAGE_KEY);
+    if (elements.personalView && elements.personalView.value !== preferredMemberId) {
+      elements.personalView.value = preferredMemberId;
+    }
+    if (rerender) renderCurrentSet();
+  }
+
+  function renderPersonalViewOptions() {
+    const keepCleanView = personalViewMemberId === "" && elements.personalView.options.length > 0;
+    const selected = keepCleanView
+      ? ""
+      : memberById(personalViewMemberId)?.id || memberById(preferredMemberId)?.id || state.members[0]?.id || "";
+    elements.personalView.replaceChildren();
+    const clean = document.createElement("option");
+    clean.value = "";
+    clean.textContent = "Bez osobních poznámek";
+    elements.personalView.append(clean);
+    state.members.forEach(member => {
+      const option = document.createElement("option");
+      option.value = member.id;
+      option.textContent = member.name;
+      elements.personalView.append(option);
+    });
+    personalViewMemberId = selected;
+    if (!memberById(preferredMemberId)) preferredMemberId = state.members[0]?.id || "";
+    elements.personalView.value = selected;
+    if (preferredMemberId) localStorage.setItem(ACTIVE_MEMBER_STORAGE_KEY, preferredMemberId);
+  }
+
   function profileForMember(member) {
     const configured = MEMBER_PROFILES.find(candidate =>
       candidate.name.toLocaleLowerCase("cs-CZ") === member?.name?.toLocaleLowerCase("cs-CZ"));
@@ -521,6 +586,30 @@
     return String(first || "").toLocaleLowerCase("cs-CZ") === String(second || "").toLocaleLowerCase("cs-CZ");
   }
 
+  function isNoInstrument(instrument) {
+    const normalized = String(instrument || "").trim().toLocaleLowerCase("cs-CZ");
+    return normalized === NO_INSTRUMENT.toLocaleLowerCase("cs-CZ") || normalized === "žádný" || normalized === "žádný nástroj";
+  }
+
+  function normalizeInstrument(instrument) {
+    return isNoInstrument(instrument) ? NO_INSTRUMENT : String(instrument || "").trim();
+  }
+
+  function normalizeEnergy(value) {
+    return Math.max(1, Math.min(5, Math.round(Number(value) || 3)));
+  }
+
+  function normalizeVibeRoles(value) {
+    const roles = Array.isArray(value) ? value : [];
+    return [...new Set(roles.filter(role => VIBE_ROLES.includes(role)))];
+  }
+
+  function vibeLabel(song) {
+    const labels = { opener: "otevírací", closer: "na závěr", encore: "přídavek" };
+    const roles = normalizeVibeRoles(song?.vibeRoles).map(role => labels[role]);
+    return [`energie ${normalizeEnergy(song?.energy)}/5`, ...roles].join(" · ");
+  }
+
   function instrumentUsesCapo(member, instrument) {
     return profileForMember(member).capoInstruments.some(candidate => sameInstrument(candidate, instrument));
   }
@@ -537,9 +626,10 @@
   function normalizeNote(note) {
     return {
       capo: normalizeCapo(note?.capo),
-      instrument: String(note?.instrument || "").trim(),
+      instrument: normalizeInstrument(note?.instrument),
       sound: String(note?.sound || "").trim(),
-      text: String(note?.text || "").trim()
+      text: String(note?.text || "").trim(),
+      alias: String(note?.alias || "").trim()
     };
   }
 
@@ -550,7 +640,7 @@
 
   function noteHasContent(note) {
     const normalized = normalizeNote(note);
-    return Boolean(normalized.capo !== "K0" || normalized.instrument || normalized.sound || normalized.text);
+    return Boolean(normalized.capo !== "K0" || normalized.instrument || normalized.sound || normalized.text || normalized.alias);
   }
 
   function songNoteCount(song) {
@@ -610,6 +700,79 @@
 
   function allTransitionPlans(songs) {
     return new Map(state.members.map(member => [member.id, transitionPlanForMember(songs, member)]));
+  }
+
+  function songSetupForMember(song, member) {
+    const note = normalizeNote(song?.memberNotes?.[member.id]);
+    return {
+      instrument: note.instrument || profileForMember(member).defaultInstrument,
+      capo: note.capo
+    };
+  }
+
+  function setupTransitionCost(previousSong, nextSong) {
+    if (!previousSong || !nextSong) return 0;
+    return state.members.reduce((cost, member) => {
+      const previous = songSetupForMember(previousSong, member);
+      const next = songSetupForMember(nextSong, member);
+      if (!sameInstrument(previous.instrument, next.instrument)) return cost + 1.25;
+      if (instrumentUsesCapo(member, next.instrument) && previous.capo !== next.capo) return cost + 2.75;
+      return cost;
+    }, 0);
+  }
+
+  function energyTargetForPosition(index, count) {
+    if (count <= 1) return 4;
+    const anchors = [4, 3, 4, 2, 3, 4, 5];
+    const position = index / (count - 1) * (anchors.length - 1);
+    const lower = Math.floor(position);
+    const upper = Math.min(anchors.length - 1, Math.ceil(position));
+    const share = position - lower;
+    return anchors[lower] * (1 - share) + anchors[upper] * share;
+  }
+
+  function rolePositionPenalty(song, index, count) {
+    const roles = normalizeVibeRoles(song.vibeRoles);
+    let penalty = 0;
+    if (roles.includes("opener")) penalty += index === 0 ? -20 : 18 + index;
+    if (roles.includes("closer")) penalty += index === count - 1 ? -16 : Math.abs(count - 1 - index) * 4;
+    if (roles.includes("encore")) penalty += index === count - 1 ? -22 : Math.abs(count - 1 - index) * 5;
+    return penalty;
+  }
+
+  function suggestedSongOrder(songs) {
+    const remaining = [...songs];
+    const result = [];
+    while (remaining.length) {
+      const index = result.length;
+      const previous = result.at(-1) || null;
+      const targetEnergy = energyTargetForPosition(index, songs.length);
+      remaining.sort((first, second) => {
+        const firstScore = Math.abs(normalizeEnergy(first.energy) - targetEnergy) * 3
+          + setupTransitionCost(previous, first)
+          + rolePositionPenalty(first, index, songs.length);
+        const secondScore = Math.abs(normalizeEnergy(second.energy) - targetEnergy) * 3
+          + setupTransitionCost(previous, second)
+          + rolePositionPenalty(second, index, songs.length);
+        return firstScore - secondScore || first.title.localeCompare(second.title, "cs-CZ");
+      });
+      result.push(remaining.shift());
+    }
+    return result;
+  }
+
+  function suggestCurrentSetOrder() {
+    const songs = entriesFor().filter(entry => !isInterlude(entry));
+    if (songs.length < 2) {
+      showToast("Pro návrh pořadí jsou potřeba alespoň dvě písničky.");
+      return;
+    }
+    if (!confirm("Navrhnout nové pořadí podle energie, role a změn vybavení? Pořadí pak můžeš dál ručně upravit.")) return;
+    const orderedIds = suggestedSongOrder(songs).map(song => song.id);
+    let songIndex = 0;
+    state.draft.songIds = state.draft.songIds.map(id => state.draft.interludes[id] ? id : orderedIds[songIndex++]);
+    commit({ library: true });
+    showToast("Kostra setu je připravená. Pauzy zůstaly na svých pozicích.");
   }
 
   function formatTime(totalSeconds) {
@@ -818,7 +981,8 @@
       title.textContent = song.title;
       const duration = document.createElement("small");
       const durationText = song.durationSec ? formatTime(song.durationSec) : "Délka nezadaná";
-      duration.textContent = `${song.album || "Bez alba"} · ${durationText}`;
+      const starter = memberById(song.starterMemberId);
+      duration.textContent = `${song.album || "Bez alba"} · ${durationText} · ${vibeLabel(song)}${starter ? ` · otevírá ${starter.name}` : ""}`;
       info.append(title, duration);
       if (song.archived) {
         const archived = document.createElement("small");
@@ -886,11 +1050,13 @@
       : "";
     elements.emptySet.classList.toggle("hidden", entries.length > 0);
     const transitionPlans = allTransitionPlans(songs);
+    const viewMember = memberById(personalViewMemberId);
     let songIndex = 0;
 
     entries.forEach((entry, index) => {
       const musicalIndex = isInterlude(entry) ? -1 : songIndex++;
-      const transitions = musicalIndex < 0 ? [] : state.members.flatMap(member => {
+      const visibleMembers = viewMember ? [viewMember] : state.members;
+      const transitions = musicalIndex < 0 ? [] : visibleMembers.flatMap(member => {
         const changes = transitionPlans.get(member.id)?.[musicalIndex]?.changes || [];
         return changes.length ? [{ member, changes }] : [];
       });
@@ -921,13 +1087,35 @@
       const title = document.createElement("div");
       title.className = "set-song-title";
       const strong = document.createElement("strong");
-      strong.textContent = entry.title;
+      const personalNote = !isInterlude(entry) && viewMember
+        ? normalizeNote(entry.memberNotes?.[viewMember.id])
+        : null;
+      strong.textContent = personalNote?.alias || entry.title;
       const small = document.createElement("small");
-      const noteCount = isInterlude(entry) ? 0 : songNoteCount(entry);
+      const noteCount = isInterlude(entry)
+        ? 0
+        : viewMember ? Number(noteHasContent(personalNote)) : songNoteCount(entry);
+      const starter = isInterlude(entry) ? null : memberById(entry.starterMemberId);
       small.textContent = isInterlude(entry)
         ? "Pauza / intermezzo"
-        : `Pozice ${musicalIndex + 1}${entry.archived ? " · archivovaná" : ""}${noteCount ? ` · ${noteCount}× poznámka` : ""}`;
+        : `${personalNote?.alias ? `Oficiálně: ${entry.title} · ` : ""}pozice ${musicalIndex + 1} · ${vibeLabel(entry)}${starter ? ` · otevírá ${starter.name}` : ""}${entry.archived ? " · archivovaná" : ""}${noteCount ? ` · ${noteCount}× poznámka` : ""}`;
       title.append(strong, small);
+
+      if (personalNote && viewMember) {
+        const itemPlan = transitionPlans.get(viewMember.id)?.[musicalIndex] || {};
+        const details = [];
+        const instrument = itemPlan.instrument || personalNote.instrument || profileForMember(viewMember).defaultInstrument;
+        if (instrumentUsesCapo(viewMember, instrument) && personalNote.capo !== "K0") details.push(personalNote.capo);
+        if (itemPlan.instrumentChanged && instrument) details.push(instrument);
+        if (instrumentUsesSound(instrument) && personalNote.sound) details.push(personalNote.sound);
+        if (personalNote.text) details.push(personalNote.text);
+        if (details.length) {
+          const noteLine = document.createElement("span");
+          noteLine.className = "set-personal-note";
+          noteLine.textContent = details.join(" · ");
+          title.append(noteLine);
+        }
+      }
 
       const duration = document.createElement("span");
       duration.className = "set-duration";
@@ -1083,7 +1271,7 @@
   function openNotesDialog(song) {
     notesEditingSongId = song.id;
     pendingMemberNotes = JSON.parse(JSON.stringify(song.memberNotes || {}));
-    activeNotesMemberId = state.members[0]?.id || null;
+    activeNotesMemberId = activeMember()?.id || null;
     elements.notesSongTitle.textContent = `Poznámky · ${song.title}`;
     renderMemberTabs();
     loadActiveMemberNote();
@@ -1095,12 +1283,13 @@
     const profile = profileForMember(member);
     const selectedInstrument = elements.noteInstrument.value;
     const effectiveInstrument = activeMemberEffectiveInstrument();
-    const storesInstrument = profile.instruments.length > 1;
+    const storesInstrument = Boolean(selectedInstrument);
     return normalizeNote({
       capo: instrumentUsesCapo(member, effectiveInstrument) ? elements.noteCapo.value : "K0",
       instrument: storesInstrument ? selectedInstrument : "",
       sound: instrumentUsesSound(effectiveInstrument) ? elements.noteSound.value : "",
-      text: elements.noteText.value
+      text: elements.noteText.value,
+      alias: elements.noteAlias.value
     });
   }
 
@@ -1114,12 +1303,10 @@
     const profile = profileForMember(member);
     const note = normalizeNote(pendingMemberNotes[activeNotesMemberId]);
     elements.noteInstrument.replaceChildren();
-    if (profile.instruments.length > 1) {
-      const unchanged = document.createElement("option");
-      unchanged.value = "";
-      unchanged.textContent = "Beze změny";
-      elements.noteInstrument.append(unchanged);
-    }
+    const unchanged = document.createElement("option");
+    unchanged.value = "";
+    unchanged.textContent = "Beze změny";
+    elements.noteInstrument.append(unchanged);
     profile.instruments.forEach(instrument => {
       const option = document.createElement("option");
       option.value = instrument;
@@ -1128,13 +1315,20 @@
         : instrument;
       elements.noteInstrument.append(option);
     });
+    if (!profile.instruments.some(isNoInstrument)) {
+      const none = document.createElement("option");
+      none.value = NO_INSTRUMENT;
+      none.textContent = NO_INSTRUMENT;
+      elements.noteInstrument.append(none);
+    }
     const selectedInstrument = profile.instruments.find(instrument => sameInstrument(instrument, note.instrument))
-      || (profile.instruments.length === 1 ? profile.defaultInstrument : "");
+      || (isNoInstrument(note.instrument) ? NO_INSTRUMENT : "");
     elements.noteInstrument.value = selectedInstrument;
-    elements.noteInstrumentField.hidden = profile.instruments.length <= 1;
+    elements.noteInstrumentField.hidden = false;
     elements.noteCapo.value = note.capo;
     elements.noteSound.value = note.sound;
     elements.noteText.value = note.text;
+    elements.noteAlias.value = note.alias;
     updateActiveMemberNoteFields();
   }
 
@@ -1160,7 +1354,9 @@
     elements.noteSoundField.hidden = !usesSound;
     if (!usesCapo) elements.noteCapo.value = "K0";
     if (!usesSound) elements.noteSound.value = "";
-    if (!profile.capoInstruments.length && profile.instruments.length === 1) {
+    if (isNoInstrument(selectedInstrument)) {
+      elements.noteTransitionHelp.textContent = `${member?.name || "Člen"} v této skladbě nehraje na žádný nástroj. Jeho ostatní nástroje tak mohou být k dispozici ladiči.`;
+    } else if (!profile.capoInstruments.length && profile.instruments.length === 1) {
       elements.noteTransitionHelp.textContent = member?.name === "Jáchym"
         ? "Pro Jáchyma sem stačí zapsat pokyn ke skladbě, například kdy klepe náklep."
         : `Nástroj ${profile.defaultInstrument} je nastavený napevno; stačí doplnit vlastní pokyn.`;
@@ -1181,6 +1377,7 @@
       tab.addEventListener("click", () => {
         storeActiveMemberNote();
         activeNotesMemberId = member.id;
+        selectPreferredMember(member.id);
         renderMemberTabs();
         loadActiveMemberNote();
       });
@@ -1192,6 +1389,7 @@
     const song = songById(notesEditingSongId);
     if (!song) return;
     storeActiveMemberNote();
+    selectPreferredMember(activeNotesMemberId, { rerender: false });
     song.memberNotes = Object.fromEntries(
       Object.entries(pendingMemberNotes)
         .map(([memberId, note]) => [memberId, normalizeNote(note)])
@@ -1345,6 +1543,9 @@
       return false;
     }
     state.members = cleaned;
+    if (!memberById(preferredMemberId)) preferredMemberId = state.members[0]?.id || "";
+    if (!memberById(personalViewMemberId)) personalViewMemberId = preferredMemberId;
+    renderPersonalViewOptions();
     commit({ library: true, saved: true });
     elements.membersDialog.close();
     showToast("Seznam členů kapely je uložený.");
@@ -1395,6 +1596,7 @@
 
   function suggestedCleanCopyCount() {
     const mode = elements.exportForm.querySelector('input[name="exportMode"]:checked')?.value;
+    if (mode === "tuner") return 0;
     if (mode === "common") return 6;
     const selectedCount = elements.exportMemberList.querySelectorAll('input[name="exportMember"]:checked').length;
     return Math.max(0, state.members.length - selectedCount);
@@ -1407,6 +1609,7 @@
   function updateExportMode(resetCleanCopies = false) {
     const mode = elements.exportForm.querySelector('input[name="exportMode"]:checked')?.value;
     elements.exportMembersFieldset.disabled = mode !== "individual";
+    elements.cleanCopyControl.hidden = mode === "tuner";
     if (resetCleanCopies) exportCleanCopiesEdited = false;
     syncSuggestedCleanCopies(resetCleanCopies);
   }
@@ -1417,6 +1620,87 @@
     note.className = chip ? "print-note-chip" : "";
     note.textContent = label ? `${label}: ${value}` : value;
     container.append(note);
+  }
+
+  function tunerInstructionsForSongs(songs) {
+    const instructions = new Map(songs.map((_, index) => [index, []]));
+    state.members.forEach(member => {
+      const profile = profileForMember(member);
+      const plan = transitionPlanForMember(songs, member);
+      profile.capoInstruments.forEach(instrument => {
+        const uses = plan
+          .map((item, index) => sameInstrument(item.instrument, instrument) ? index : -1)
+          .filter(index => index >= 0);
+        let previousUse = -1;
+        let previousCapo = "K0";
+        uses.forEach(useIndex => {
+          const neededCapo = normalizeNote(songs[useIndex].memberNotes?.[member.id]).capo;
+          if (neededCapo !== previousCapo) {
+            const hasIdleSong = useIndex > previousUse + 1;
+            const preparationIndex = hasIdleSong ? Math.max(0, previousUse + 1) : useIndex;
+            const prefix = hasIdleSong ? "připravit během skladby" : useIndex === 0 ? "připravit před koncertem" : "rychlá změna mezi skladbami";
+            const from = previousCapo === "K0" ? "" : `${previousCapo} → `;
+            instructions.get(preparationIndex)?.push(
+              `${member.name} — ${instrument}: ${prefix}, ${from}${neededCapo} pro „${songs[useIndex].title}“`
+            );
+          }
+          previousUse = useIndex;
+          previousCapo = neededCapo;
+        });
+      });
+    });
+    return instructions;
+  }
+
+  function buildTunerPage() {
+    const entries = entriesFor();
+    const songs = entries.filter(entry => !isInterlude(entry));
+    const instructions = tunerInstructionsForSongs(songs);
+    const instructionCount = [...instructions.values()].reduce((sum, items) => sum + items.length, 0);
+    const weightedRows = Math.max(1, entries.length + instructionCount * .45);
+    const rowHeightMm = Math.max(4.7, Math.min(24, 250 / weightedRows));
+    const page = document.createElement("section");
+    page.className = "print-page tuner-page";
+    page.style.setProperty("--print-row-height", `${rowHeightMm.toFixed(2)}mm`);
+    page.style.setProperty("--print-title-size", `${Math.max(10.5, Math.min(28, rowHeightMm * 1.55)).toFixed(2)}pt`);
+    page.style.setProperty("--print-side-size", `${Math.max(7, Math.min(10.5, rowHeightMm * .67)).toFixed(2)}pt`);
+
+    const header = document.createElement("header");
+    header.className = "print-header";
+    const memberWrap = document.createElement("div");
+    memberWrap.className = "print-member";
+    const name = document.createElement("strong");
+    name.textContent = "Ladiči";
+    memberWrap.append(name);
+    header.append(memberWrap);
+
+    const list = document.createElement("ol");
+    list.className = "print-list";
+    let songIndex = 0;
+    entries.forEach(entry => {
+      if (isInterlude(entry)) {
+        const interlude = document.createElement("li");
+        interlude.className = "print-interlude";
+        interlude.textContent = entry.title;
+        list.append(interlude);
+        return;
+      }
+      const row = document.createElement("li");
+      row.className = "print-song print-tuner-song";
+      const title = document.createElement("span");
+      title.className = "print-song-title";
+      title.textContent = entry.title;
+      const notes = document.createElement("span");
+      notes.className = "print-tuner-notes";
+      const items = instructions.get(songIndex) || [];
+      notes.textContent = items.length ? items.join(" · ") : "—";
+      if (items.length) notes.classList.add("has-action");
+      row.append(title, notes);
+      list.append(row);
+      songIndex += 1;
+    });
+    page.append(header, list);
+    return page;
   }
 
   function buildPrintPage(member = null, includeNotes = true) {
@@ -1475,24 +1759,26 @@
       left.className = "print-left";
       const songTitle = document.createElement("span");
       songTitle.className = "print-song-title";
-      songTitle.textContent = entry.title;
+      const note = member && includeNotes ? normalizeNote(entry.memberNotes?.[member.id]) : null;
+      songTitle.textContent = note?.alias || entry.title;
       const right = document.createElement("span");
       right.className = "print-right";
       row.append(left, songTitle, right);
 
       if (member && includeNotes) {
-        const note = normalizeNote(entry.memberNotes?.[member.id]);
         const itemPlan = transitionPlan[index] || {};
         const instrument = itemPlan.instrument || note.instrument || profileForMember(member).defaultInstrument;
         if (instrumentUsesCapo(member, instrument) && note.capo !== "K0") {
           appendPrintNote(left, "", note.capo);
         }
-        if (profileForMember(member).instruments.length > 1 && itemPlan.instrumentChanged) {
+        if (itemPlan.instrumentChanged) {
           appendPrintNote(left, "", instrument, false);
         }
         if (instrumentUsesSound(instrument)) appendPrintNote(right, "", note.sound);
         appendPrintNote(right, "", note.text, false);
       }
+      const starter = memberById(entry.starterMemberId);
+      if (starter) appendPrintNote(right, "START", starter.name, false);
       list.append(row);
     });
 
@@ -1507,12 +1793,15 @@
     const cleanCopyCount = Math.max(0, Math.min(50, Math.floor(Number(elements.cleanCopyCount.value) || 0)));
     elements.cleanCopyCount.value = cleanCopyCount;
     elements.printArea.replaceChildren();
+    if (mode === "tuner") elements.printArea.append(buildTunerPage());
     if (mode === "individual") {
       state.members
         .filter(member => selectedIds.has(member.id))
         .forEach(member => elements.printArea.append(buildPrintPage(member, true)));
     }
-    for (let index = 0; index < cleanCopyCount; index += 1) elements.printArea.append(buildPrintPage());
+    if (mode !== "tuner") {
+      for (let index = 0; index < cleanCopyCount; index += 1) elements.printArea.append(buildPrintPage());
+    }
     if (!elements.printArea.childElementCount) {
       elements.exportError.textContent = "Vyber alespoň jednu individuální stránku nebo nastav počet čistých kopií.";
       return false;
@@ -1556,6 +1845,10 @@
       .print-transition { flex: 0 0 auto; padding: .8mm 8mm; color: #8b4e00; font-size: var(--print-transition-size, 9pt); font-weight: 800; line-height: 1.05; text-align: center; break-inside: avoid; }
       .print-transition::before { content: "↻ "; }
       .print-interlude { flex: 0 0 auto; margin: .6mm 12mm; border-block: 1px dashed #888; padding: .8mm; color: #444; font-size: var(--print-transition-size, 9pt); font-weight: 800; text-align: center; text-transform: uppercase; break-inside: avoid; }
+      .print-tuner-song { grid-template-columns: minmax(52mm, .8fr) minmax(0, 1.2fr); }
+      .print-tuner-song .print-song-title { text-align: left; }
+      .print-tuner-notes { color: #777; font-size: var(--print-side-size, 9pt); font-weight: 700; line-height: 1.15; }
+      .print-tuner-notes.has-action { color: #7b4200; font-weight: 900; }
       @page { size: A4 portrait; margin: 0; }
       @media print {
         body { background: #fff; }
@@ -1605,6 +1898,23 @@
     elements.songAlbum.value = song?.album ?? "";
     elements.songMinutes.value = song ? Math.floor(song.durationSec / 60) : 3;
     elements.songSeconds.value = song ? song.durationSec % 60 : 30;
+    elements.songEnergy.value = String(normalizeEnergy(song?.energy));
+    const roles = normalizeVibeRoles(song?.vibeRoles);
+    elements.songRoleOpener.checked = roles.includes("opener");
+    elements.songRoleCloser.checked = roles.includes("closer");
+    elements.songRoleEncore.checked = roles.includes("encore");
+    elements.songStarter.replaceChildren();
+    const nobody = document.createElement("option");
+    nobody.value = "";
+    nobody.textContent = "Neuvedeno";
+    elements.songStarter.append(nobody);
+    state.members.forEach(member => {
+      const option = document.createElement("option");
+      option.value = member.id;
+      option.textContent = member.name;
+      elements.songStarter.append(option);
+    });
+    elements.songStarter.value = song?.starterMemberId || "";
     elements.archiveSong.hidden = !song;
     elements.deleteSong.hidden = !song;
     elements.archiveSong.textContent = song?.archived ? "Obnovit píseň" : "Archivovat píseň";
@@ -1620,6 +1930,13 @@
     const album = elements.songAlbum.value.trim();
     const minutes = Number(elements.songMinutes.value);
     const seconds = Number(elements.songSeconds.value);
+    const energy = normalizeEnergy(elements.songEnergy.value);
+    const vibeRoles = [
+      elements.songRoleOpener.checked ? "opener" : "",
+      elements.songRoleCloser.checked ? "closer" : "",
+      elements.songRoleEncore.checked ? "encore" : ""
+    ].filter(Boolean);
+    const starterMemberId = memberById(elements.songStarter.value)?.id || "";
     if (!title) {
       elements.songError.textContent = "Doplň název písně.";
       return false;
@@ -1636,10 +1953,10 @@
     const durationSec = minutes * 60 + seconds;
     if (editingSongId) {
       const song = songById(editingSongId);
-      if (song) Object.assign(song, { title, durationSec, album });
+      if (song) Object.assign(song, { title, durationSec, album, energy, vibeRoles, starterMemberId });
       showToast("Píseň byla upravena.");
     } else {
-      state.songs.push({ id: makeId("song"), title, durationSec, album, archived: false, memberNotes: {} });
+      state.songs.push({ id: makeId("song"), title, durationSec, album, energy, vibeRoles, starterMemberId, archived: false, memberNotes: {} });
       showToast("Píseň byla přidána do knihovny.");
     }
     commit({ library: true, saved: true });
@@ -1879,7 +2196,7 @@
           return;
         }
         knownTitles.add(key);
-        state.songs.push({ id: makeId("song"), memberNotes: {}, ...candidate });
+        state.songs.push({ id: makeId("song"), energy: 3, vibeRoles: [], starterMemberId: "", memberNotes: {}, ...candidate });
         added += 1;
       });
       commit({ library: true });
@@ -1922,12 +2239,29 @@
   }
 
   function renderAll() {
+    renderPersonalViewOptions();
     renderLibrary();
     renderCurrentSet();
     renderSavedSets();
   }
 
   elements.songSearch.addEventListener("input", renderLibrary);
+  window.addEventListener("beforeinstallprompt", event => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    elements.installApp.hidden = false;
+  });
+  window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    elements.installApp.hidden = true;
+    showToast("Setlister je nainstalovaný jako aplikace.");
+  });
+  elements.installApp.addEventListener("click", async () => {
+    if (!deferredInstallPrompt) return;
+    await deferredInstallPrompt.prompt();
+    deferredInstallPrompt = null;
+    elements.installApp.hidden = true;
+  });
   elements.albumFilter.addEventListener("change", renderLibrary);
   elements.showArchived.addEventListener("change", renderLibrary);
   elements.addSong.addEventListener("click", () => openSongDialog());
@@ -1958,6 +2292,12 @@
     saveState();
     renderCurrentSet();
   });
+  elements.personalView.addEventListener("change", event => {
+    personalViewMemberId = event.target.value;
+    if (memberById(personalViewMemberId)) selectPreferredMember(personalViewMemberId);
+    else renderCurrentSet();
+  });
+  elements.suggestOrder.addEventListener("click", suggestCurrentSetOrder);
   elements.saveSet.addEventListener("click", saveCurrentSet);
   elements.newSet.addEventListener("click", startNewSet);
   elements.manageMembers.addEventListener("click", openMembersDialog);
@@ -2061,7 +2401,7 @@
     result.forEach(candidate => {
       const exists = state.songs.some(song => song.title.localeCompare(candidate.title, "cs", { sensitivity: "base" }) === 0);
       if (!exists) {
-        state.songs.push({ id: makeId("song"), memberNotes: {}, ...candidate });
+        state.songs.push({ id: makeId("song"), energy: 3, vibeRoles: [], starterMemberId: "", memberNotes: {}, ...candidate });
         added += 1;
       }
     });
@@ -2076,4 +2416,9 @@
     .filter(Boolean));
   renderAll();
   initializeSharedState();
+  if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
+    navigator.serviceWorker.register("/service-worker.js").catch(error => {
+      console.warn("Instalaci webové aplikace se nepodařilo připravit.", error);
+    });
+  }
 })();

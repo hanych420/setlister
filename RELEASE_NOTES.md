@@ -2,6 +2,15 @@
 
 Přehled všech publikovaných verzí aplikace Setlister od prvního veřejného vydání.
 
+## 0.5.0 — Chytrá kostra setu a osobní pohled
+
+- U každé skladby lze nastavit energii 1–5, roli otevírací / na závěr / přídavek a člena, který ji otevírá.
+- **Navrhnout kostru** sestaví energetický oblouk a současně omezuje změny kapa a nástrojů.
+- Výběr člena se pamatuje v prohlížeči a hlavní setlist umí zobrazit jen jeho vlastní pokyny.
+- Členové mohou použít vlastní název skladby a stav **Bez nástroje**.
+- Nový export pro ladiče ukazuje, kterou volnou kytaru lze během právě hrané skladby připravit na další použití.
+- Android Chrome dostal plnohodnotné PWA podklady včetně service workeru pro instalaci Setlisteru jako aplikace.
+
 ## 0.4.4 — PropsBot a mobilní instalace
 
 - Kapelní asistent se v celém Setlisteru nově jmenuje **PropsBot**.

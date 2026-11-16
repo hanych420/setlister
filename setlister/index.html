@@ -9,17 +9,17 @@
   <meta name="apple-mobile-web-app-title" content="Setlister">
   <meta name="description" content="Lokální plánovač koncertních setlistů.">
   <title>Setlister — plánovač setlistů</title>
-  <link rel="icon" href="assets/favicon.svg?v=0.4.4" type="image/svg+xml">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=0.4.4">
-  <link rel="manifest" href="manifest.webmanifest?v=0.4.4">
-  <link rel="stylesheet" href="styles.css?v=0.4.4">
+  <link rel="icon" href="assets/favicon.svg?v=0.5.0" type="image/svg+xml">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=0.5.0">
+  <link rel="manifest" href="manifest.webmanifest?v=0.5.0">
+  <link rel="stylesheet" href="styles.css?v=0.5.0">
 </head>
 <body>
   <div class="stage-light" aria-hidden="true"></div>
 
   <header class="topbar">
     <a class="brand" href="index.html" aria-label="Setlister — domů">
-      <img class="brand-logo" src="assets/logo.svg?v=0.4.4" alt="Logo kapely">
+      <img class="brand-logo" src="assets/logo.svg?v=0.5.0" alt="Logo kapely">
       <span>
         <strong>Setlister</strong>
         <small>Setlist studio</small>
@@ -31,6 +31,7 @@
     </nav>
     <div class="top-actions">
       <span class="sync-status" id="syncStatus" data-state="connecting">Připojuji…</span>
+      <button class="button button-primary" id="installApp" type="button" hidden>Nainstalovat aplikaci</button>
       <button class="button button-ghost" id="manageMembers" type="button">Členové kapely</button>
       <button class="button button-ghost" id="exportData" type="button">Exportovat data</button>
       <label class="button button-ghost file-button">
@@ -117,6 +118,15 @@
           </div>
         </div>
 
+        <div class="set-view-bar">
+          <label class="field personal-view-field">
+            <span>Zobrazení poznámek</span>
+            <select id="personalView" aria-label="Zobrazit poznámky vybraného člena"></select>
+          </label>
+          <button class="button button-small button-ghost" id="suggestOrder" type="button">✦ Navrhnout kostru</button>
+          <p>Řazení zohlední energii, roli skladby a co nejméně změn kapa a nástrojů.</p>
+        </div>
+
         <div class="progress" aria-hidden="true">
           <span id="progressBar"></span>
         </div>
@@ -184,6 +194,28 @@
           <input id="songSeconds" type="number" min="0" max="59" value="30" inputmode="numeric" required>
         </label>
       </div>
+      <div class="song-vibe-fields">
+        <label class="field">
+          <span>Energie / vibe</span>
+          <select id="songEnergy">
+            <option value="1">1 — velmi pomalá</option>
+            <option value="2">2 — klidná</option>
+            <option value="3" selected>3 — střední</option>
+            <option value="4">4 — energická</option>
+            <option value="5">5 — maximum</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Kdo skladbu otevírá</span>
+          <select id="songStarter"><option value="">Neuvedeno</option></select>
+        </label>
+      </div>
+      <fieldset class="vibe-role-fieldset">
+        <legend>Role v setlistu</legend>
+        <label><input id="songRoleOpener" type="checkbox" value="opener"> Otevírací</label>
+        <label><input id="songRoleCloser" type="checkbox" value="closer"> Na závěr</label>
+        <label><input id="songRoleEncore" type="checkbox" value="encore"> Přídavek</label>
+      </fieldset>
       <p class="form-error" id="songError" role="alert"></p>
       <div class="modal-actions">
         <button class="button button-danger" id="deleteSong" value="delete" type="submit" hidden>Smazat píseň</button>
@@ -261,6 +293,10 @@
       <div class="member-tabs" id="memberTabs" role="tablist" aria-label="Členové kapely"></div>
 
       <div class="member-note-form">
+        <label class="field note-alias-field">
+          <span>Moje pojmenování písničky</span>
+          <input id="noteAlias" type="text" maxlength="100" placeholder="V individuálním setlistu se zobrazí místo hlavního názvu" autocomplete="off">
+        </label>
         <label class="field" id="noteCapoField">
           <span>Kapo</span>
           <select id="noteCapo">
@@ -341,6 +377,10 @@
           <input type="radio" name="exportMode" value="common">
           <span><strong>Pouze čistý setlist</strong><small>Bez individuálních pokynů. Výchozí počet je 6 kusů.</small></span>
         </label>
+        <label class="option-card">
+          <input type="radio" name="exportMode" value="tuner">
+          <span><strong>Setlist pro ladiče</strong><small>Všechny skladby a okamžiky, kdy je volný nástroj možné připravit na jeho další použití.</small></span>
+        </label>
       </fieldset>
 
       <fieldset class="export-members" id="exportMembersFieldset">
@@ -348,7 +388,7 @@
         <div class="export-member-list" id="exportMemberList"></div>
       </fieldset>
 
-      <label class="clean-copy-control" for="cleanCopyCount">
+      <label class="clean-copy-control" id="cleanCopyControl" for="cleanCopyCount">
         <span><strong>Počet čistých setlistů</strong><small>Bez poznámek a osobních pokynů.</small></span>
         <input id="cleanCopyCount" type="number" min="0" max="50" step="1" value="0">
       </label>
@@ -365,7 +405,7 @@
   <div id="printArea" aria-hidden="true"></div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/vendor/spreadsheet-reader.js?v=0.4.4"></script>
-  <script src="app.js?v=0.4.4"></script>
+  <script src="assets/vendor/spreadsheet-reader.js?v=0.5.0"></script>
+  <script src="app.js?v=0.5.0"></script>
 </body>
 </html>
