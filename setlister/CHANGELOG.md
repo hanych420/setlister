@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.1
+
+- obecná úprava skladby a osobní pokyny členů mají oddělená tlačítka i dialogy;
+- úprava skladby a poznámek je dostupná přímo u repertoáru vlevo, nikoli v rozestavěném setu vpravo;
+- osobní pokyny se otevírají na přihlášeném členovi a obsahují vlastní název skladby, nástroj, podmíněný kapodastr/preset a poznámku;
+- vlastní název člena se propisuje do jeho pohledu i osobního A4 výtisku;
+- repertoár při skládání lze filtrovat fulltextem, albem, energií a rolí skladby;
+- název setlistu je nově viditelně označené editovatelné pole;
+- systémové selecty nahradily vlastní přístupné roletky ve vizuálním stylu Setlisteru;
+- přepracovaná tlačítka pro načtení setlistu a poznámky členů.
+
 ## 0.8.0
 
 - veřejná aplikace nově obsahuje plnohodnotný repertoár s albem, délkou, energií a rolí skladby;

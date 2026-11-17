@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.8.0 · aktualizováno 17. 11. 2026
+> Stav specifikace: 0.8.1 · aktualizováno 17. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -76,6 +76,7 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
       "memberDetails": {
         "member-...": {
           "instrumentId": "electric-guitar",
+          "customTitle": "Můj vlastní název",
           "capo": 0,
           "preset": "Crunch 04",
           "note": "V druhé sloce stáhnout volume"
@@ -117,14 +118,17 @@ V detailu skladby zobraz sekci pro každého pódiového člena:
 - podmíněný zvuk/preset elektrické kytary;
 - soukromou pódiovou poznámku.
 
+Obecná editace skladby a osobní pokyny jsou dvě oddělené akce. Tužka upravuje pouze název, album, délku, energii a roli. Samostatná akce „Poznámky členů“ nejprve zvolí člena; výchozí je pódiový profil propojený s přihlášeným účtem. Osobní dialog obsahuje vlastní název skladby, nástroj, podmíněné kapo/preset a textovou poznámku.
+
 ## Skládání setlistu
 
 - Levá / horní část nabídne jen skladby, které ještě nejsou v aktuálním setu.
-- Hledání filtruje název a album.
+- Fulltext hledá v názvu, albu a roli; samostatné filtry vybírají album, energii a roli skladby.
 - Skladbu lze přidat, odebrat a přetřídit drag-and-drop i tlačítky.
 - Zobraz celkovou délku, cílovou délku a progress.
 - Uživatel může přepnout pohled „Bez poznámek“ nebo konkrétního člena.
 - „Bez poznámek“ nikdy nesmí zobrazit kapodastr, změnu nástroje, preset ani osobní poznámku žádného člena.
+- V osobním pohledu i osobním výtisku se použije `customTitle`, pokud jej člen vyplnil. Čistý setlist vždy používá hlavní název skladby.
 - Aktuální set lze uložit pod názvem a později znovu načíst.
 
 ## Tisk a PDF
@@ -203,6 +207,7 @@ Všechny POST/PUT požadavky posílej s `Content-Type: application/json`. Server
 - Výrazné nadpisy s těsným prokladem; provozní obsah kompaktní a velmi čitelný.
 - Karty a formuláře mají jemné linky, ne výrazné stíny.
 - Tlačítka mají kapslový tvar; primární akce limetková, sekundární průhledná s linkou.
+- Výběry nepoužívají výchozí systémový vzhled prohlížeče. Použij vlastní přístupnou roletku se zvýrazněnou aktivní volbou, klávesou Escape a odpovídajícím limetkovým focus stavem.
 - Pódiové PDF je černé na bílém, bez tmavého brandového pozadí.
 
 ## Akceptační scénáře
