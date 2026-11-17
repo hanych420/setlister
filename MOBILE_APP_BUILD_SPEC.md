@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.8.2 · aktualizováno 17. 11. 2026
+> Stav specifikace: 0.8.3 · aktualizováno 17. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -150,7 +150,7 @@ Export je určen pro papír ležící na pódiu, proto je čitelnost důležitě
 
 ## Logo kapely
 
-Kapela může nahrát vlastní PNG, JPEG, WebP nebo SVG. Klient obraz zmenší maximálně na 512 × 512 px a uloží jako kompaktní WebP. Logo se zobrazuje vedle názvu aktivní kapely a na výtisku. Maximální uložená data URL je 700 000 znaků.
+Kapela může nahrát vlastní PNG, JPEG, WebP nebo SVG libovolného poměru stran. Po výběru souboru klient otevře editor čtvercového výřezu: uživatel obrázek posouvá tažením nebo šipkami, mění přiblížení v rozsahu 1× až 4× a může jej znovu vycentrovat. Potvrzený výřez se vyrenderuje přesně na 512 × 512 px a uloží jako kompaktní WebP; zrušení editoru zachová předchozí logo beze změny. Logo se zobrazuje vedle názvu aktivní kapely a na výtisku. Maximální uložená data URL je 700 000 znaků. Stejné chování a výsledný formát musí zachovat web, iOS i Android.
 
 ## Mailový agent — cílová funkce
 

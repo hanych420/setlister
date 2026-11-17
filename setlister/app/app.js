@@ -23,6 +23,7 @@
   let toastTimer = null;
   let memberDraftCustomInstruments = [];
   let memberDraftSelectedIds = new Set();
+  let logoCropState = null;
 
   async function api(path, options = {}) {
     const response = await fetch(API + path, { credentials: "same-origin", ...options, headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
@@ -310,11 +311,36 @@
     if (!elements.printRoot.children.length) { showToast("Vyber alespoň jeden výtisk."); return; }
     elements.exportDialog.close(); requestAnimationFrame(() => window.print());
   }
-  async function resizeLogo(file) {
+  async function loadLogoImage(file) {
     if (!file || file.size > 5 * 1024 * 1024) throw new Error("Logo může mít nejvýše 5 MB.");
     const source = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); });
-    const image = await new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = reject; img.src = source; });
-    const scale = Math.min(1, 512 / Math.max(image.naturalWidth, image.naturalHeight)); const canvas = document.createElement("canvas"); canvas.width = Math.max(1, Math.round(image.naturalWidth * scale)); canvas.height = Math.max(1, Math.round(image.naturalHeight * scale)); canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height); return canvas.toDataURL("image/webp", .86);
+    return new Promise((resolve, reject) => { const img = new Image(); img.onload = () => img.naturalWidth && img.naturalHeight ? resolve(img) : reject(new Error("Obrázek nemá platné rozměry.")); img.onerror = () => reject(new Error("Soubor se nepodařilo načíst jako obrázek.")); img.src = source; });
+  }
+  function cropMetrics() {
+    if (!logoCropState) return null;
+    const rect = elements.logoCropStage.getBoundingClientRect(); const width = rect.width; const height = rect.height; const image = logoCropState.image;
+    const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight) * logoCropState.zoom;
+    const displayWidth = image.naturalWidth * scale; const displayHeight = image.naturalHeight * scale;
+    const maxX = Math.max(0, (displayWidth - width) / 2); const maxY = Math.max(0, (displayHeight - height) / 2);
+    logoCropState.offsetX = Math.max(-maxX, Math.min(maxX, logoCropState.offsetX)); logoCropState.offsetY = Math.max(-maxY, Math.min(maxY, logoCropState.offsetY));
+    return { width, height, scale, displayWidth, displayHeight };
+  }
+  function renderLogoCrop() {
+    const metrics = cropMetrics(); if (!metrics) return;
+    elements.logoCropImage.style.width = metrics.displayWidth + "px"; elements.logoCropImage.style.height = metrics.displayHeight + "px";
+    elements.logoCropImage.style.left = (metrics.width / 2 + logoCropState.offsetX) + "px"; elements.logoCropImage.style.top = (metrics.height / 2 + logoCropState.offsetY) + "px";
+  }
+  async function openLogoCrop(file) {
+    const image = await loadLogoImage(file); logoCropState = { image, zoom: 1, offsetX: 0, offsetY: 0, pointer: null };
+    elements.logoCropImage.src = image.src; elements.logoCropZoom.value = "1"; elements.logoCropDialog.showModal();
+    requestAnimationFrame(() => { renderLogoCrop(); elements.logoCropStage.focus(); });
+  }
+  function saveLogoCrop() {
+    const metrics = cropMetrics(); if (!metrics) return;
+    const image = logoCropState.image; const imageLeft = metrics.width / 2 + logoCropState.offsetX - metrics.displayWidth / 2; const imageTop = metrics.height / 2 + logoCropState.offsetY - metrics.displayHeight / 2;
+    const sourceX = Math.max(0, -imageLeft / metrics.scale); const sourceY = Math.max(0, -imageTop / metrics.scale); const sourceWidth = Math.min(image.naturalWidth - sourceX, metrics.width / metrics.scale); const sourceHeight = Math.min(image.naturalHeight - sourceY, metrics.height / metrics.scale);
+    const canvas = document.createElement("canvas"); canvas.width = 512; canvas.height = 512; const context = canvas.getContext("2d"); context.imageSmoothingEnabled = true; context.imageSmoothingQuality = "high"; context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, 512, 512);
+    workspace.state.bandProfile.logoDataUrl = canvas.toDataURL("image/webp", .86); elements.logoCropDialog.close(); logoCropState = null; changed(); showToast("Čtvercový výřez loga je uložený.");
   }
 
   document.querySelectorAll("[data-auth-tab]").forEach(button => button.addEventListener("click", () => activateAuthTab(button.dataset.authTab)));
@@ -344,7 +370,17 @@
   elements.addMember.addEventListener("click", () => openMemberDialog());
   elements.addCustomInstrument.addEventListener("click", addDraftCustomInstrument);
   elements.customInstrumentInput.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); addDraftCustomInstrument(); } });
-  elements.bandLogoInput.addEventListener("change", async event => { try { workspace.state.bandProfile.logoDataUrl = await resizeLogo(event.target.files[0]); changed(); showToast("Logo kapely je uložené."); } catch (error) { showToast(error.message || "Logo se nepodařilo načíst."); } event.target.value = ""; });
+  elements.bandLogoInput.addEventListener("change", async event => { try { await openLogoCrop(event.target.files[0]); } catch (error) { showToast(error.message || "Logo se nepodařilo načíst."); } event.target.value = ""; });
+  elements.logoCropZoom.addEventListener("input", event => { if (!logoCropState) return; logoCropState.zoom = Number(event.target.value); renderLogoCrop(); });
+  elements.resetLogoCrop.addEventListener("click", () => { if (!logoCropState) return; logoCropState.zoom = 1; logoCropState.offsetX = 0; logoCropState.offsetY = 0; elements.logoCropZoom.value = "1"; renderLogoCrop(); });
+  elements.saveLogoCrop.addEventListener("click", saveLogoCrop);
+  elements.logoCropStage.addEventListener("pointerdown", event => { if (!logoCropState) return; event.preventDefault(); elements.logoCropStage.setPointerCapture(event.pointerId); logoCropState.pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, offsetX: logoCropState.offsetX, offsetY: logoCropState.offsetY }; elements.logoCropStage.classList.add("dragging"); });
+  elements.logoCropStage.addEventListener("pointermove", event => { const pointer = logoCropState?.pointer; if (!pointer || pointer.id !== event.pointerId) return; logoCropState.offsetX = pointer.offsetX + event.clientX - pointer.x; logoCropState.offsetY = pointer.offsetY + event.clientY - pointer.y; renderLogoCrop(); });
+  const finishLogoDrag = event => { if (!logoCropState?.pointer || logoCropState.pointer.id !== event.pointerId) return; logoCropState.pointer = null; elements.logoCropStage.classList.remove("dragging"); };
+  elements.logoCropStage.addEventListener("pointerup", finishLogoDrag); elements.logoCropStage.addEventListener("pointercancel", finishLogoDrag);
+  elements.logoCropStage.addEventListener("keydown", event => { if (!logoCropState || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return; event.preventDefault(); const step = event.shiftKey ? 12 : 3; if (event.key === "ArrowLeft") logoCropState.offsetX -= step; if (event.key === "ArrowRight") logoCropState.offsetX += step; if (event.key === "ArrowUp") logoCropState.offsetY -= step; if (event.key === "ArrowDown") logoCropState.offsetY += step; renderLogoCrop(); });
+  elements.logoCropDialog.addEventListener("close", () => { logoCropState = null; elements.logoCropStage.classList.remove("dragging"); });
+  window.addEventListener("resize", () => { if (elements.logoCropDialog.open) renderLogoCrop(); });
   elements.removeBandLogo.addEventListener("click", () => { workspace.state.bandProfile.logoDataUrl = ""; changed(); });
   elements.bandSwitcher.addEventListener("click", () => { renderBandDialog(); elements.bandDialog.showModal(); }); elements.closeBandDialog.addEventListener("click", () => elements.bandDialog.close()); elements.showOnboarding.addEventListener("click", () => { elements.bandDialog.close(); setScreen("onboarding"); });
   elements.copyCode.addEventListener("click", async () => { await navigator.clipboard.writeText(workspace.band.inviteCode); showToast("Pozvánkový kód je zkopírovaný."); });

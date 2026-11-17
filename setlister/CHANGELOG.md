@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.3
+
+- po nahrání loga se otevře vlastní editor čtvercového výřezu;
+- obrázek lze posouvat tažením nebo klávesami a plynule přibližovat;
+- výsledné logo se ukládá jako čtverec 512 × 512 px, původní logo se při zrušení editoru nezmění.
+
 ## 0.8.2
 
 - člen může mít libovolný počet současně vybraných nástrojů a všechny jsou zřetelně označené;
