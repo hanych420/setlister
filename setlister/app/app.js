@@ -21,6 +21,8 @@
   let revision = 0;
   let saveTimer = null;
   let toastTimer = null;
+  let memberDraftCustomInstruments = [];
+  let memberDraftSelectedIds = new Set();
 
   async function api(path, options = {}) {
     const response = await fetch(API + path, { credentials: "same-origin", ...options, headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
@@ -259,12 +261,24 @@
   }
   function openMemberDialog(memberId = "") {
     const member = memberId ? memberById(memberId) : null; const form = elements.memberForm; form.reset(); form.elements.memberId.value = member?.id || ""; form.elements.name.value = member?.name || ""; form.elements.vocals.checked = Boolean(member?.vocals); elements.memberDialogTitle.textContent = member ? "Upravit " + member.name : "Přidat člena";
-    const selected = new Set((member?.instruments || []).map(item => item.id)); elements.instrumentChoices.replaceChildren(...INSTRUMENTS.map(instrument => { const label = document.createElement("label"); const input = document.createElement("input"); input.type = "checkbox"; input.value = instrument.id; input.checked = selected.has(instrument.id); const span = document.createElement("span"); span.textContent = instrument.name; label.append(input, span); return label; }));
-    const custom = (member?.instruments || []).find(item => item.kind === "custom"); form.elements.customInstrument.value = custom?.name || ""; elements.memberDialog.showModal();
+    memberDraftCustomInstruments = (member?.instruments || []).filter(item => item.kind === "custom").map(item => ({ ...item })); memberDraftSelectedIds = new Set((member?.instruments || []).map(item => item.id)); elements.customInstrumentInput.value = ""; renderMemberInstrumentChoices(); elements.memberDialog.showModal();
+  }
+  function renderMemberInstrumentChoices() {
+    const instruments = [...INSTRUMENTS, ...memberDraftCustomInstruments]; elements.instrumentChoices.replaceChildren(...instruments.map(instrument => {
+      const wrapper = document.createElement("div"); wrapper.className = "instrument-choice-wrap"; const label = document.createElement("label"); label.className = "instrument-option"; const input = document.createElement("input"); input.type = "checkbox"; input.value = instrument.id; input.checked = memberDraftSelectedIds.has(instrument.id); input.addEventListener("change", () => { if (input.checked) memberDraftSelectedIds.add(instrument.id); else memberDraftSelectedIds.delete(instrument.id); }); const marker = document.createElement("i"); const name = document.createElement("span"); name.textContent = instrument.name; label.append(input, marker, name); wrapper.append(label);
+      if (instrument.kind === "custom") { const remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-custom-instrument"; remove.textContent = "×"; remove.title = "Odstranit " + instrument.name; remove.setAttribute("aria-label", "Odstranit vlastní nástroj " + instrument.name); remove.addEventListener("click", () => { memberDraftSelectedIds.delete(instrument.id); memberDraftCustomInstruments = memberDraftCustomInstruments.filter(item => item.id !== instrument.id); renderMemberInstrumentChoices(); }); wrapper.append(remove); }
+      return wrapper;
+    }));
+  }
+  function addDraftCustomInstrument() {
+    const name = elements.customInstrumentInput.value.trim(); if (!name) return; const all = [...INSTRUMENTS, ...memberDraftCustomInstruments]; const existing = all.find(item => item.name.toLocaleLowerCase("cs") === name.toLocaleLowerCase("cs"));
+    if (existing) memberDraftSelectedIds.add(existing.id); else { const instrument = { id: uid("custom"), name, kind: "custom" }; memberDraftCustomInstruments.push(instrument); memberDraftSelectedIds.add(instrument.id); }
+    elements.customInstrumentInput.value = ""; renderMemberInstrumentChoices(); elements.customInstrumentInput.focus();
   }
   function saveMemberForm(form) {
-    const payload = formPayload(form); const checked = Array.from(elements.instrumentChoices.querySelectorAll("input:checked")).map(input => instrumentById(input.value)).filter(Boolean); if (payload.customInstrument.trim()) checked.push({ id: uid("custom"), name: payload.customInstrument.trim(), kind: "custom" });
-    const existing = payload.memberId ? memberById(payload.memberId) : null; const member = existing || { id: uid("member"), linkedUserId: "" }; member.name = payload.name.trim(); member.instruments = checked.map(item => ({ ...item })); member.defaultInstrumentId = member.instruments[0]?.id || "none"; member.vocals = form.elements.vocals.checked;
+    const payload = formPayload(form); const all = [...INSTRUMENTS, ...memberDraftCustomInstruments]; const checked = all.filter(item => memberDraftSelectedIds.has(item.id));
+    const existing = payload.memberId ? memberById(payload.memberId) : null; const member = existing || { id: uid("member"), linkedUserId: "" }; member.name = payload.name.trim(); member.instruments = checked.map(item => ({ ...item })); if (!memberDraftSelectedIds.has(member.defaultInstrumentId)) member.defaultInstrumentId = member.instruments.find(item => item.id !== "none")?.id || member.instruments[0]?.id || "none"; member.vocals = form.elements.vocals.checked;
+    const validInstrumentIds = new Set(["none", ...member.instruments.map(item => item.id)]); workspace.state.songs.forEach(song => { const detail = song.memberDetails?.[member.id]; if (detail && !validInstrumentIds.has(detail.instrumentId)) { detail.instrumentId = "none"; detail.capo = 0; detail.preset = ""; } });
     if (!existing) workspace.state.members.push(member); elements.memberDialog.close(); changed();
   }
   function saveSongForm(form) {
@@ -320,6 +334,7 @@
   elements.appTargetMinutes.addEventListener("input", event => { if (!workspace || event.target.value === "") return; workspace.state.draft.targetMinutes = Math.max(1, Math.min(240, Number(event.target.value))); changed(); });
   elements.appTargetMinutes.addEventListener("blur", event => { if (!event.target.value) { event.target.value = String(workspace.state.draft.targetMinutes || 45); } });
   elements.setName.addEventListener("input", event => { workspace.state.draft.name = event.target.value; clearTimeout(saveTimer); saveTimer = setTimeout(saveWorkspace, 600); });
+  elements.editSetName.addEventListener("click", () => { elements.setName.focus(); elements.setName.select(); });
   elements.setViewer.addEventListener("change", event => { workspace.state.draft.viewerMemberId = event.target.value; changed(); });
   elements.songSearch.addEventListener("input", renderWorkspace);
   elements.albumFilter.addEventListener("change", renderWorkspace); elements.energyFilter.addEventListener("change", renderWorkspace); elements.roleFilter.addEventListener("change", renderWorkspace);
@@ -327,6 +342,8 @@
   elements.openExport.addEventListener("click", () => { updateExportSummary(); elements.exportDialog.showModal(); });
   elements.exportForm.addEventListener("input", updateExportSummary); elements.exportForm.addEventListener("submit", event => { event.preventDefault(); generatePrint(event.currentTarget); });
   elements.addMember.addEventListener("click", () => openMemberDialog());
+  elements.addCustomInstrument.addEventListener("click", addDraftCustomInstrument);
+  elements.customInstrumentInput.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); addDraftCustomInstrument(); } });
   elements.bandLogoInput.addEventListener("change", async event => { try { workspace.state.bandProfile.logoDataUrl = await resizeLogo(event.target.files[0]); changed(); showToast("Logo kapely je uložené."); } catch (error) { showToast(error.message || "Logo se nepodařilo načíst."); } event.target.value = ""; });
   elements.removeBandLogo.addEventListener("click", () => { workspace.state.bandProfile.logoDataUrl = ""; changed(); });
   elements.bandSwitcher.addEventListener("click", () => { renderBandDialog(); elements.bandDialog.showModal(); }); elements.closeBandDialog.addEventListener("click", () => elements.bandDialog.close()); elements.showOnboarding.addEventListener("click", () => { elements.bandDialog.close(); setScreen("onboarding"); });

@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.8.1 · aktualizováno 17. 11. 2026
+> Stav specifikace: 0.8.2 · aktualizováno 17. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -100,6 +100,8 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
 
 Základní katalog: Bez nástroje, Akustická kytara, Elektrická kytara, Baskytara, Bicí, Klávesy, Housle, Saxofon, Perkuse a vlastní nástroj.
 
+Člen může mít současně zvolený libovolný počet nástrojů. Výběr je vizuální sada nezávislých přepínačů, nikoli radio button. Vlastní nástroj se po Enteru nebo potvrzení vloží jako další zaškrtnutá možnost; lze jej odškrtnout i úplně odstranit. Po odstranění nástroje se osobní pokyny skladeb, které jej používaly, bezpečně přepnou na „Bez nástroje“ a zruší kapo i preset.
+
 - `capo` zobraz pouze pokud vybraný nástroj člena v dané skladbě má `kind` `guitar` nebo `electric-guitar`.
 - K0 se ve výtisku nevypisuje. K1–K12 ano.
 - `preset` zobraz pouze pro `kind: electric-guitar`.
@@ -130,6 +132,7 @@ Obecná editace skladby a osobní pokyny jsou dvě oddělené akce. Tužka uprav
 - „Bez poznámek“ nikdy nesmí zobrazit kapodastr, změnu nástroje, preset ani osobní poznámku žádného člena.
 - V osobním pohledu i osobním výtisku se použije `customTitle`, pokud jej člen vyplnil. Čistý setlist vždy používá hlavní název skladby.
 - Aktuální set lze uložit pod názvem a později znovu načíst.
+- Název setlistu je přímo editovatelný a má viditelnou ikonu tužky, aby možnost přejmenování nebyla skrytá jen vzhledem nadpisu.
 
 ## Tisk a PDF
 

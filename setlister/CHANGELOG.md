@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.2
+
+- člen může mít libovolný počet současně vybraných nástrojů a všechny jsou zřetelně označené;
+- vlastní nástroje se přidávají Enterem nebo tlačítkem přímo mezi ostatní možnosti;
+- vlastní nástroj lze odškrtnout i úplně odstranit a odebraný nástroj se bezpečně vyčistí z osobních pokynů skladeb;
+- zákaznický popis Mailového agenta vysvětluje přínos bez technických detailů o indexaci a kreditech;
+- k názvu aktuálního setlistu přibyla viditelná tužka pro přejmenování.
+
 ## 0.8.1
 
 - obecná úprava skladby a osobní pokyny členů mají oddělená tlačítka i dialogy;
