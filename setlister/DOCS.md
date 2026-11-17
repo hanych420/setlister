@@ -20,11 +20,11 @@ Ve stávajícím tunelu vytvoř novou veřejnou trasu:
 setlister.cz → http://IP_HOME_ASSISTANTU:8110
 ```
 
-Nový tunnel ani další token nejsou potřeba. Pro `setlister.cz` musí zůstat zapnutý Cloudflare Access.
+Nový tunnel ani další token nejsou potřeba. Cloudflare Access musí chránit pouze `setlister.cz/propadleek*`; kořen `setlister.cz` je veřejné MVP.
 
 ## Nastavení Gmail asistenta
 
-V konfiguraci add-onu doplň Google OAuth Client ID a Client Secret, OpenAI API klíč, Cloudflare Access team domain a Application Audience tag. Přesměrovací adresa Google OAuth klienta musí být `https://setlister.cz/oauth/google/callback`.
+V konfiguraci add-onu doplň Google OAuth Client ID a Client Secret, OpenAI API klíč, Cloudflare Access team domain a Application Audience tag. Přesměrovací adresa Google OAuth klienta musí být `https://setlister.cz/propadleek/oauth/google/callback`.
 
 Po restartu otevři **PropsBot → Připojené účty** a autorizuj postupně oba kapelní Gmaily. Setlister žádá pouze `gmail.readonly` a nemůže do Gmailu zapisovat. První synchronizace může podle velikosti schránky trvat několik minut; další synchronizace už načítají jen změny.
 
@@ -34,7 +34,7 @@ Při změně pravidel extrakce se pouze odvozená evidence koncertů jednorázov
 
 Cloudflare Access team domain a AUD jsou povinné pro produkční provoz. Backend díky nim odmítne Gmail a chat API také při přímém otevření portu `8110` z lokální sítě bez platného Access tokenu.
 
-Pro Google OAuth Branding použij veřejné adresy `https://setlister.cz/about.html`, `https://setlister.cz/privacy.html` a `https://setlister.cz/terms.html`. Tyto tři cesty musí mít v Cloudflare Access samostatnou politiku **Bypass → Everyone**, zatímco zbytek aplikace zůstane chráněný.
+Pro Google OAuth Branding použij veřejné adresy `https://setlister.cz/propadleek/about.html`, `https://setlister.cz/propadleek/privacy.html` a `https://setlister.cz/propadleek/terms.html`. Tyto tři cesty musí mít v Cloudflare Access samostatnou politiku **Bypass → Everyone**, zatímco ostatní cesty pod `/propadleek` zůstanou chráněné.
 
 ## Lokální síť
 

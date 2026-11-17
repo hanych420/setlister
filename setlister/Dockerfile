@@ -7,8 +7,8 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-COPY server.py index.html ask.html about.html privacy.html terms.html styles.css app.js ask.js README.md /app/
-COPY assets /app/assets
+COPY server.py index.html mvp.css mvp.js mvp-icon.svg mvp-icon-192.png mvp-icon-512.png manifest.webmanifest service-worker.js README.md /app/
+COPY propadleek /app/propadleek
 COPY run.sh /run.sh
 
 RUN apk add --no-cache su-exec \

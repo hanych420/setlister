@@ -1,10 +1,10 @@
 # Setlister — plánovač setlistů
 
-Kapelní aplikace pro skládání a tisk setlistů a read-only dotazy nad kapelními Gmaily. Při otevření přímo ze souboru funguje setlistová část lokálně. Sdílená databáze a Gmail asistent vyžadují přiložený server.
+Veřejné MVP Setlisteru a soukromá kapelní aplikace Propadleeku. Obecné demo běží na kořeni webu, zatímco kompletní kapelní aplikace se sdílenou databází a Gmail asistentem je dostupná pod `/propadleek/`.
 
 ## Spuštění
 
-Nejjednodušší je otevřít `index.html` dvojklikem. Pro lokální webový server lze ve složce projektu spustit:
+Pro lokální webový server lze ve složce projektu spustit:
 
 ```bash
 python3 -m http.server 8080
@@ -19,7 +19,7 @@ python3 -m pip install -r requirements.txt
 python3 server.py
 ```
 
-Aplikace potom běží na `http://localhost:8110` a data ukládá do `data/setlister.sqlite3`.
+Aplikace potom běží na `http://localhost:8110`, kapelní část na `http://localhost:8110/propadleek/` a data ukládá do `data/setlister.sqlite3`.
 
 ## Home Assistant add-on, Docker a Raspberry Pi
 
@@ -47,7 +47,7 @@ Pro existující Cloudflare Tunnel se nepřidává nový token ani další tunne
 setlister.cz -> http://IP_RASPBERRY_PI:8110
 ```
 
-Před veřejným spuštěním je nutné chránit hostname pomocí Cloudflare Access. Gmail API a chat navíc ověřují podepsaný Access JWT přímo v backendu, pokud jsou vyplněné volby `cloudflare_access_team` a `cloudflare_access_aud`.
+Cloudflare Access chrání pouze cestu `setlister.cz/propadleek*`; veřejné MVP na kořeni domény zůstává dostupné bez přihlášení. Gmail API a chat navíc ověřují podepsaný Access JWT přímo v backendu, pokud jsou vyplněné volby `cloudflare_access_team` a `cloudflare_access_aud`.
 
 ## Read-only Gmail asistent
 
@@ -61,7 +61,7 @@ V nastavení Home Assistant add-onu vyplň:
 V Google OAuth klientovi musí být jako redirect URI přesně:
 
 ```text
-https://setlister.cz/oauth/google/callback
+https://setlister.cz/propadleek/oauth/google/callback
 ```
 
 OAuth aplikace žádá výhradně scope `https://www.googleapis.com/auth/gmail.readonly`. Setlister neobsahuje Gmail endpoint pro odesílání, koncepty, úpravy štítků, přesouvání ani mazání. Oba účty se připojují samostatně na stránce **PropsBot → Připojené účty**.
@@ -80,7 +80,7 @@ Historie úspěšných konverzací se ukládá lokálně bez textů zdrojových 
 
 ## Ukládání dat
 
-Písně, rozpracovaný set i uložené setlisty se ukládají do `localStorage` aktuálního prohlížeče. Tlačítkem **Exportovat data** lze stáhnout kompletní JSON zálohu a později ji znovu importovat.
+Veřejné demo ukládá zkušební set pouze do `localStorage` aktuálního prohlížeče. Soukromá část Propadleeku synchronizuje repertoár a setlisty přes SQLite; tlačítkem **Exportovat data** lze stáhnout také kompletní JSON zálohu.
 
 Při spuštění přes `server.py` nebo Docker se data synchronizují mezi zařízeními přes SQLite. Aplikace uchovává posledních 200 serverových verzí pro případ obnovy. Při otevření samotného `index.html` zůstává v lokálním režimu bez synchronizace.
 

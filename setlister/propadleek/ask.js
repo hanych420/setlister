@@ -1,6 +1,8 @@
 (() => {
   "use strict";
 
+  const API_BASE = "/propadleek/api";
+
   const elements = {
     toggleConnections: document.querySelector("#toggleConnections"),
     connectionPanel: document.querySelector("#connectionPanel"),
@@ -218,7 +220,7 @@
 
   async function loadStatus(quiet = false) {
     try {
-      const status = await api("/api/gmail/status");
+      const status = await api(`${API_BASE}/gmail/status`);
       renderAccounts(status);
       if (!quiet) {
         let text = status.accounts.length ? `Připojeno ${status.accounts.length} ze 2 účtů` : "Čekám na první účet";
@@ -237,7 +239,7 @@
   async function connectGmail() {
     elements.connectGmail.disabled = true;
     try {
-      const result = await api("/api/gmail/connect");
+      const result = await api(`${API_BASE}/gmail/connect`);
       window.location.assign(result.authorizationUrl);
     } catch (error) {
       showToast(error.message, true);
@@ -248,7 +250,7 @@
   async function disconnectAccount(email) {
     if (!window.confirm(`Odpojit ${email} a odstranit jeho lokální index ze Setlisteru? V Gmailu se nic nezmění.`)) return;
     try {
-      await api("/api/gmail/disconnect", { method: "POST", body: JSON.stringify({ email }) });
+      await api(`${API_BASE}/gmail/disconnect`, { method: "POST", body: JSON.stringify({ email }) });
       showToast(`${email} byl odpojen. Gmail zůstal beze změny.`);
       await loadStatus();
     } catch (error) {
@@ -260,7 +262,7 @@
     elements.syncGmail.disabled = true;
     elements.connectionStatus.textContent = "Synchronizace spuštěna…";
     try {
-      await api("/api/gmail/sync", { method: "POST" });
+      await api(`${API_BASE}/gmail/sync`, { method: "POST" });
       showToast("Kontroluji nové zprávy v obou schránkách.");
       setTimeout(() => loadStatus(true), 2500);
     } catch (error) {
@@ -338,7 +340,7 @@
     scrollToBottom();
     elements.chatForm.querySelector("button").disabled = true;
     try {
-      const result = await api("/api/ask", {
+      const result = await api(`${API_BASE}/ask`, {
         method: "POST",
         body: JSON.stringify({ question, history: conversation.slice(-6), sessionId: chatSessionId })
       });
@@ -399,7 +401,7 @@
   }
 
   async function loadAdminHistory() {
-    const result = await api("/api/admin/chat-history");
+    const result = await api(`${API_BASE}/admin/chat-history`);
     renderHistory(result.sessions || []);
     elements.adminUnlock.hidden = true;
     elements.adminHistory.hidden = false;
@@ -440,7 +442,7 @@
     elements.unlockAdmin.textContent = "Ověřuji…";
     elements.adminPinError.textContent = "";
     try {
-      await api("/api/admin/unlock", {method: "POST", body: JSON.stringify({pin: elements.adminPin.value})});
+      await api(`${API_BASE}/admin/unlock`, {method: "POST", body: JSON.stringify({pin: elements.adminPin.value})});
       await loadAdminHistory();
     } catch (error) {
       elements.adminPinError.textContent = error.message;
@@ -484,7 +486,7 @@
     elements.saveFeedback.textContent = "Ukládám…";
     elements.feedbackError.textContent = "";
     try {
-      await api("/api/assistant/lessons", {
+      await api(`${API_BASE}/assistant/lessons`, {
         method: "POST",
         body: JSON.stringify({ question: feedback.question, correction })
       });

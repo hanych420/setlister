@@ -1,5 +1,5 @@
 name: Setlister
-version: "0.5.1"
+version: "0.6.0"
 slug: setlister
 description: Kapelní repertoár, setlisty, tisk a read-only asistent nad kapelními Gmaily.
 url: https://github.com/hanych420/setlister
@@ -13,7 +13,7 @@ ports:
   "8110/tcp": 8110
 ports_description:
   "8110/tcp": Webové rozhraní Setlisteru
-webui: http://[HOST]:[PORT:8110]/
+webui: http://[HOST]:[PORT:8110]/propadleek/
 watchdog: http://[HOST]:[PORT:8110]/api/health
 backup: cold
 environment:

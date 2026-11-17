@@ -1365,7 +1365,8 @@ def cloudflare_identity(jwt: str, options: dict[str, Any]) -> str | None:
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.5.1"
+    server_version = "Setlister/0.6.0"
+    private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
     def __init__(self, *args, **kwargs):
@@ -1377,7 +1378,8 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         print(f"{self.log_date_time_string()} {self.address_string()} {message}", flush=True)
 
     def end_headers(self) -> None:
-        if not urlparse(self.path).path.startswith("/api/"):
+        request_path = urlparse(self.path).path
+        if not request_path.startswith(("/api/", f"{self.private_prefix}/api/")):
             self.send_header("Cache-Control", "no-cache")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
@@ -1448,8 +1450,28 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         return (self.headers.get("CF-Connecting-IP") or self.headers.get("X-Forwarded-For")
                 or self.client_address[0]).split(",")[0].strip()
 
+    @classmethod
+    def routed_private_path(cls, path: str) -> str:
+        if path == cls.private_prefix:
+            return "/"
+        if path.startswith(f"{cls.private_prefix}/"):
+            return path[len(cls.private_prefix):]
+        return path
+
+    @classmethod
+    def is_private_request(cls, path: str) -> bool:
+        return path == cls.private_prefix or path.startswith(f"{cls.private_prefix}/")
+
+    @classmethod
+    def private_base_url(cls, options: dict[str, Any]) -> str:
+        return f"{str(options['base_url']).rstrip('/')}{cls.private_prefix}"
+
     def do_GET(self) -> None:
-        parsed, path = urlparse(self.path), unquote(urlparse(self.path).path)
+        parsed = urlparse(self.path)
+        request_path = unquote(parsed.path)
+        path = self.routed_private_path(request_path)
+        if path.startswith(("/api/", "/oauth/")) and not self.is_private_request(request_path) and path != "/api/health":
+            self.send_json(HTTPStatus.NOT_FOUND, {"error": "Nenalezeno"}); return
         if path == "/api/health":
             with connect_db() as database:
                 row = database.execute("SELECT revision, updated_at FROM app_state WHERE id=1").fetchone()
@@ -1485,7 +1507,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                 database.execute("DELETE FROM gmail_oauth_states WHERE expires_at < ?", (utc_now(),))
                 database.execute("INSERT INTO gmail_oauth_states VALUES (?, ?, ?)", (state, utc_now(), expires.isoformat(timespec="seconds")))
                 database.commit()
-            params = {"client_id": options["google_client_id"], "redirect_uri": f"{options['base_url']}/oauth/google/callback",
+            params = {"client_id": options["google_client_id"], "redirect_uri": f"{self.private_base_url(options)}/oauth/google/callback",
                 "response_type": "code", "scope": GMAIL_READONLY_SCOPE, "access_type": "offline",
                 "prompt": "consent", "include_granted_scopes": "false", "state": state}
             self.send_json(HTTPStatus.OK, {"authorizationUrl": f"{GOOGLE_AUTH_URL}?{urlencode(params)}"}); return
@@ -1493,7 +1515,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
             self.handle_oauth_callback(parse_qs(parsed.query)); return
         if path.startswith("/api/"):
             self.send_json(HTTPStatus.NOT_FOUND, {"error": "Nenalezeno"}); return
-        if not self.public_path(path):
+        if not self.public_path(request_path):
             self.send_error(HTTPStatus.NOT_FOUND); return
         super().do_GET()
 
@@ -1510,7 +1532,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         try:
             token_data = form_request(GOOGLE_TOKEN_URL, {"client_id": options["google_client_id"],
                 "client_secret": options["google_client_secret"], "code": code, "grant_type": "authorization_code",
-                "redirect_uri": f"{options['base_url']}/oauth/google/callback"})
+                "redirect_uri": f"{self.private_base_url(options)}/oauth/google/callback"})
             token, refresh, scope = str(token_data.get("access_token") or ""), str(token_data.get("refresh_token") or ""), str(token_data.get("scope") or "")
             if not token or not refresh or GMAIL_READONLY_SCOPE not in scope.split():
                 raise RuntimeError("Google nevrátil dlouhodobý read-only přístup. Zkus účet připojit znovu.")
@@ -1534,7 +1556,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         color = "#70d9a0" if success else "#ff817a"
         return f'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>{html.escape(title)}</title>
         <style>body{{margin:0;display:grid;min-height:100vh;place-items:center;background:#12110f;color:#f7f0e4;font-family:system-ui}}main{{max-width:520px;padding:40px;text-align:center}}h1{{color:{color}}}a{{color:#ffb23f}}</style></head>
-        <body><main><h1>{html.escape(title)}</h1><p>{message}</p><p><a href="/ask.html">Zpět do Setlisteru</a></p></main></body></html>'''
+        <body><main><h1>{html.escape(title)}</h1><p>{message}</p><p><a href="/propadleek/ask.html">Zpět do Setlisteru</a></p></main></body></html>'''
 
     def do_HEAD(self) -> None:
         if not self.public_path(unquote(urlparse(self.path).path)):
@@ -1542,7 +1564,10 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         super().do_HEAD()
 
     def do_POST(self) -> None:
-        path = unquote(urlparse(self.path).path)
+        request_path = unquote(urlparse(self.path).path)
+        if not self.is_private_request(request_path):
+            self.send_json(HTTPStatus.NOT_FOUND, {"error": "Nenalezeno"}); return
+        path = self.routed_private_path(request_path)
         if path == "/api/ask":
             identity = self.require_assistant_access()
             if not identity: return
@@ -1598,7 +1623,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                 database.execute("INSERT INTO admin_sessions VALUES (?, ?, ?)",
                                  (admin_token_hash(token), created, expires)); database.commit()
             secure = "; Secure" if load_options()["base_url"].startswith("https://") else ""
-            cookie = f"setlister_admin={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={ADMIN_SESSION_SECONDS}{secure}"
+            cookie = f"setlister_admin={token}; Path=/propadleek; HttpOnly; SameSite=Strict; Max-Age={ADMIN_SESSION_SECONDS}{secure}"
             self.send_json(HTTPStatus.OK, {"ok": True, "expiresAt": expires}, {"Set-Cookie": cookie}); return
         if path == "/api/assistant/lessons":
             identity = self.require_assistant_access()
@@ -1656,7 +1681,9 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         self.send_json(HTTPStatus.NOT_FOUND, {"error": "Nenalezeno"})
 
     def do_PUT(self) -> None:
-        if unquote(urlparse(self.path).path) != "/api/state": self.send_json(HTTPStatus.NOT_FOUND, {"error": "Nenalezeno"}); return
+        request_path = unquote(urlparse(self.path).path)
+        if not self.is_private_request(request_path) or self.routed_private_path(request_path) != "/api/state":
+            self.send_json(HTTPStatus.NOT_FOUND, {"error": "Nenalezeno"}); return
         if not self.require_assistant_access(): return
         if not self.same_origin_request(): self.send_json(HTTPStatus.FORBIDDEN, {"error": "Neplatný původ požadavku"}); return
         try: payload = self.read_json_body()
@@ -1688,9 +1715,13 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     @staticmethod
     def public_path(path: str) -> bool:
         return ".." not in Path(path).parts and (path in {
-            "/", "/index.html", "/ask.html", "/about.html", "/privacy.html", "/terms.html",
-            "/styles.css", "/app.js", "/ask.js", "/manifest.webmanifest", "/service-worker.js"
-        } or path.startswith("/assets/"))
+            "/", "/index.html", "/mvp.css", "/mvp.js", "/manifest.webmanifest", "/service-worker.js",
+            "/mvp-icon.svg", "/mvp-icon-192.png", "/mvp-icon-512.png", "/propadleek", "/propadleek/",
+            "/propadleek/index.html", "/propadleek/ask.html", "/propadleek/about.html",
+            "/propadleek/privacy.html", "/propadleek/terms.html", "/propadleek/styles.css",
+            "/propadleek/app.js", "/propadleek/ask.js", "/propadleek/manifest.webmanifest",
+            "/propadleek/service-worker.js"
+        } or path.startswith("/propadleek/assets/"))
 
 
 def main() -> None:

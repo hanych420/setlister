@@ -5,6 +5,7 @@
   const DRAFT_STORAGE_KEY = "setlister-draft-v2";
   const LEGACY_STORAGE_KEY = "kapelnik-setlist-v1";
   const ACTIVE_MEMBER_STORAGE_KEY = "setlister-active-member-v1";
+  const API_BASE = "/propadleek/api";
   const NO_INSTRUMENT = "Bez nástroje";
   const VIBE_ROLES = ["opener", "closer", "encore"];
   const MEMBER_PROFILES = [
@@ -374,7 +375,7 @@
   }
 
   async function readServerState() {
-    const response = await fetch("/api/state", { headers: { Accept: "application/json" }, cache: "no-store" });
+    const response = await fetch(`${API_BASE}/state`, { headers: { Accept: "application/json" }, cache: "no-store" });
     if (!response.ok) throw new Error(`Server odpověděl ${response.status}.`);
     return response.json();
   }
@@ -416,7 +417,7 @@
     serverSyncInFlight = true;
     setSyncStatus("Ukládám…", "saving");
     try {
-      const response = await fetch("/api/state", {
+      const response = await fetch(`${API_BASE}/state`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ baseRevision: serverRevision, state: JSON.parse(serialized) })
@@ -2441,7 +2442,7 @@
   renderAll();
   initializeSharedState();
   if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
-    navigator.serviceWorker.register("/service-worker.js").catch(error => {
+    navigator.serviceWorker.register("/propadleek/service-worker.js", { scope: "/propadleek/" }).catch(error => {
       console.warn("Instalaci webové aplikace se nepodařilo připravit.", error);
     });
   }

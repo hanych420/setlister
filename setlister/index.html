@@ -3,409 +3,127 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#12110f">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Setlister">
-  <meta name="description" content="Lokální plánovač koncertních setlistů.">
-  <title>Setlister — plánovač setlistů</title>
-  <link rel="icon" href="assets/favicon.svg?v=0.5.1" type="image/svg+xml">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=0.5.1">
-  <link rel="manifest" href="manifest.webmanifest?v=0.5.1">
-  <link rel="stylesheet" href="styles.css?v=0.5.1">
+  <meta name="theme-color" content="#0c0d0e">
+  <meta name="description" content="Setlister pomáhá kapelám skládat setlisty, hlídat délku koncertu a připravit čitelné podklady pro každého člena.">
+  <title>Setlister — setlist bez chaosu</title>
+  <link rel="icon" href="mvp-icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="mvp-icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest?v=0.6.0">
+  <link rel="stylesheet" href="mvp.css?v=0.6.0">
 </head>
 <body>
-  <div class="stage-light" aria-hidden="true"></div>
-
-  <header class="topbar">
-    <a class="brand" href="index.html" aria-label="Setlister — domů">
-      <img class="brand-logo" src="assets/logo.svg?v=0.5.1" alt="Logo kapely">
-      <span>
-        <strong>Setlister</strong>
-        <small>Setlist studio</small>
-      </span>
-    </a>
-    <nav class="main-nav" aria-label="Hlavní navigace">
-      <a href="index.html" class="active" aria-current="page">Setlisty</a>
-      <a href="ask.html">PropsBot</a>
+  <header class="site-header">
+    <a class="wordmark" href="#top" aria-label="Setlister — domů"><span class="brand-mark">S</span><strong>Setlister</strong></a>
+    <nav aria-label="Hlavní navigace">
+      <a href="#produkt">Produkt</a>
+      <a href="#demo">Demo</a>
+      <a href="#early-access">Early access</a>
     </nav>
-    <div class="top-actions">
-      <span class="sync-status" id="syncStatus" data-state="connecting">Připojuji…</span>
-      <button class="button button-primary" id="installApp" type="button" hidden>Nainstalovat aplikaci</button>
-      <button class="button button-ghost" id="manageMembers" type="button">Členové kapely</button>
-      <button class="button button-ghost" id="exportData" type="button">Exportovat data</button>
-      <label class="button button-ghost file-button">
-        Importovat
-        <input id="importData" type="file" accept="application/json,.json">
-      </label>
-    </div>
+    <button class="button button-quiet" id="installApp" type="button" hidden>Nainstalovat</button>
   </header>
 
-  <main class="page-shell">
-    <div class="workspace">
-      <aside class="library panel" aria-labelledby="libraryTitle">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Repertoár</p>
-            <h2 id="libraryTitle">Knihovna písní</h2>
-          </div>
-          <span class="count-badge" id="songLibraryCount">0</span>
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Setlist studio pro celou kapelu</p>
+        <h1>Setlist bez chaosu.<br><em>Kapela připravená.</em></h1>
+        <p class="hero-lead">Repertoár, délky skladeb, energie setu a osobní poznámky na jednom místě. Od první zkoušky až po papír ležící na pódiu.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#demo">Vyzkoušet živé demo</a>
+          <a class="button button-quiet" href="#produkt">Jak to funguje</a>
         </div>
-
-        <div class="search-wrap">
-          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"/></svg>
-          <input id="songSearch" type="search" autocomplete="off" placeholder="Hledat písničku…" aria-label="Hledat v knihovně písní">
-        </div>
-
-        <div class="library-actions">
-          <button class="button button-small button-primary" id="addSong" type="button">＋ Přidat píseň</button>
-          <button class="button button-small button-ghost" id="bulkAdd" type="button">Hromadně vložit</button>
-        </div>
-        <div class="library-import-actions">
-          <button class="button button-small button-ghost" id="bulkImport" type="button">Hromadně importovat</button>
-          <a class="button button-small button-ghost" href="assets/setlister-sablona-repertoaru.xlsx" download>Stáhnout šablonu</a>
-          <input id="bulkImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
-        </div>
-
-        <div class="library-filters">
-          <label class="field album-filter-field">
-            <span>Album</span>
-            <select id="albumFilter" aria-label="Filtrovat podle alba">
-              <option value="">Všechna alba</option>
-            </select>
-          </label>
-          <label class="check-field">
-            <input id="showArchived" type="checkbox">
-            <span>Zobrazit archivované</span>
-          </label>
-        </div>
-
-        <p class="drag-tip"><span aria-hidden="true">↗</span> Přetáhni skladbu doprava nebo ji přidej tlačítkem.</p>
-        <div class="song-library" id="songLibrary" aria-live="polite"></div>
-      </aside>
-
-      <section class="current-set panel" aria-labelledby="currentSetTitle">
-        <div class="set-summary">
-          <div>
-            <p class="eyebrow">Právě skládáš</p>
-            <h2 id="currentSetTitle">Aktuální set</h2>
-          </div>
-          <div class="time-total">
-            <strong id="totalTime">0:00</strong>
-            <span id="targetStatus">z 45:00</span>
-          </div>
-        </div>
-
-        <div class="set-controls" aria-label="Nastavení aktuálního setlistu">
-          <label class="field set-name-field">
-            <span>Název setlistu</span>
-            <input id="setName" type="text" maxlength="80" placeholder="Např. Festival 60 min">
-          </label>
-          <label class="field target-field">
-            <span>Cílová délka</span>
-            <span class="input-suffix">
-              <input id="targetMinutes" type="number" min="1" max="600" step="1" inputmode="numeric" value="45">
-              <b>min</b>
-            </span>
-          </label>
-          <label class="check-field gap-control">
-            <input id="includeGaps" type="checkbox">
-            <span>Počítat 20 s mezi písněmi</span>
-          </label>
-          <div class="toolbar-buttons">
-            <button class="button button-ghost" id="newSet" type="button">Nový set</button>
-            <button class="button button-primary" id="saveSet" type="button">Uložit set</button>
-          </div>
-        </div>
-
-        <div class="set-view-bar">
-          <label class="field personal-view-field">
-            <span>Zobrazení poznámek</span>
-            <select id="personalView" aria-label="Zobrazit poznámky vybraného člena"></select>
-          </label>
-          <button class="button button-small button-ghost" id="suggestOrder" type="button">✦ Navrhnout kostru</button>
-          <p>Řazení zohlední energii, roli skladby a co nejméně změn kapa a nástrojů.</p>
-        </div>
-
-        <div class="progress" aria-hidden="true">
-          <span id="progressBar"></span>
-        </div>
-        <div class="set-meta">
-          <span id="setCount">0 skladeb</span>
-          <span id="timeDifference">Zbývá 45:00</span>
-        </div>
-
-        <ol class="set-list" id="setList" aria-live="polite"></ol>
-
-        <div class="empty-set" id="emptySet">
-          <span class="empty-icon" aria-hidden="true">↓</span>
-          <strong>Sem přetáhni první písničku</strong>
-          <p>Na telefonu použij tlačítko plus v knihovně.</p>
-        </div>
-
-        <div class="set-footer">
-          <p id="unknownDurations"></p>
-          <div class="set-footer-actions">
-            <button class="button button-small button-ghost" id="addInterlude" type="button">＋ Pauza / intermezzo</button>
-            <button class="text-button danger" id="clearSet" type="button">Vyprázdnit set</button>
-            <button class="button button-small button-ghost" id="exportSet" type="button">Tisk / PDF pro kapelu</button>
-          </div>
-        </div>
-      </section>
-    </div>
-
-    <section class="saved-section" aria-labelledby="savedTitle">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">Připraveno na hraní</p>
-          <h2 id="savedTitle">Uložené setlisty</h2>
-        </div>
-        <p>Jedním kliknutím načti některou z připravených variant.</p>
+        <p class="microcopy">Demo se ukládá jen v tomto prohlížeči. Bez registrace.</p>
       </div>
-      <div class="saved-grid" id="savedSets"></div>
+      <div class="hero-stage" aria-label="Ukázka sestaveného setlistu">
+        <div class="stage-glow"></div>
+        <div class="set-card">
+          <header><span>LIVE SET · 45 MIN</span><b>43:20</b></header>
+          <ol>
+            <li><span>01</span><strong>První jiskra</strong><small>ENERGY 4</small></li>
+            <li><span>02</span><strong>Noční linka</strong><small>K2 · ENERGY 3</small></li>
+            <li class="transition">Petr · akustika → elektrika</li>
+            <li><span>03</span><strong>Bez mapy</strong><small>ENERGY 5</small></li>
+            <li><span>04</span><strong>Poslední refrén</strong><small>CLOSER</small></li>
+          </ol>
+          <footer><i></i><span>Připraveno pro 6 členů</span></footer>
+        </div>
+      </div>
+    </section>
+
+    <section class="product-section" id="produkt">
+      <div class="section-intro">
+        <p class="eyebrow">Méně tabulek, více hraní</p>
+        <h2>Jedna verze pravdy pro celou kapelu</h2>
+        <p>Každý vidí stejné pořadí skladeb, ale dostane právě ty pokyny, které potřebuje.</p>
+      </div>
+      <div class="feature-grid">
+        <article><span>01</span><h3>Repertoár pod kontrolou</h3><p>Délky, alba, energie, archiv skladeb i hromadný import.</p></article>
+        <article><span>02</span><h3>Chytrá kostra setu</h3><p>Pořadí zohlední energii koncertu a omezí zbytečné změny vybavení.</p></article>
+        <article><span>03</span><h3>Pokyny pro každého</h3><p>Kapo, nástroj, zvuk, vlastní název skladby a poznámky členů.</p></article>
+        <article><span>04</span><h3>Čitelné na pódiu</h3><p>Setlisty a podklady pro ladiče připravené na tisk jedním kliknutím.</p></article>
+      </div>
+    </section>
+
+    <section class="demo-section" id="demo">
+      <div class="section-intro demo-intro">
+        <div>
+          <p class="eyebrow">Funkční MVP</p>
+          <h2>Poskládej si první set</h2>
+        </div>
+        <p>Přidej skladby z repertoáru. Setlister průběžně počítá délku a vše si pamatuje v tomto zařízení.</p>
+      </div>
+
+      <div class="demo-app">
+        <section class="demo-panel repertoire-panel" aria-labelledby="repertoireTitle">
+          <header class="panel-title"><div><span>REPERTOÁR</span><h3 id="repertoireTitle">Skladby</h3></div><b id="repertoireCount">0</b></header>
+          <form class="song-form" id="songForm">
+            <input id="songTitle" type="text" maxlength="60" placeholder="Název skladby" aria-label="Název skladby" required>
+            <input id="songMinutes" type="number" min="0" max="30" value="3" aria-label="Minuty" required>
+            <span>:</span>
+            <input id="songSeconds" type="number" min="0" max="59" value="30" aria-label="Sekundy" required>
+            <button type="submit" aria-label="Přidat skladbu">＋</button>
+          </form>
+          <div class="demo-list" id="repertoireList"></div>
+        </section>
+
+        <section class="demo-panel set-panel" aria-labelledby="setTitle">
+          <header class="set-header">
+            <div><span>AKTUÁLNÍ SET</span><h3 id="setTitle">Festivalový set</h3></div>
+            <div class="set-time"><strong id="totalTime">0:00</strong><small id="targetLabel">z 45:00</small></div>
+          </header>
+          <div class="target-row">
+            <label>Cílová délka <input id="targetMinutes" type="number" min="1" max="240" value="45"> min</label>
+            <button class="link-button" id="resetDemo" type="button">Obnovit demo</button>
+          </div>
+          <div class="progress"><i id="progressBar"></i></div>
+          <ol class="set-list" id="setList"></ol>
+          <div class="empty-state" id="emptyState"><strong>Set zatím čeká na první skladbu.</strong><span>Přidej ji z repertoáru vlevo.</span></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="early-section" id="early-access">
+      <div>
+        <p class="eyebrow">Early access</p>
+        <h2>Postavíme placený Setlister s kapelami, ne vedle nich.</h2>
+        <p>Obecná verze připravuje oddělené účty kapel, bezpečné sdílení, cloudovou synchronizaci a později také stageplan a rider. Cena bude oznámena před spuštěním placeného provozu.</p>
+      </div>
+      <div class="access-card">
+        <span>PRVNÍ KAPELY</span>
+        <strong>Early access</strong>
+        <ul><li>Vlastní kapelní prostor</li><li>Kompletní setlistový workflow</li><li>Přímý vliv na další funkce</li></ul>
+        <a class="button button-primary" href="mailto:propadleek@gmail.com?subject=Setlister%20early%20access&body=Ahoj%2C%20m%C3%A1me%20z%C3%A1jem%20o%20early%20access%20pro%20kapelu%3A%20">Mám zájem</a>
+      </div>
     </section>
   </main>
 
-  <dialog id="songDialog" class="modal">
-    <form method="dialog" id="songForm">
-      <div class="modal-heading">
-        <div>
-          <p class="eyebrow">Repertoár</p>
-          <h2 id="songDialogTitle">Přidat píseň</h2>
-        </div>
-        <button class="modal-close" value="cancel" aria-label="Zavřít" type="submit">×</button>
-      </div>
-      <label class="field">
-        <span>Název písně</span>
-        <input id="songTitle" type="text" maxlength="100" required autocomplete="off">
-      </label>
-      <label class="field song-album-field">
-        <span>Album</span>
-        <input id="songAlbum" type="text" maxlength="100" placeholder="Např. První deska" autocomplete="off">
-      </label>
-      <div class="duration-fields">
-        <label class="field">
-          <span>Minuty</span>
-          <input id="songMinutes" type="number" min="0" max="59" value="3" inputmode="numeric" required>
-        </label>
-        <span class="duration-separator">:</span>
-        <label class="field">
-          <span>Sekundy</span>
-          <input id="songSeconds" type="number" min="0" max="59" value="30" inputmode="numeric" required>
-        </label>
-      </div>
-      <div class="song-vibe-fields">
-        <label class="field">
-          <span>Energie / vibe</span>
-          <select id="songEnergy">
-            <option value="1">1 — velmi pomalá</option>
-            <option value="2">2 — klidná</option>
-            <option value="3" selected>3 — střední</option>
-            <option value="4">4 — energická</option>
-            <option value="5">5 — maximum</option>
-          </select>
-        </label>
-        <fieldset class="song-starters-fieldset">
-          <legend>Kdo skladbu otevírá</legend>
-          <div class="starter-member-list" id="songStarters"></div>
-        </fieldset>
-      </div>
-      <fieldset class="vibe-role-fieldset">
-        <legend>Role v setlistu</legend>
-        <label><input id="songRoleOpener" type="checkbox" value="opener"> Otevírací</label>
-        <label><input id="songRoleCloser" type="checkbox" value="closer"> Na závěr</label>
-        <label><input id="songRoleEncore" type="checkbox" value="encore"> Přídavek</label>
-      </fieldset>
-      <p class="form-error" id="songError" role="alert"></p>
-      <div class="modal-actions">
-        <button class="button button-danger" id="deleteSong" value="delete" type="submit" hidden>Smazat píseň</button>
-        <button class="button button-danger archive-song-button" id="archiveSong" value="archive" type="submit" hidden>Archivovat píseň</button>
-        <button class="button button-ghost" value="cancel" type="submit">Zrušit</button>
-        <button class="button button-primary" id="confirmSong" value="default" type="submit">Uložit píseň</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="interludeDialog" class="modal">
-    <form method="dialog" id="interludeForm">
-      <div class="modal-heading">
-        <div>
-          <p class="eyebrow">Průběh koncertu</p>
-          <h2>Přidat pauzu / intermezzo</h2>
-        </div>
-        <button class="modal-close" value="cancel" aria-label="Zavřít" type="submit">×</button>
-      </div>
-      <label class="field">
-        <span>Název</span>
-        <input id="interludeTitle" type="text" maxlength="100" value="Pauza" placeholder="Např. Moderování, výměna nástrojů">
-      </label>
-      <div class="duration-fields">
-        <label class="field">
-          <span>Minuty</span>
-          <input id="interludeMinutes" type="number" min="0" max="59" value="1" inputmode="numeric" required>
-        </label>
-        <span class="duration-separator">:</span>
-        <label class="field">
-          <span>Sekundy</span>
-          <input id="interludeSeconds" type="number" min="0" max="59" value="0" inputmode="numeric" required>
-        </label>
-      </div>
-      <p class="form-error" id="interludeError" role="alert"></p>
-      <div class="modal-actions">
-        <button class="button button-ghost" value="cancel" type="submit">Zrušit</button>
-        <button class="button button-primary" value="default" type="submit">Přidat do setu</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="bulkDialog" class="modal modal-wide">
-    <form method="dialog" id="bulkForm">
-      <div class="modal-heading">
-        <div>
-          <p class="eyebrow">Rychlé naplnění</p>
-          <h2>Hromadně vložit písně</h2>
-        </div>
-        <button class="modal-close" value="cancel" aria-label="Zavřít" type="submit">×</button>
-      </div>
-      <p class="modal-help">Každou píseň dej na nový řádek ve formátu <code>Název | 3:45 | Album</code>. Čas i album můžeš vynechat.</p>
-      <label class="field">
-        <span>Seznam písní</span>
-        <textarea id="bulkSongs" rows="10" placeholder="Nová píseň | 3:45 | První deska&#10;Druhá píseň | 4:10 | Druhá deska&#10;Intro"></textarea>
-      </label>
-      <p class="form-error" id="bulkError" role="alert"></p>
-      <div class="modal-actions">
-        <button class="button button-ghost" value="cancel" type="submit">Zrušit</button>
-        <button class="button button-primary" value="default" type="submit">Přidat do knihovny</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="notesDialog" class="modal modal-wide notes-modal">
-    <form method="dialog" id="notesForm">
-      <div class="modal-heading">
-        <div>
-          <p class="eyebrow">Individuální příprava</p>
-          <h2 id="notesSongTitle">Poznámky ke skladbě</h2>
-        </div>
-        <button class="modal-close" value="cancel" aria-label="Zavřít" type="submit">×</button>
-      </div>
-
-      <div class="member-tabs" id="memberTabs" role="tablist" aria-label="Členové kapely"></div>
-
-      <div class="member-note-form">
-        <label class="field note-alias-field">
-          <span>Moje pojmenování písničky</span>
-          <input id="noteAlias" type="text" maxlength="100" placeholder="V individuálním setlistu se zobrazí místo hlavního názvu" autocomplete="off">
-        </label>
-        <label class="field" id="noteCapoField">
-          <span>Kapo</span>
-          <select id="noteCapo">
-            <option value="K0">K0</option>
-            <option value="K1">K1</option>
-            <option value="K2">K2</option>
-            <option value="K3">K3</option>
-            <option value="K4">K4</option>
-            <option value="K5">K5</option>
-            <option value="K6">K6</option>
-            <option value="K7">K7</option>
-            <option value="K8">K8</option>
-            <option value="K9">K9</option>
-            <option value="K10">K10</option>
-            <option value="K11">K11</option>
-            <option value="K12">K12</option>
-          </select>
-        </label>
-        <label class="field" id="noteInstrumentField">
-          <span>Nástroj</span>
-          <select id="noteInstrument"></select>
-        </label>
-        <label class="field" id="noteSoundField">
-          <span>Zvuk / preset</span>
-          <input id="noteSound" type="text" maxlength="100" placeholder="Např. Preset 12 — Crunch" autocomplete="off">
-        </label>
-        <label class="field note-text-field">
-          <span>Vlastní pokyn</span>
-          <textarea id="noteText" rows="3" maxlength="500" placeholder="Např. náklep, podat kytaru nebo jiný pokyn ke skladbě"></textarea>
-        </label>
-      </div>
-
-      <p class="note-help" id="noteTransitionHelp">Aplikace hlídá poslední kapo každého nástroje a potřebnou změnu automaticky vloží mezi skladby.</p>
-      <div class="modal-actions">
-        <button class="button button-ghost" value="cancel" type="submit">Zrušit</button>
-        <button class="button button-primary" value="default" type="submit">Uložit poznámky</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="membersDialog" class="modal modal-wide">
-    <form method="dialog" id="membersForm">
-      <div class="modal-heading">
-        <div>
-          <p class="eyebrow">Kapela</p>
-          <h2>Členové kapely</h2>
-        </div>
-        <button class="modal-close" value="cancel" aria-label="Zavřít" type="submit">×</button>
-      </div>
-      <p class="modal-help">U každého člena nastav jméno, výchozí nástroj a případně další nástroje. Výchozí nástroj se použije, pokud u skladby není vybraná změna.</p>
-      <div class="member-rows" id="memberRows"></div>
-      <button class="button button-small button-ghost add-member-button" id="addMember" type="button">＋ Přidat člena</button>
-      <p class="form-error" id="membersError" role="alert"></p>
-      <div class="modal-actions">
-        <button class="button button-ghost" value="cancel" type="submit">Zrušit</button>
-        <button class="button button-primary" value="default" type="submit">Uložit členy</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="exportDialog" class="modal modal-wide">
-    <form method="dialog" id="exportForm">
-      <div class="modal-heading">
-        <div>
-          <p class="eyebrow">Tisk a PDF</p>
-          <h2>Exportovat setlist</h2>
-        </div>
-        <button class="modal-close" value="cancel" aria-label="Zavřít" type="submit">×</button>
-      </div>
-
-      <fieldset class="export-options">
-        <legend>Typ sestavy</legend>
-        <label class="option-card">
-          <input type="radio" name="exportMode" value="individual" checked>
-          <span><strong>Individuální stránky</strong><small>Zaškrtnutí členové dostanou stránku se svými poznámkami. Pro ostatní se automaticky navrhnou čisté kopie.</small></span>
-        </label>
-        <label class="option-card">
-          <input type="radio" name="exportMode" value="common">
-          <span><strong>Pouze čistý setlist</strong><small>Bez individuálních pokynů. Výchozí počet je 6 kusů.</small></span>
-        </label>
-        <label class="option-card">
-          <input type="radio" name="exportMode" value="tuner">
-          <span><strong>Setlist pro ladiče</strong><small>Všechny skladby a okamžiky, kdy je volný nástroj možné připravit na jeho další použití.</small></span>
-        </label>
-      </fieldset>
-
-      <fieldset class="export-members" id="exportMembersFieldset">
-        <legend>Kdo dostane individuální stránku</legend>
-        <div class="export-member-list" id="exportMemberList"></div>
-      </fieldset>
-
-      <label class="clean-copy-control" id="cleanCopyControl" for="cleanCopyCount">
-        <span><strong>Počet čistých setlistů</strong><small>Bez poznámek a osobních pokynů.</small></span>
-        <input id="cleanCopyCount" type="number" min="0" max="50" step="1" value="0">
-      </label>
-      <p class="modal-help export-help">Pokud vestavěný prohlížeč neotevře tiskové okno, stáhni tiskovou sestavu. V otevřeném souboru pak zvolíš Tisk / Uložit jako PDF.</p>
-      <p class="form-error" id="exportError" role="alert"></p>
-      <div class="modal-actions">
-        <button class="button button-ghost" value="cancel" type="submit">Zrušit</button>
-        <button class="button button-ghost" id="downloadPrintFile" type="button">Stáhnout tiskovou sestavu</button>
-        <button class="button button-primary" value="default" type="submit">Tisk / uložit PDF</button>
-      </div>
-    </form>
-  </dialog>
-
-  <div id="printArea" aria-hidden="true"></div>
+  <footer class="site-footer">
+    <a class="wordmark" href="#top"><span class="brand-mark">S</span><strong>Setlister</strong></a>
+    <p>MVP ve vývoji · setlister.cz</p>
+    <a href="mailto:propadleek@gmail.com">Kontakt</a>
+  </footer>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/vendor/spreadsheet-reader.js?v=0.5.1"></script>
-  <script src="app.js?v=0.5.1"></script>
+  <script src="mvp.js?v=0.6.0"></script>
 </body>
 </html>

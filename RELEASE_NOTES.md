@@ -2,6 +2,12 @@
 
 Přehled všech publikovaných verzí aplikace Setlister od prvního veřejného vydání.
 
+## 0.6.0 — Veřejný Setlister a soukromý Propadleek
+
+- Kompletní interní aplikace Propadleeku nově běží na `setlister.cz/propadleek/`.
+- Na hlavní doméně vzniklo obecné MVP pro kapely s funkčním setlistovým demem, přehledem produktu a vstupem do early access.
+- PropsBot, databáze, OAuth a interní API zůstávají oddělené v chráněné kapelní části.
+
 ## 0.5.1 — Společné otevírání skladeb
 
 - U skladby lze označit více členů, kteří ji otevírají.

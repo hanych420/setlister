@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+- Soukromý Setlister Propadleeku se přesunul pod `/propadleek/` včetně PropsBota, API, OAuth callbacku a PWA.
+- Kořen `setlister.cz` obsahuje nové veřejné MVP pro ostatní kapely s produktovou prezentací a funkčním lokálním demem skládání setu.
+- Veřejná a soukromá část mají oddělené manifesty, service workery a vizuální identitu.
+
 ## 0.5.1
 
 - Jednu skladbu teď může otevírat více členů kapely.
