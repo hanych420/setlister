@@ -2,7 +2,7 @@
   "name": "Setlister",
   "short_name": "Setlister",
   "id": "/",
-  "description": "Společný pracovní prostor pro kapelu.",
+  "description": "Repertoár, koncertní setlisty, osobní pódiové poznámky a čitelné A4 výtisky pro kapelu.",
   "lang": "cs",
   "start_url": "/",
   "scope": "/",

@@ -10,6 +10,8 @@
 
 Uživatel má jeden účet a může být členem více kapel. Každá kapela má vlastní band_id, pozvánkový kód, členství, stav repertoáru a předplatné. API ověřuje členství na serveru při každém čtení i zápisu.
 
+Vedle přihlášených účtů má kapela samostatné pódiové profily členů. Ty lze vytvářet bez registrace, obsahují nástroje a osobní pokyny pro skladby a mohou být později propojeny s účtem pomocí linkedUserId. Stav v2 obsahuje repertoár, osobní nastavení, aktuální set, uložené setlisty a logo kapely. Úplný aktuální kontrakt je v kořenovém souboru `MOBILE_APP_BUILD_SPEC.md`.
+
 Pozvánkový kód může zobrazit každý člen. Pouze vlastník kapely jej může zneplatnit a vytvořit nový.
 
 ## Předplatné napříč platformami
@@ -26,7 +28,7 @@ Klientské aplikace pouze čtou stav kapely ze serveru. Nákup z jedné platform
 
 ## Mailový agent
 
-Datový model počítá nejvýše se dvěma Gmail účty na kapelu. Připojení musí zůstat pouze v rozsahu gmail.readonly. Tokeny se ukládají šifrovaně a nikdy se neposílají do prohlížeče. Ve verzi 0.7.0 je v obecné aplikaci pouze připravené rozhraní; OAuth a oddělené indexy jednotlivých kapel budou samostatná další etapa.
+Datový model počítá nejvýše se dvěma Gmail účty na kapelu. Připojení musí zůstat pouze v rozsahu gmail.readonly. Tokeny se ukládají šifrovaně a nikdy se neposílají do prohlížeče. Ve verzi 0.8.0 je v obecné aplikaci přesně popsané cílové chování, ale veřejný tenantový OAuth ještě není aktivní; oddělené indexy jednotlivých kapel a jejich bezpečnostní kontrola budou samostatná další etapa.
 
 ## Kontakt
 

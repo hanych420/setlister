@@ -1441,23 +1441,34 @@ def verify_password(password: str, encoded: str) -> bool:
         return False
 
 
-def public_default_state() -> dict[str, Any]:
+def public_default_state(owner: sqlite3.Row | None = None) -> dict[str, Any]:
+    owner_id = "member-owner"
+    members = []
+    if owner:
+        members.append({
+            "id": owner_id,
+            "name": str(owner["name"]),
+            "linkedUserId": str(owner["id"]),
+            "instruments": [],
+            "defaultInstrumentId": "",
+            "vocals": False,
+        })
     songs = [
-        {"id": "sample-1", "title": "První skladba", "seconds": 210, "energy": 4,
-         "capo": 0, "note": "Nástup po čtyřech dobách."},
-        {"id": "sample-2", "title": "Druhá skladba", "seconds": 235, "energy": 3,
-         "capo": 2, "note": "Akustická kytara."},
-        {"id": "sample-3", "title": "Finále", "seconds": 250, "energy": 5,
-         "capo": 0, "note": "Nechat doznít poslední akord."},
+        {"id": "sample-1", "title": "První skladba", "album": "Demo", "seconds": 210,
+         "energy": 4, "role": "opener", "memberDetails": {}},
+        {"id": "sample-2", "title": "Druhá skladba", "album": "Demo", "seconds": 235,
+         "energy": 3, "role": "standard", "memberDetails": {}},
+        {"id": "sample-3", "title": "Finále", "album": "Demo", "seconds": 250,
+         "energy": 5, "role": "closer", "memberDetails": {}},
     ]
-    return {"version": 1, "songs": songs,
+    return {"version": 2, "bandProfile": {"logoDataUrl": ""}, "members": members, "songs": songs,
             "draft": {"name": "Nový koncert", "targetMinutes": 45,
-                      "songIds": ["sample-1", "sample-2"]},
+                      "songIds": ["sample-1", "sample-2"], "viewerMemberId": owner_id if members else ""},
             "savedSetlists": []}
 
 
 def valid_public_state(value: object) -> bool:
-    if not isinstance(value, dict) or value.get("version") != 1:
+    if not isinstance(value, dict) or value.get("version") not in (1, 2):
         return False
     songs, draft = value.get("songs"), value.get("draft")
     if not isinstance(songs, list) or not isinstance(draft, dict) or not isinstance(draft.get("songIds"), list):
@@ -1467,8 +1478,32 @@ def valid_public_state(value: object) -> bool:
     for song in songs:
         if not isinstance(song, dict) or not str(song.get("id") or "") or not str(song.get("title") or ""):
             return False
-        if not 0 < int(song.get("seconds") or 0) <= 3600:
+        try:
+            seconds = int(song.get("seconds") or 0)
+        except (TypeError, ValueError):
             return False
+        if not 0 < seconds <= 3600:
+            return False
+        if len(str(song.get("title") or "")) > 120 or len(str(song.get("album") or "")) > 120:
+            return False
+        details = song.get("memberDetails") or {}
+        if not isinstance(details, dict) or len(details) > 250:
+            return False
+    members = value.get("members") or []
+    if not isinstance(members, list) or len(members) > 250:
+        return False
+    for member in members:
+        if not isinstance(member, dict) or not str(member.get("id") or "") or not str(member.get("name") or ""):
+            return False
+        instruments = member.get("instruments") or []
+        if not isinstance(instruments, list) or len(instruments) > 50:
+            return False
+    profile = value.get("bandProfile") or {}
+    if not isinstance(profile, dict):
+        return False
+    logo = str(profile.get("logoDataUrl") or "")
+    if len(logo) > 700_000:
+        return False
     return True
 
 
@@ -1493,7 +1528,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.7.0"
+    server_version = "Setlister/0.8.0"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -2011,7 +2046,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                 if not 2 <= len(name) <= 100:
                     raise ValueError("Název kapely musí mít 2 až 100 znaků.")
                 band_id, created = "band_" + secrets.token_hex(16), utc_now()
-                state = json.dumps(public_default_state(), ensure_ascii=False, separators=(",", ":"))
+                state = json.dumps(public_default_state(user), ensure_ascii=False, separators=(",", ":"))
                 trial_end = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(timespec="seconds")
                 with connect_db() as database:
                     database.execute("BEGIN IMMEDIATE")

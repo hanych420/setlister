@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0
+
+- veřejná aplikace nově obsahuje plnohodnotný repertoár s albem, délkou, energií a rolí skladby;
+- pódiové členy lze vytvářet a upravovat i bez jejich registrace;
+- členům lze nastavit nástroje, zpěv a osobní pokyny pro každou skladbu;
+- kapodastr se zobrazuje pouze u kytarových nástrojů, preset pouze u elektrické kytary;
+- setlist lze pojmenovat, uložit, znovu načíst, přetřídit a prohlížet bez poznámek nebo jako konkrétní člen;
+- přidán tisk/PDF s osobními a čistými kopiemi, automatickou velikostí písma a A4 pódiovým layoutem;
+- kapela může nahrát vlastní logo;
+- Mailový agent nyní přesně popisuje read-only indexaci, inkrementální synchronizaci a odpovědi se zdroji;
+- přidána živá specifikace `MOBILE_APP_BUILD_SPEC.md` pro budoucí iOS a Android klienty.
+
 ## 0.7.0
 
 - Veřejná registrace a přihlášení na app.setlister.cz.
