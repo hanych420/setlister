@@ -1,6 +1,11 @@
 # Setlister — plánovač setlistů
 
-Veřejné MVP Setlisteru a soukromá kapelní aplikace Propadleeku. Obecné demo běží na kořeni webu, zatímco kompletní kapelní aplikace se sdílenou databází a Gmail asistentem je dostupná pod `/propadleek/`.
+Veřejný marketing a demo běží na setlister.cz, obecná multi-tenant aplikace
+na app.setlister.cz a soukromý prostor Propadleeku na
+setlister.cz/propadleek.
+
+Brand pravidla jsou v brand/BRAND_MANUAL.md, architektura účtů a plateb v
+APP_ARCHITECTURE.md.
 
 ## Spuštění
 
@@ -47,7 +52,9 @@ Pro existující Cloudflare Tunnel se nepřidává nový token ani další tunne
 setlister.cz -> http://IP_RASPBERRY_PI:8110
 ```
 
-Cloudflare Access chrání pouze cestu `setlister.cz/propadleek*`; veřejné MVP na kořeni domény zůstává dostupné bez přihlášení. Gmail API a chat navíc ověřují podepsaný Access JWT přímo v backendu, pokud jsou vyplněné volby `cloudflare_access_team` a `cloudflare_access_aud`.
+Cloudflare Access chrání pouze cestu setlister.cz/propadleek*. Veřejný marketing na kořeni domény a aplikace na app.setlister.cz zůstávají dostupné bez Access brány. Gmail API a soukromý chat Propadleeku nadále ověřují podepsaný Access JWT.
+
+Ve stejném Cloudflare tunelu přidej druhý hostname app.setlister.cz, který míří na stejný origin http://IP_RASPBERRY_PI:8110. Přihlášení a oddělení kapel tam zajišťuje vlastní session vrstva aplikace.
 
 ## Read-only Gmail asistent
 
@@ -57,6 +64,12 @@ V nastavení Home Assistant add-onu vyplň:
 - `openai_api_key`,
 - `cloudflare_access_team`, například `propadleek.cloudflareaccess.com`,
 - `cloudflare_access_aud`, tedy Application Audience tag aplikace Setlister v Cloudflare Access.
+
+## Kontaktní formulář
+
+Pro odesílání přes Resend vyplň v nastavení add-onu resend_api_key. Odesílatel
+contact_from musí být na doméně ověřené v Resendu. Cíl zpráv určuje
+contact_email.
 
 V Google OAuth klientovi musí být jako redirect URI přesně:
 

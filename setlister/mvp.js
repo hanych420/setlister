@@ -5,11 +5,11 @@
   const defaults = {
     targetMinutes: 45,
     songs: [
-      { id: "demo-1", title: "První jiskra", seconds: 215, energy: 4 },
-      { id: "demo-2", title: "Noční linka", seconds: 248, energy: 3 },
-      { id: "demo-3", title: "Bez mapy", seconds: 194, energy: 5 },
-      { id: "demo-4", title: "Nádech", seconds: 276, energy: 2 },
-      { id: "demo-5", title: "Poslední refrén", seconds: 232, energy: 5 }
+      { id: "demo-1", title: "První jiskra", seconds: 215, energy: 4, capo: 0, note: "Nástup po čtyřech dobách." },
+      { id: "demo-2", title: "Noční linka", seconds: 248, energy: 3, capo: 2, note: "Akustika, druhý refrén bez trsátka." },
+      { id: "demo-3", title: "Bez mapy", seconds: 194, energy: 5, capo: 0, note: "Elektrika · preset 04." },
+      { id: "demo-4", title: "Nádech", seconds: 276, energy: 2, capo: 4, note: "Začíná zpěv a klávesy." },
+      { id: "demo-5", title: "Poslední refrén", seconds: 232, energy: 5, capo: 0, note: "Nechat doznít poslední akord." }
     ],
     setIds: ["demo-1", "demo-2"]
   };
@@ -20,6 +20,8 @@
     songTitle: document.querySelector("#songTitle"),
     songMinutes: document.querySelector("#songMinutes"),
     songSeconds: document.querySelector("#songSeconds"),
+    songCapo: document.querySelector("#songCapo"),
+    songNote: document.querySelector("#songNote"),
     repertoireList: document.querySelector("#repertoireList"),
     repertoireCount: document.querySelector("#repertoireCount"),
     setList: document.querySelector("#setList"),
@@ -29,7 +31,9 @@
     totalTime: document.querySelector("#totalTime"),
     progressBar: document.querySelector("#progressBar"),
     resetDemo: document.querySelector("#resetDemo"),
-    toast: document.querySelector("#toast")
+    toast: document.querySelector("#toast"),
+    contactForm: document.querySelector("#contactForm"),
+    contactStatus: document.querySelector("#contactStatus")
   };
 
   let deferredInstallPrompt = null;
@@ -90,10 +94,13 @@
       title.textContent = song.title;
       const duration = document.createElement("small");
       duration.textContent = formatTime(song.seconds);
-      info.append(title, duration);
+      const note = document.createElement("span");
+      note.className = "song-note";
+      note.textContent = song.note || "Bez poznámky";
+      info.append(title, duration, note);
       const energy = document.createElement("span");
       energy.className = "energy";
-      energy.textContent = `E${song.energy}`;
+      energy.textContent = `E${song.energy}${Number(song.capo) ? ` · K${song.capo}` : ""}`;
       const add = iconButton("＋", `Přidat ${song.title} do setu`, () => {
         state.setIds.push(song.id); save(); render();
       });
@@ -112,8 +119,12 @@
       const title = document.createElement("strong");
       title.textContent = song.title;
       const meta = document.createElement("small");
-      meta.textContent = `Energie ${song.energy}/5`;
-      info.append(title, meta);
+      meta.className = "song-meta";
+      meta.textContent = `Energie ${song.energy}/5${Number(song.capo) ? ` · K${song.capo}` : ""}`;
+      const note = document.createElement("span");
+      note.className = "song-note";
+      note.textContent = song.note || "Bez poznámky";
+      info.append(title, meta, note);
       const duration = document.createElement("small");
       duration.textContent = formatTime(song.seconds);
       const actions = document.createElement("div");
@@ -153,8 +164,14 @@
     const minutes = Number(elements.songMinutes.value);
     const seconds = Number(elements.songSeconds.value);
     if (!title || !Number.isInteger(minutes) || !Number.isInteger(seconds) || seconds < 0 || seconds > 59) return;
-    state.songs.push({ id: `song-${Date.now()}`, title, seconds: minutes * 60 + seconds, energy: 3 });
+    state.songs.push({
+      id: `song-${Date.now()}`, title, seconds: minutes * 60 + seconds, energy: 3,
+      capo: Math.max(0, Math.min(12, Number(elements.songCapo.value) || 0)),
+      note: elements.songNote.value.trim()
+    });
     elements.songTitle.value = "";
+    elements.songCapo.value = "0";
+    elements.songNote.value = "";
     save(); render(); showToast("Skladba je v repertoáru.");
   });
 
@@ -170,9 +187,9 @@
   window.addEventListener("beforeinstallprompt", event => {
     event.preventDefault();
     deferredInstallPrompt = event;
-    elements.installApp.hidden = false;
+    if (elements.installApp) elements.installApp.hidden = false;
   });
-  elements.installApp.addEventListener("click", async () => {
+  elements.installApp?.addEventListener("click", async () => {
     if (!deferredInstallPrompt) return;
     await deferredInstallPrompt.prompt();
     deferredInstallPrompt = null;
@@ -182,5 +199,29 @@
   if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).catch(() => {});
   }
+
+  elements.contactForm?.addEventListener("submit", async event => {
+    event.preventDefault();
+    const button = elements.contactForm.querySelector("button[type=submit]");
+    const payload = Object.fromEntries(new FormData(elements.contactForm).entries());
+    button.disabled = true;
+    elements.contactStatus.className = "";
+    elements.contactStatus.textContent = "Odesílám…";
+    try {
+      const response = await fetch("/api/contact", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Zprávu se nepodařilo odeslat.");
+      elements.contactForm.reset();
+      elements.contactStatus.className = "success";
+      elements.contactStatus.textContent = "Díky. Zpráva je na cestě.";
+    } catch (error) {
+      elements.contactStatus.className = "error";
+      elements.contactStatus.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
   render();
 })();

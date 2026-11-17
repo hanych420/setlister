@@ -1,9 +1,9 @@
 "use strict";
 
-const CACHE_NAME = "setlister-public-v0.6.0";
+const CACHE_NAME = "setlister-public-v0.7.0";
 const APP_SHELL = [
-  "/", "/index.html", "/mvp.css?v=0.6.0", "/mvp.js?v=0.6.0",
-  "/manifest.webmanifest?v=0.6.0", "/mvp-icon.svg", "/mvp-icon-192.png", "/mvp-icon-512.png"
+  "/", "/index.html", "/mvp.css?v=0.7.0", "/mvp.js?v=0.7.0",
+  "/manifest.webmanifest?v=0.7.0", "/brand/logo-mark.svg", "/mvp-icon-192.png", "/mvp-icon-512.png"
 ];
 
 self.addEventListener("install", event => {

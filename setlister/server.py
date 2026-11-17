@@ -63,6 +63,11 @@ GMAIL_SYNC_LOCKS_GUARD = threading.Lock()
 GMAIL_LAST_REQUEST_AT = 0.0
 ADMIN_AUTH_ATTEMPTS: dict[str, list[float]] = {}
 ADMIN_AUTH_LOCK = threading.Lock()
+PUBLIC_SESSION_SECONDS = 30 * 24 * 60 * 60
+PASSWORD_ITERATIONS = 310_000
+CONTACT_ATTEMPTS: dict[str, list[float]] = {}
+CONTACT_ATTEMPTS_LOCK = threading.Lock()
+INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 
 def utc_now() -> str:
@@ -86,6 +91,7 @@ def load_options() -> dict[str, Any]:
 
     return {
         "base_url": str(value("SETLISTER_BASE_URL", "base_url", f"http://localhost:{PORT}")).rstrip("/"),
+        "app_host": str(value("SETLISTER_APP_HOST", "app_host", "app.setlister.cz")).lower().strip(),
         "admin_email": str(value("SETLISTER_ADMIN_EMAIL", "admin_email", "propadleek@gmail.com")).lower(),
         "admin_history_pin": str(value("SETLISTER_ADMIN_HISTORY_PIN", "admin_history_pin", "0000")),
         "google_client_id": str(value("GOOGLE_CLIENT_ID", "google_client_id")),
@@ -94,6 +100,9 @@ def load_options() -> dict[str, Any]:
         "openai_model": str(value("OPENAI_MODEL", "openai_model", "gpt-6-luna")),
         "cf_team_domain": str(value("CF_ACCESS_TEAM_DOMAIN", "cloudflare_access_team")).strip(),
         "cf_access_aud": str(value("CF_ACCESS_AUD", "cloudflare_access_aud")).strip(),
+        "resend_api_key": str(value("RESEND_API_KEY", "resend_api_key")).strip(),
+        "contact_email": str(value("SETLISTER_CONTACT_EMAIL", "contact_email", "propadleek@gmail.com")).strip(),
+        "contact_from": str(value("SETLISTER_CONTACT_FROM", "contact_from", "Setlister <kontakt@setlister.cz>")).strip(),
         "lookback_days": max(30, min(3650, int(value("GMAIL_LOOKBACK_DAYS", "gmail_lookback_days", 730) or 730))),
     }
 
@@ -200,6 +209,45 @@ def initialize_database() -> None:
             CREATE INDEX IF NOT EXISTS chat_messages_session_idx ON chat_messages(session_id, id);
             CREATE TABLE IF NOT EXISTS admin_sessions (
                 token_hash TEXT PRIMARY KEY, created_at TEXT NOT NULL, expires_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS public_users (
+                id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+                password_hash TEXT NOT NULL, created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS public_sessions (
+                token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+                created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES public_users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS public_sessions_user_idx ON public_sessions(user_id);
+            CREATE TABLE IF NOT EXISTS public_bands (
+                id TEXT PRIMARY KEY, name TEXT NOT NULL, invite_code TEXT NOT NULL UNIQUE,
+                created_by TEXT NOT NULL, created_at TEXT NOT NULL,
+                FOREIGN KEY (created_by) REFERENCES public_users(id)
+            );
+            CREATE TABLE IF NOT EXISTS public_band_members (
+                band_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL,
+                joined_at TEXT NOT NULL, PRIMARY KEY (band_id, user_id),
+                FOREIGN KEY (band_id) REFERENCES public_bands(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES public_users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS public_band_members_user_idx ON public_band_members(user_id);
+            CREATE TABLE IF NOT EXISTS public_band_state (
+                band_id TEXT PRIMARY KEY, revision INTEGER NOT NULL DEFAULT 0,
+                state_json TEXT NOT NULL, updated_at TEXT NOT NULL,
+                FOREIGN KEY (band_id) REFERENCES public_bands(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS public_subscriptions (
+                band_id TEXT PRIMARY KEY, status TEXT NOT NULL, plan_name TEXT NOT NULL,
+                provider TEXT, external_customer_id TEXT, external_subscription_id TEXT,
+                entitlement_source TEXT, current_period_end TEXT, updated_at TEXT NOT NULL,
+                FOREIGN KEY (band_id) REFERENCES public_bands(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS public_gmail_connections (
+                id TEXT PRIMARY KEY, band_id TEXT NOT NULL, email TEXT NOT NULL,
+                encrypted_refresh_token TEXT NOT NULL, connected_at TEXT NOT NULL,
+                UNIQUE (band_id, email),
+                FOREIGN KEY (band_id) REFERENCES public_bands(id) ON DELETE CASCADE
             );
             """
         )
@@ -1364,8 +1412,88 @@ def cloudflare_identity(jwt: str, options: dict[str, Any]) -> str | None:
         return None
 
 
+def normalize_email(value: object) -> str:
+    email_address = str(value or "").strip().lower()
+    if len(email_address) > 160 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email_address):
+        raise ValueError("Zadej platnou e-mailovou adresu.")
+    return email_address
+
+
+def password_hash(password: str) -> str:
+    if not 10 <= len(password) <= 128:
+        raise ValueError("Heslo musí mít 10 až 128 znaků.")
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, PASSWORD_ITERATIONS)
+    return ("pbkdf2_sha256$" + str(PASSWORD_ITERATIONS) + "$"
+            + base64.urlsafe_b64encode(salt).decode() + "$"
+            + base64.urlsafe_b64encode(digest).decode())
+
+
+def verify_password(password: str, encoded: str) -> bool:
+    try:
+        algorithm, iterations, salt, expected = encoded.split("$", 3)
+        if algorithm != "pbkdf2_sha256":
+            return False
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode(), base64.urlsafe_b64decode(salt),
+                                     int(iterations))
+        return hmac.compare_digest(actual, base64.urlsafe_b64decode(expected))
+    except (ValueError, TypeError):
+        return False
+
+
+def public_default_state() -> dict[str, Any]:
+    songs = [
+        {"id": "sample-1", "title": "První skladba", "seconds": 210, "energy": 4,
+         "capo": 0, "note": "Nástup po čtyřech dobách."},
+        {"id": "sample-2", "title": "Druhá skladba", "seconds": 235, "energy": 3,
+         "capo": 2, "note": "Akustická kytara."},
+        {"id": "sample-3", "title": "Finále", "seconds": 250, "energy": 5,
+         "capo": 0, "note": "Nechat doznít poslední akord."},
+    ]
+    return {"version": 1, "songs": songs,
+            "draft": {"name": "Nový koncert", "targetMinutes": 45,
+                      "songIds": ["sample-1", "sample-2"]},
+            "savedSetlists": []}
+
+
+def valid_public_state(value: object) -> bool:
+    if not isinstance(value, dict) or value.get("version") != 1:
+        return False
+    songs, draft = value.get("songs"), value.get("draft")
+    if not isinstance(songs, list) or not isinstance(draft, dict) or not isinstance(draft.get("songIds"), list):
+        return False
+    if len(songs) > 3000 or len(value.get("savedSetlists") or []) > 1000:
+        return False
+    for song in songs:
+        if not isinstance(song, dict) or not str(song.get("id") or "") or not str(song.get("title") or ""):
+            return False
+        if not 0 < int(song.get("seconds") or 0) <= 3600:
+            return False
+    return True
+
+
+def generate_invite_code(database: sqlite3.Connection) -> str:
+    for _ in range(40):
+        code = "".join(secrets.choice(INVITE_ALPHABET) for _ in range(8))
+        if not database.execute("SELECT 1 FROM public_bands WHERE invite_code=?", (code,)).fetchone():
+            return code
+    raise RuntimeError("Nepodařilo se vytvořit pozvánkový kód.")
+
+
+def public_bands_for_user(database: sqlite3.Connection, user_id: str) -> list[dict[str, Any]]:
+    rows = database.execute("""SELECT b.id, b.name, m.role
+        FROM public_band_members m JOIN public_bands b ON b.id=m.band_id
+        WHERE m.user_id=? ORDER BY b.created_at""", (user_id,)).fetchall()
+    return [dict(row) for row in rows]
+
+
+def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) -> sqlite3.Row | None:
+    return database.execute("SELECT role FROM public_band_members WHERE user_id=? AND band_id=?",
+                            (user_id, band_id)).fetchone()
+
+
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.6.0"
+    server_version = "Setlister/0.7.0"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -1434,6 +1562,73 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         except Exception: return ""
         return cookie[name].value if name in cookie else ""
 
+    def request_hostname(self) -> str:
+        value = (self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or "").split(",")[0].strip()
+        return value.split(":", 1)[0].lower()
+
+    def is_public_app_host(self) -> bool:
+        return self.request_hostname() == load_options()["app_host"]
+
+    def public_user(self) -> sqlite3.Row | None:
+        token = self.cookie_value("setlister_session")
+        if not token:
+            return None
+        now = utc_now()
+        with connect_db() as database:
+            database.execute("DELETE FROM public_sessions WHERE expires_at<?", (now,))
+            row = database.execute("""SELECT u.* FROM public_sessions s
+                JOIN public_users u ON u.id=s.user_id
+                WHERE s.token_hash=? AND s.expires_at>=?""",
+                (hashlib.sha256(token.encode()).hexdigest(), now)).fetchone()
+            database.commit()
+        return row
+
+    def require_public_user(self) -> sqlite3.Row | None:
+        user = self.public_user()
+        if not user:
+            self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "Přihlas se do Setlisteru."})
+            return None
+        return user
+
+    def public_session_payload(self, user: sqlite3.Row) -> dict[str, Any]:
+        with connect_db() as database:
+            bands = public_bands_for_user(database, user["id"])
+        return {"user": {"id": user["id"], "email": user["email"], "name": user["name"]},
+                "bands": bands}
+
+    def issue_public_session(self, user: sqlite3.Row) -> dict[str, Any]:
+        token = secrets.token_urlsafe(36)
+        created = utc_now()
+        expires = (datetime.now(timezone.utc) + timedelta(seconds=PUBLIC_SESSION_SECONDS)).isoformat(timespec="seconds")
+        with connect_db() as database:
+            database.execute("INSERT INTO public_sessions VALUES (?, ?, ?, ?)",
+                (hashlib.sha256(token.encode()).hexdigest(), user["id"], created, expires))
+            database.commit()
+        secure = "; Secure" if self.request_hostname() not in ("localhost", "127.0.0.1") else ""
+        cookie = ("setlister_session=" + token + "; Path=/; HttpOnly; SameSite=Lax; Max-Age="
+                  + str(PUBLIC_SESSION_SECONDS) + secure)
+        return {"payload": self.public_session_payload(user), "cookie": cookie}
+
+    def serve_public_app_file(self, request_path: str) -> None:
+        if ".." in Path(request_path).parts:
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        if request_path.startswith("/brand/"):
+            mapped = request_path
+        else:
+            allowed = {"/", "/index.html", "/styles.css", "/app.js", "/manifest.webmanifest",
+                       "/service-worker.js", "/icon-192.png", "/icon-512.png"}
+            if request_path not in allowed:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            mapped = "/app/index.html" if request_path in ("/", "/index.html") else "/app" + request_path
+        original = self.path
+        self.path = mapped
+        try:
+            super().do_GET()
+        finally:
+            self.path = original
+
     def require_history_admin(self) -> bool:
         if not self.require_assistant_access(): return False
         token = self.cookie_value("setlister_admin")
@@ -1469,6 +1664,12 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         request_path = unquote(parsed.path)
+        if self.is_public_app_host():
+            if request_path.startswith("/api/app/"):
+                self.handle_public_app_get(request_path, parse_qs(parsed.query))
+            else:
+                self.serve_public_app_file(request_path)
+            return
         path = self.routed_private_path(request_path)
         if path.startswith(("/api/", "/oauth/")) and not self.is_private_request(request_path) and path != "/api/health":
             self.send_json(HTTPStatus.NOT_FOUND, {"error": "Nenalezeno"}); return
@@ -1519,6 +1720,53 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
             self.send_error(HTTPStatus.NOT_FOUND); return
         super().do_GET()
 
+    def handle_public_app_get(self, path: str, query: dict[str, list[str]]) -> None:
+        if path == "/api/app/session":
+            user = self.require_public_user()
+            if user:
+                self.send_json(HTTPStatus.OK, self.public_session_payload(user))
+            return
+        if path == "/api/app/workspace":
+            user = self.require_public_user()
+            if not user:
+                return
+            band_id = str((query.get("bandId") or [""])[0])
+            with connect_db() as database:
+                membership = public_membership(database, user["id"], band_id)
+                if not membership:
+                    self.send_json(HTTPStatus.FORBIDDEN, {"error": "K této kapele nemáš přístup."})
+                    return
+                band = database.execute("SELECT id, name, invite_code FROM public_bands WHERE id=?",
+                                        (band_id,)).fetchone()
+                state_row = database.execute("SELECT revision, state_json, updated_at FROM public_band_state WHERE band_id=?",
+                                             (band_id,)).fetchone()
+                members = database.execute("""SELECT u.id, u.name, u.email, m.role
+                    FROM public_band_members m JOIN public_users u ON u.id=m.user_id
+                    WHERE m.band_id=? ORDER BY CASE m.role WHEN 'owner' THEN 0 ELSE 1 END, m.joined_at""",
+                    (band_id,)).fetchall()
+                subscription = database.execute("""SELECT status, plan_name, provider,
+                    entitlement_source, current_period_end FROM public_subscriptions WHERE band_id=?""",
+                    (band_id,)).fetchone()
+            if not band or not state_row:
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "Kapela nebyla nalezena."})
+                return
+            self.send_json(HTTPStatus.OK, {
+                "band": {"id": band["id"], "name": band["name"], "inviteCode": band["invite_code"]},
+                "membership": {"role": membership["role"]},
+                "members": [dict(row) for row in members],
+                "subscription": {
+                    "status": subscription["status"] if subscription else "trialing",
+                    "planName": subscription["plan_name"] if subscription else "Setlister Early",
+                    "provider": subscription["provider"] if subscription else None,
+                    "entitlementSource": subscription["entitlement_source"] if subscription else None,
+                    "currentPeriodEnd": subscription["current_period_end"] if subscription else None,
+                },
+                "state": json.loads(state_row["state_json"]), "revision": state_row["revision"],
+                "updatedAt": state_row["updated_at"],
+            })
+            return
+        self.send_json(HTTPStatus.NOT_FOUND, {"error": "Nenalezeno"})
+
     def handle_oauth_callback(self, query: dict[str, list[str]]) -> None:
         options = load_options(); state = (query.get("state") or [""])[0]; code = (query.get("code") or [""])[0]
         if query.get("error"):
@@ -1559,12 +1807,33 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         <body><main><h1>{html.escape(title)}</h1><p>{message}</p><p><a href="/propadleek/ask.html">Zpět do Setlisteru</a></p></main></body></html>'''
 
     def do_HEAD(self) -> None:
+        if self.is_public_app_host():
+            request_path = unquote(urlparse(self.path).path)
+            if ".." in Path(request_path).parts:
+                self.send_error(HTTPStatus.NOT_FOUND); return
+            if request_path.startswith("/brand/"):
+                mapped = request_path
+            elif request_path in {"/", "/index.html", "/styles.css", "/app.js", "/manifest.webmanifest",
+                                  "/service-worker.js", "/icon-192.png", "/icon-512.png"}:
+                mapped = "/app/index.html" if request_path in ("/", "/index.html") else "/app" + request_path
+            else:
+                self.send_error(HTTPStatus.NOT_FOUND); return
+            original = self.path; self.path = mapped
+            try: super().do_HEAD()
+            finally: self.path = original
+            return
         if not self.public_path(unquote(urlparse(self.path).path)):
             self.send_error(HTTPStatus.NOT_FOUND); return
         super().do_HEAD()
 
     def do_POST(self) -> None:
         request_path = unquote(urlparse(self.path).path)
+        if self.is_public_app_host() and request_path.startswith("/api/app/"):
+            self.handle_public_app_post(request_path)
+            return
+        if request_path == "/api/contact" and not self.is_public_app_host():
+            self.handle_contact_form()
+            return
         if not self.is_private_request(request_path):
             self.send_json(HTTPStatus.NOT_FOUND, {"error": "Nenalezeno"}); return
         path = self.routed_private_path(request_path)
@@ -1680,8 +1949,214 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
             return
         self.send_json(HTTPStatus.NOT_FOUND, {"error": "Nenalezeno"})
 
+    def handle_public_app_post(self, path: str) -> None:
+        if not self.same_origin_request():
+            self.send_json(HTTPStatus.FORBIDDEN, {"error": "Neplatný původ požadavku."})
+            return
+        if path == "/api/app/register":
+            try:
+                payload = self.read_json_body(16 * 1024)
+                name = str(payload.get("name") or "").strip()
+                email_address = normalize_email(payload.get("email"))
+                password = str(payload.get("password") or "")
+                if not 2 <= len(name) <= 80:
+                    raise ValueError("Jméno musí mít 2 až 80 znaků.")
+                encoded_password = password_hash(password)
+                user_id = "usr_" + secrets.token_hex(16)
+                with connect_db() as database:
+                    if database.execute("SELECT 1 FROM public_users WHERE email=?", (email_address,)).fetchone():
+                        self.send_json(HTTPStatus.CONFLICT, {"error": "Účet s tímto e-mailem už existuje."})
+                        return
+                    database.execute("INSERT INTO public_users VALUES (?, ?, ?, ?, ?)",
+                                     (user_id, email_address, name, encoded_password, utc_now()))
+                    database.commit()
+                    user = database.execute("SELECT * FROM public_users WHERE id=?", (user_id,)).fetchone()
+                issued = self.issue_public_session(user)
+                self.send_json(HTTPStatus.CREATED, issued["payload"], {"Set-Cookie": issued["cookie"]})
+            except ValueError as error:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/api/app/login":
+            try:
+                payload = self.read_json_body(16 * 1024)
+                email_address = normalize_email(payload.get("email"))
+                password = str(payload.get("password") or "")
+                with connect_db() as database:
+                    user = database.execute("SELECT * FROM public_users WHERE email=?", (email_address,)).fetchone()
+                if not user or not verify_password(password, user["password_hash"]):
+                    self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "Nesprávný e-mail nebo heslo."})
+                    return
+                issued = self.issue_public_session(user)
+                self.send_json(HTTPStatus.OK, issued["payload"], {"Set-Cookie": issued["cookie"]})
+            except ValueError as error:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/api/app/logout":
+            token = self.cookie_value("setlister_session")
+            if token:
+                with connect_db() as database:
+                    database.execute("DELETE FROM public_sessions WHERE token_hash=?",
+                                     (hashlib.sha256(token.encode()).hexdigest(),))
+                    database.commit()
+            cookie = "setlister_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+            self.send_json(HTTPStatus.OK, {"ok": True}, {"Set-Cookie": cookie})
+            return
+
+        user = self.require_public_user()
+        if not user:
+            return
+        if path == "/api/app/bands":
+            try:
+                name = str(self.read_json_body(4096).get("name") or "").strip()
+                if not 2 <= len(name) <= 100:
+                    raise ValueError("Název kapely musí mít 2 až 100 znaků.")
+                band_id, created = "band_" + secrets.token_hex(16), utc_now()
+                state = json.dumps(public_default_state(), ensure_ascii=False, separators=(",", ":"))
+                trial_end = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(timespec="seconds")
+                with connect_db() as database:
+                    database.execute("BEGIN IMMEDIATE")
+                    code = generate_invite_code(database)
+                    database.execute("INSERT INTO public_bands VALUES (?, ?, ?, ?, ?)",
+                                     (band_id, name, code, user["id"], created))
+                    database.execute("INSERT INTO public_band_members VALUES (?, ?, 'owner', ?)",
+                                     (band_id, user["id"], created))
+                    database.execute("INSERT INTO public_band_state VALUES (?, 0, ?, ?)",
+                                     (band_id, state, created))
+                    database.execute("""INSERT INTO public_subscriptions
+                        (band_id, status, plan_name, provider, external_customer_id,
+                         external_subscription_id, entitlement_source, current_period_end, updated_at)
+                        VALUES (?, 'trialing', 'Setlister Early', NULL, NULL, NULL, 'trial', ?, ?)""",
+                        (band_id, trial_end, created))
+                    database.commit()
+                self.send_json(HTTPStatus.CREATED, {"band": {"id": band_id, "name": name, "inviteCode": code}})
+            except ValueError as error:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/api/app/bands/join":
+            try:
+                code = re.sub(r"[^A-Z0-9]", "", str(self.read_json_body(4096).get("code") or "").upper())
+                if len(code) != 8:
+                    raise ValueError("Pozvánkový kód má osm znaků.")
+                with connect_db() as database:
+                    band = database.execute("SELECT id, name FROM public_bands WHERE invite_code=?", (code,)).fetchone()
+                    if not band:
+                        self.send_json(HTTPStatus.NOT_FOUND, {"error": "Kapela s tímto kódem nebyla nalezena."})
+                        return
+                    database.execute("""INSERT OR IGNORE INTO public_band_members
+                        (band_id, user_id, role, joined_at) VALUES (?, ?, 'member', ?)""",
+                        (band["id"], user["id"], utc_now()))
+                    database.commit()
+                self.send_json(HTTPStatus.OK, {"band": {"id": band["id"], "name": band["name"]}})
+            except ValueError as error:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/api/app/bands/rotate-code":
+            try:
+                band_id = str(self.read_json_body(4096).get("bandId") or "")
+                with connect_db() as database:
+                    membership = public_membership(database, user["id"], band_id)
+                    if not membership or membership["role"] != "owner":
+                        self.send_json(HTTPStatus.FORBIDDEN, {"error": "Nový kód může vytvořit pouze vlastník kapely."})
+                        return
+                    code = generate_invite_code(database)
+                    database.execute("UPDATE public_bands SET invite_code=? WHERE id=?", (code, band_id))
+                    database.commit()
+                self.send_json(HTTPStatus.OK, {"inviteCode": code})
+            except ValueError as error:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        self.send_json(HTTPStatus.NOT_FOUND, {"error": "Nenalezeno"})
+
+    def handle_contact_form(self) -> None:
+        if not self.same_origin_request():
+            self.send_json(HTTPStatus.FORBIDDEN, {"error": "Neplatný původ požadavku."})
+            return
+        client = self.admin_client_key()
+        now = time.time()
+        with CONTACT_ATTEMPTS_LOCK:
+            recent = [stamp for stamp in CONTACT_ATTEMPTS.get(client, []) if stamp > now - 3600]
+            if len(recent) >= 5:
+                self.send_json(HTTPStatus.TOO_MANY_REQUESTS,
+                               {"error": "Příliš mnoho zpráv. Zkus to prosím později."})
+                return
+            CONTACT_ATTEMPTS[client] = recent + [now]
+        try:
+            payload = self.read_json_body(16 * 1024)
+            if str(payload.get("website") or "").strip():
+                self.send_json(HTTPStatus.OK, {"ok": True})
+                return
+            name = str(payload.get("name") or "").strip()
+            email_address = normalize_email(payload.get("email"))
+            band = str(payload.get("band") or "").strip()
+            message = str(payload.get("message") or "").strip()
+            if not 2 <= len(name) <= 80 or not 5 <= len(message) <= 3000 or len(band) > 120:
+                raise ValueError("Zkontroluj prosím jméno a text zprávy.")
+            options = load_options()
+            if not options["resend_api_key"]:
+                self.send_json(HTTPStatus.SERVICE_UNAVAILABLE,
+                               {"error": "Kontaktní formulář se právě dokončuje. Zkus to prosím za chvíli."})
+                return
+            safe = lambda value: html.escape(value).replace("\n", "<br>")
+            result = json_request("https://api.resend.com/emails", method="POST", headers={
+                "Authorization": "Bearer " + options["resend_api_key"]
+            }, data={
+                "from": options["contact_from"], "to": [options["contact_email"]],
+                "reply_to": email_address, "subject": "Setlister — zpráva od " + name,
+                "html": ("<h2>Nová zpráva ze setlister.cz</h2><p><b>Jméno:</b> " + safe(name)
+                         + "</p><p><b>E-mail:</b> " + safe(email_address)
+                         + "</p><p><b>Kapela:</b> " + safe(band or "neuvedena")
+                         + "</p><p><b>Zpráva:</b><br>" + safe(message) + "</p>")
+            })
+            self.send_json(HTTPStatus.OK, {"ok": True, "id": result.get("id")})
+        except ValueError as error:
+            self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+        except Exception as error:
+            self.send_json(HTTPStatus.BAD_GATEWAY, {"error": "Zprávu se nepodařilo odeslat. Zkus to prosím později."})
+
     def do_PUT(self) -> None:
         request_path = unquote(urlparse(self.path).path)
+        if self.is_public_app_host() and request_path == "/api/app/band-state":
+            if not self.same_origin_request():
+                self.send_json(HTTPStatus.FORBIDDEN, {"error": "Neplatný původ požadavku."})
+                return
+            user = self.require_public_user()
+            if not user:
+                return
+            try:
+                payload = self.read_json_body()
+                band_id = str(payload.get("bandId") or "")
+                base_revision = payload.get("revision")
+                state = payload.get("state")
+                if not isinstance(base_revision, int) or not valid_public_state(state):
+                    raise ValueError("Neplatná data kapely.")
+                serialized = json.dumps(state, ensure_ascii=False, separators=(",", ":"))
+                timestamp = utc_now()
+                with connect_db() as database:
+                    database.execute("BEGIN IMMEDIATE")
+                    if not public_membership(database, user["id"], band_id):
+                        database.rollback()
+                        self.send_json(HTTPStatus.FORBIDDEN, {"error": "K této kapele nemáš přístup."})
+                        return
+                    row = database.execute("SELECT revision FROM public_band_state WHERE band_id=?",
+                                           (band_id,)).fetchone()
+                    if not row:
+                        database.rollback()
+                        self.send_json(HTTPStatus.NOT_FOUND, {"error": "Kapela nebyla nalezena."})
+                        return
+                    if row["revision"] != base_revision:
+                        database.rollback()
+                        self.send_json(HTTPStatus.CONFLICT, {"error": "Konflikt změn. Načítám novější verzi.",
+                                                             "revision": row["revision"]})
+                        return
+                    next_revision = base_revision + 1
+                    database.execute("""UPDATE public_band_state SET revision=?, state_json=?, updated_at=?
+                        WHERE band_id=?""", (next_revision, serialized, timestamp, band_id))
+                    database.commit()
+                self.send_json(HTTPStatus.OK, {"ok": True, "revision": next_revision,
+                                               "updatedAt": timestamp})
+            except ValueError as error:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
         if not self.is_private_request(request_path) or self.routed_private_path(request_path) != "/api/state":
             self.send_json(HTTPStatus.NOT_FOUND, {"error": "Nenalezeno"}); return
         if not self.require_assistant_access(): return
@@ -1721,7 +2196,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
             "/propadleek/privacy.html", "/propadleek/terms.html", "/propadleek/styles.css",
             "/propadleek/app.js", "/propadleek/ask.js", "/propadleek/manifest.webmanifest",
             "/propadleek/service-worker.js"
-        } or path.startswith("/propadleek/assets/"))
+        } or path.startswith("/propadleek/assets/") or path.startswith("/brand/"))
 
 
 def main() -> None:

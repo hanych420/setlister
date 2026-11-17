@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0c0d0e">
+  <meta name="description" content="Setlister — společný pracovní prostor pro kapelu.">
+  <title>Setlister</title>
+  <link rel="icon" href="/brand/logo-mark.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/app/icon-192.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/styles.css?v=0.7.0">
+</head>
+<body>
+  <header class="app-header">
+    <a class="wordmark" href="/" aria-label="Setlister"><img src="/brand/logo-mark.svg" alt=""><strong>Setlister</strong></a>
+    <div class="header-band" id="headerBand" hidden>
+      <button class="band-switcher" id="bandSwitcher" type="button"><span id="currentBandName"></span><small>Změnit kapelu</small></button>
+    </div>
+    <div class="user-area" id="userArea" hidden><span id="userName"></span><button class="quiet-button" id="logoutButton" type="button">Odhlásit</button></div>
+    <a class="quiet-button marketing-link" id="marketingLink" href="https://setlister.cz">O produktu</a>
+  </header>
+
+  <main>
+    <section class="auth-shell" id="authView">
+      <div class="auth-intro">
+        <p class="eyebrow">Kapela na jednom místě</p>
+        <h1>Začni setem.<br><em>Skonči připravený.</em></h1>
+        <p>Setlisty, repertoár a osobní poznámky dostupné celé kapele z každého zařízení.</p>
+        <ul><li>Oddělená data každé kapely</li><li>Členové přes pozvánkový kód</li><li>Předplatné společné pro celou kapelu</li></ul>
+      </div>
+      <div class="auth-card">
+        <div class="auth-tabs" role="tablist">
+          <button class="active" data-auth-tab="register" role="tab" type="button">Vytvořit účet</button>
+          <button data-auth-tab="login" role="tab" type="button">Přihlásit se</button>
+        </div>
+        <form id="registerForm" class="auth-form">
+          <div><p class="form-kicker">Nový účet</p><h2>Vítej v Setlisteru</h2></div>
+          <label>Jméno<input name="name" maxlength="80" autocomplete="name" required></label>
+          <label>E-mail<input name="email" type="email" maxlength="160" autocomplete="email" required></label>
+          <label>Heslo<input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required><small>Alespoň 10 znaků.</small></label>
+          <button class="primary-button" type="submit">Pokračovat</button>
+        </form>
+        <form id="loginForm" class="auth-form" hidden>
+          <div><p class="form-kicker">Návrat ke kapele</p><h2>Přihlášení</h2></div>
+          <label>E-mail<input name="email" type="email" maxlength="160" autocomplete="email" required></label>
+          <label>Heslo<input name="password" type="password" maxlength="128" autocomplete="current-password" required></label>
+          <button class="primary-button" type="submit">Přihlásit se</button>
+        </form>
+        <p class="form-status" id="authStatus" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section class="onboarding" id="onboardingView" hidden>
+      <div class="onboarding-heading"><p class="eyebrow">První krok</p><h1>Kde budeš hrát?</h1><p>Založ prostor pro svoji kapelu, nebo zadej kód, který ti poslal její člen.</p></div>
+      <div class="choice-grid">
+        <form class="choice-card" id="createBandForm">
+          <span class="choice-number">01</span><h2>Založit kapelu</h2><p>Vytvoříš oddělený prostor a získáš pozvánkový kód pro ostatní.</p>
+          <label>Název kapely<input name="name" maxlength="100" placeholder="Např. Hlasitý ticho" required></label>
+          <button class="primary-button" type="submit">Založit kapelu</button>
+        </form>
+        <form class="choice-card" id="joinBandForm">
+          <span class="choice-number">02</span><h2>Připojit se</h2><p>Zadej osmimístný kód, který najde kterýkoli člen v nastavení kapely.</p>
+          <label>Kód kapely<input class="code-input" name="code" maxlength="8" minlength="8" autocomplete="one-time-code" placeholder="AB12CD34" required></label>
+          <button class="secondary-button" type="submit">Připojit se ke kapele</button>
+        </form>
+      </div>
+      <p class="form-status" id="onboardingStatus" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="workspace" id="workspaceView" hidden>
+      <aside class="sidebar">
+        <nav aria-label="Aplikace">
+          <button class="active" data-view="setlist" type="button"><span>01</span> Setlist</button>
+          <button data-view="repertoire" type="button"><span>02</span> Repertoár</button>
+          <button data-view="agent" type="button"><span>03</span> Mailový agent <small>beta</small></button>
+          <button data-view="settings" type="button"><span>04</span> Kapela a účet</button>
+        </nav>
+        <div class="plan-card"><span id="planStatus">Zkušební provoz</span><strong id="planName">Setlister Early</strong><small>Předplatné patří kapele, ne zařízení.</small></div>
+      </aside>
+
+      <div class="workspace-main">
+        <section class="app-view active" data-app-view="setlist">
+          <header class="view-header"><div><p class="eyebrow">Aktuální set</p><h1>Nový koncert</h1></div><div class="duration"><strong id="appTotalTime">0:00</strong><small id="appTargetLabel">z 45:00</small></div></header>
+          <div class="set-toolbar"><label>Cíl <input id="appTargetMinutes" type="number" min="1" max="240" value="45"> min</label><span id="saveState">Uloženo</span></div>
+          <div class="progress"><i id="appProgress"></i></div>
+          <div class="workspace-grid">
+            <div class="library-card"><div class="card-heading"><div><span>REPERTOÁR</span><h2>Přidat do setu</h2></div><b id="appAvailableCount">0</b></div><div id="appAvailableSongs" class="song-stack"></div></div>
+            <div class="set-card-app"><ol id="appSetSongs" class="set-stack"></ol><div class="empty" id="appSetEmpty"><strong>Set je zatím prázdný.</strong><span>Přidej první skladbu z repertoáru.</span></div></div>
+          </div>
+        </section>
+
+        <section class="app-view" data-app-view="repertoire">
+          <header class="view-header"><div><p class="eyebrow">Knihovna kapely</p><h1>Repertoár</h1></div></header>
+          <form class="repertoire-form" id="appSongForm">
+            <label>Název skladby<input name="title" maxlength="80" required></label>
+            <label>Délka v sekundách<input name="seconds" type="number" min="1" max="3600" value="210" required></label>
+            <label>Energie<select name="energy"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+            <label>Kapodastr<select name="capo"><option value="0">K0</option><option value="1">K1</option><option value="2">K2</option><option value="3">K3</option><option value="4">K4</option><option value="5">K5</option><option value="6">K6</option><option value="7">K7</option></select></label>
+            <label class="wide">Poznámka<textarea name="note" rows="2" maxlength="300" placeholder="Zvuk, nástroj, nástup nebo cokoli, co má člen vědět."></textarea></label>
+            <button class="primary-button" type="submit">Přidat skladbu</button>
+          </form>
+          <div class="repertoire-table" id="appRepertoire"></div>
+        </section>
+
+        <section class="app-view" data-app-view="agent">
+          <header class="view-header"><div><p class="eyebrow">Read-only</p><h1>Mailový agent</h1></div><span class="beta-pill">Připravujeme</span></header>
+          <div class="agent-placeholder">
+            <div><h2>Až dva kapelní Gmaily. Žádné odesílání.</h2><p>Agent bude číst pouze zprávy, které kapela připojí, a odpoví na konkrétní organizační otázky. Nebude umět e-maily odeslat, upravit ani smazat.</p></div>
+            <div class="agent-questions"><span>„V kolik máme být 23. 1. v Olomouci?“</span><span>„Nečeká někdo na fakturu?“</span><span>„Na co jsme zapomněli odpovědět?“</span></div>
+          </div>
+        </section>
+
+        <section class="app-view" data-app-view="settings">
+          <header class="view-header"><div><p class="eyebrow">Správa prostoru</p><h1>Kapela a účet</h1></div></header>
+          <div class="settings-grid">
+            <article class="settings-card"><span>POZVÁNKOVÝ KÓD</span><h2 id="inviteCode">--------</h2><p>Pošli jej komukoli, koho chceš přidat. Kód může zobrazit každý člen kapely.</p><div class="button-row"><button class="primary-button" id="copyCode" type="button">Kopírovat kód</button><button class="secondary-button" id="rotateCode" type="button">Vytvořit nový</button></div></article>
+            <article class="settings-card"><span>ČLENOVÉ</span><div id="memberList" class="member-list"></div></article>
+            <article class="settings-card billing-card"><span>PŘEDPLATNÉ</span><h2>Jedna platba za kapelu</h2><p>Budoucí nákup z webu, App Storu nebo Google Play se propíše ke kapele. Na jiném zařízení už se znovu platit nebude.</p><button class="secondary-button" type="button" disabled>Správa plateb bude doplněna</button></article>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="bandDialog">
+    <div class="dialog-heading"><h2>Moje kapely</h2><button id="closeBandDialog" aria-label="Zavřít" type="button">×</button></div>
+    <div id="bandList" class="band-list"></div>
+    <button class="secondary-button" id="showOnboarding" type="button">Přidat další kapelu</button>
+  </dialog>
+
+  <div class="toast" id="appToast" role="status" aria-live="polite"></div>
+  <script src="/app.js?v=0.7.0"></script>
+</body>
+</html>

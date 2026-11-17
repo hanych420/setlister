@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Setlister</title>
+  <rect width="64" height="64" rx="16" fill="#0C0D0E"/>
+  <path d="M47 15H23c-7 0-11 3.8-11 9.2 0 5.2 4 8.8 10.5 8.8h18C47 33 51 36.6 51 42c0 5.2-4 8-11 8H15" fill="none" stroke="#D9FF43" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

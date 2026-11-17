@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0
+
+- Veřejná registrace a přihlášení na app.setlister.cz.
+- Založení kapely nebo připojení osmimístným kódem.
+- Striktně oddělená data repertoáru a setu podle kapely.
+- Kapelní entitlement připravený pro Stripe, App Store a Google Play.
+- Nový brand Setlisteru s limetkovou #D9FF43 a vlastním logem.
+- Kapodastr a poznámky v marketingovém demu.
+- Kontaktní formulář připravený na Resend.
+- Marketing bez interního označení MVP a bez exportu pro ladiče.
+- Read-only mailový agent zachovaný jako připravovaná kapelní funkce.
+
 ## 0.6.0
 
 - Soukromý Setlister Propadleeku se přesunul pod `/propadleek/` včetně PropsBota, API, OAuth callbacku a PWA.

@@ -6,36 +6,34 @@
   <meta name="theme-color" content="#0c0d0e">
   <meta name="description" content="Setlister pomáhá kapelám skládat setlisty, hlídat délku koncertu a připravit čitelné podklady pro každého člena.">
   <title>Setlister — setlist bez chaosu</title>
-  <link rel="icon" href="mvp-icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="mvp-icon-192.png">
-  <link rel="manifest" href="manifest.webmanifest?v=0.6.0">
-  <link rel="stylesheet" href="mvp.css?v=0.6.0">
+  <link rel="icon" href="/brand/logo-mark.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/mvp-icon-192.png">
+  <link rel="manifest" href="/manifest.webmanifest?v=0.7.0">
+  <link rel="stylesheet" href="/mvp.css?v=0.7.0">
 </head>
 <body>
   <header class="site-header">
-    <a class="wordmark" href="#top" aria-label="Setlister — domů"><span class="brand-mark">S</span><strong>Setlister</strong></a>
+    <a class="wordmark" href="#top" aria-label="Setlister — domů"><img src="/brand/logo-mark.svg" alt=""><strong>Setlister</strong></a>
     <nav aria-label="Hlavní navigace">
-      <a href="#produkt">Produkt</a>
-      <a href="#demo">Demo</a>
-      <a href="#early-access">Early access</a>
+      <a href="#produkt">Produkt</a><a href="#demo">Demo</a><a href="#agent">Mailový agent</a><a href="#kontakt">Kontakt</a>
     </nav>
-    <button class="button button-quiet" id="installApp" type="button" hidden>Nainstalovat</button>
+    <a class="button button-primary header-cta" href="https://app.setlister.cz">Otevřít aplikaci</a>
   </header>
 
   <main id="top">
     <section class="hero">
       <div class="hero-copy">
-        <p class="eyebrow">Setlist studio pro celou kapelu</p>
+        <p class="eyebrow">Pracovní prostor pro celou kapelu</p>
         <h1>Setlist bez chaosu.<br><em>Kapela připravená.</em></h1>
-        <p class="hero-lead">Repertoár, délky skladeb, energie setu a osobní poznámky na jednom místě. Od první zkoušky až po papír ležící na pódiu.</p>
+        <p class="hero-lead">Repertoár, délky skladeb, energie setu a osobní poznámky na jednom místě. Od první zkoušky až po čitelný setlist na pódiu.</p>
         <div class="hero-actions">
-          <a class="button button-primary" href="#demo">Vyzkoušet živé demo</a>
-          <a class="button button-quiet" href="#produkt">Jak to funguje</a>
+          <a class="button button-primary" href="https://app.setlister.cz">Začít se Setlisterem</a>
+          <a class="button button-quiet" href="#demo">Vyzkoušet demo</a>
         </div>
-        <p class="microcopy">Demo se ukládá jen v tomto prohlížeči. Bez registrace.</p>
+        <p class="microcopy">Demo funguje bez registrace a ukládá se pouze v tomto prohlížeči.</p>
       </div>
       <div class="hero-stage" aria-label="Ukázka sestaveného setlistu">
-        <div class="stage-glow"></div>
+        <div class="stage-grid"></div>
         <div class="set-card">
           <header><span>LIVE SET · 45 MIN</span><b>43:20</b></header>
           <ol>
@@ -45,47 +43,42 @@
             <li><span>03</span><strong>Bez mapy</strong><small>ENERGY 5</small></li>
             <li><span>04</span><strong>Poslední refrén</strong><small>CLOSER</small></li>
           </ol>
-          <footer><i></i><span>Připraveno pro 6 členů</span></footer>
+          <footer><i></i><span>Připraveno pro celou kapelu</span></footer>
         </div>
       </div>
     </section>
 
     <section class="product-section" id="produkt">
       <div class="section-intro">
-        <p class="eyebrow">Méně tabulek, více hraní</p>
-        <h2>Jedna verze pravdy pro celou kapelu</h2>
+        <div><p class="eyebrow">Méně tabulek, více hraní</p><h2>Jedna verze pravdy pro celou kapelu</h2></div>
         <p>Každý vidí stejné pořadí skladeb, ale dostane právě ty pokyny, které potřebuje.</p>
       </div>
       <div class="feature-grid">
         <article><span>01</span><h3>Repertoár pod kontrolou</h3><p>Délky, alba, energie, archiv skladeb i hromadný import.</p></article>
         <article><span>02</span><h3>Chytrá kostra setu</h3><p>Pořadí zohlední energii koncertu a omezí zbytečné změny vybavení.</p></article>
-        <article><span>03</span><h3>Pokyny pro každého</h3><p>Kapo, nástroj, zvuk, vlastní název skladby a poznámky členů.</p></article>
-        <article><span>04</span><h3>Čitelné na pódiu</h3><p>Setlisty a podklady pro ladiče připravené na tisk jedním kliknutím.</p></article>
+        <article><span>03</span><h3>Pokyny pro každého</h3><p>Kapo, nástroj, zvuk, vlastní název skladby a osobní poznámky členů.</p></article>
+        <article><span>04</span><h3>Čitelné na pódiu</h3><p>Každý člen dostane vlastní přehled, připravený pro obrazovku i tisk.</p></article>
       </div>
     </section>
 
     <section class="demo-section" id="demo">
       <div class="section-intro demo-intro">
-        <div>
-          <p class="eyebrow">Funkční MVP</p>
-          <h2>Poskládej si první set</h2>
-        </div>
-        <p>Přidej skladby z repertoáru. Setlister průběžně počítá délku a vše si pamatuje v tomto zařízení.</p>
+        <div><p class="eyebrow">Živé demo</p><h2>Poskládej si první set</h2></div>
+        <p>Přidej skladby z repertoáru. Setlister průběžně počítá délku, ukazuje kapodastr i poznámky a vše si pamatuje v tomto zařízení.</p>
       </div>
-
       <div class="demo-app">
         <section class="demo-panel repertoire-panel" aria-labelledby="repertoireTitle">
           <header class="panel-title"><div><span>REPERTOÁR</span><h3 id="repertoireTitle">Skladby</h3></div><b id="repertoireCount">0</b></header>
           <form class="song-form" id="songForm">
             <input id="songTitle" type="text" maxlength="60" placeholder="Název skladby" aria-label="Název skladby" required>
-            <input id="songMinutes" type="number" min="0" max="30" value="3" aria-label="Minuty" required>
-            <span>:</span>
-            <input id="songSeconds" type="number" min="0" max="59" value="30" aria-label="Sekundy" required>
-            <button type="submit" aria-label="Přidat skladbu">＋</button>
+            <label class="compact-field"><span>min</span><input id="songMinutes" type="number" min="0" max="30" value="3" aria-label="Minuty" required></label>
+            <label class="compact-field"><span>sec</span><input id="songSeconds" type="number" min="0" max="59" value="30" aria-label="Sekundy" required></label>
+            <label class="compact-field capo-field"><span>kapo</span><select id="songCapo" aria-label="Kapodastr"><option value="0">K0</option><option value="1">K1</option><option value="2">K2</option><option value="3">K3</option><option value="4">K4</option><option value="5">K5</option><option value="6">K6</option><option value="7">K7</option></select></label>
+            <textarea id="songNote" maxlength="160" rows="2" placeholder="Poznámka pro člena — zvuk, nástup, nástroj…" aria-label="Poznámka ke skladbě"></textarea>
+            <button type="submit">Přidat skladbu</button>
           </form>
           <div class="demo-list" id="repertoireList"></div>
         </section>
-
         <section class="demo-panel set-panel" aria-labelledby="setTitle">
           <header class="set-header">
             <div><span>AKTUÁLNÍ SET</span><h3 id="setTitle">Festivalový set</h3></div>
@@ -102,28 +95,53 @@
       </div>
     </section>
 
-    <section class="early-section" id="early-access">
+    <section class="agent-section" id="agent">
+      <div class="agent-copy">
+        <p class="eyebrow">Read-only mailový agent</p>
+        <h2>Odpovědi z kapelní komunikace, ne další hledání.</h2>
+        <p>Kapela bude moci bezpečně připojit až dva Gmaily pouze pro čtení. Agent dohledá organizační informace a upozorní na konverzace, které možná zůstaly bez odpovědi.</p>
+      </div>
+      <div class="question-stack" aria-label="Příklady dotazů">
+        <blockquote>„V kolik máme být 23. 1. na koncertě v Olomouci?“</blockquote>
+        <blockquote>„Nečeká někdo na fakturu nebo naši odpověď?“</blockquote>
+        <blockquote>„Jaké potvrzené koncerty nás čekají v únoru?“</blockquote>
+        <small>Agent nikdy nebude e-maily odesílat, upravovat ani mazat.</small>
+      </div>
+    </section>
+
+    <section class="early-section">
       <div>
-        <p class="eyebrow">Early access</p>
-        <h2>Postavíme placený Setlister s kapelami, ne vedle nich.</h2>
-        <p>Obecná verze připravuje oddělené účty kapel, bezpečné sdílení, cloudovou synchronizaci a později také stageplan a rider. Cena bude oznámena před spuštěním placeného provozu.</p>
+        <p class="eyebrow">Začni s kapelou</p>
+        <h2>Jeden účet. Jedna kapela. Stejná data na každém zařízení.</h2>
+        <p>Založ kapelu nebo se připoj pozvánkovým kódem. Předplatné bude vždy patřit kapele, takže jej nebude potřeba kupovat zvlášť na webu, Androidu a iPhonu.</p>
       </div>
       <div class="access-card">
-        <span>PRVNÍ KAPELY</span>
-        <strong>Early access</strong>
-        <ul><li>Vlastní kapelní prostor</li><li>Kompletní setlistový workflow</li><li>Přímý vliv na další funkce</li></ul>
-        <a class="button button-primary" href="mailto:propadleek@gmail.com?subject=Setlister%20early%20access&body=Ahoj%2C%20m%C3%A1me%20z%C3%A1jem%20o%20early%20access%20pro%20kapelu%3A%20">Mám zájem</a>
+        <span>SETLISTER</span><strong>Kapelní prostor</strong>
+        <ul><li>Oddělená data každé kapely</li><li>Členové přes pozvánkový kód</li><li>Setlisty dostupné napříč zařízeními</li></ul>
+        <a class="button button-primary" href="https://app.setlister.cz">Vytvořit účet</a>
       </div>
+    </section>
+
+    <section class="contact-section" id="kontakt">
+      <div>
+        <p class="eyebrow">Kontakt</p><h2>Napiš nám, co tvoje kapela potřebuje.</h2>
+        <p>Dotaz, nápad nebo zájem o dřívější přístup. Zpráva přijde přímo týmu Setlisteru.</p>
+      </div>
+      <form class="contact-form" id="contactForm">
+        <div class="form-grid"><label>Jméno<input name="name" maxlength="80" autocomplete="name" required></label><label>E-mail<input name="email" type="email" maxlength="160" autocomplete="email" required></label></div>
+        <label>Kapela<input name="band" maxlength="120" autocomplete="organization"></label>
+        <label>Zpráva<textarea name="message" rows="5" maxlength="3000" required></textarea></label>
+        <input class="honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <div class="contact-submit"><button class="button button-primary" type="submit">Odeslat zprávu</button><p id="contactStatus" role="status" aria-live="polite"></p></div>
+      </form>
     </section>
   </main>
 
   <footer class="site-footer">
-    <a class="wordmark" href="#top"><span class="brand-mark">S</span><strong>Setlister</strong></a>
-    <p>MVP ve vývoji · setlister.cz</p>
-    <a href="mailto:propadleek@gmail.com">Kontakt</a>
+    <a class="wordmark" href="#top"><img src="/brand/logo-mark.svg" alt=""><strong>Setlister</strong></a>
+    <p>Setlisty, které drží kapelu pohromadě.</p><a href="#kontakt">Kontakt</a>
   </footer>
-
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="mvp.js?v=0.6.0"></script>
+  <script src="/mvp.js?v=0.7.0"></script>
 </body>
 </html>
