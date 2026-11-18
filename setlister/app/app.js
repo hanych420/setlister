@@ -289,7 +289,51 @@
       row.append(main, actions); return row;
     });
     if (!rows.length) rows.push(mailNode("div", "mail-account-empty", status.canManage ? "Připoj první kapelní Gmail. Po autorizaci načteš celou jeho schránku." : "Vlastník kapely zatím nepřipojil žádný Gmail.")); elements.gmailAccountList.replaceChildren(...rows); updateMailChatAvailability(ready);
-    clearTimeout(mailAgentPollTimer); if (syncing) mailAgentPollTimer = setTimeout(() => loadMailAgentStatus(true), 2500);
+    renderConcertIndex(status);
+    clearTimeout(mailAgentPollTimer);
+    const index = status.concertIndex;
+    if (syncing || (index?.enabled && index.pending > index.failed)) {
+      mailAgentPollTimer = setTimeout(() => loadMailAgentStatus(true), syncing ? 2500 : 20000);
+    }
+  }
+  function renderConcertIndex(status) {
+    const index = status.concertIndex;
+    const button = elements.toggleConcertIndex;
+    if (!index) {
+      elements.concertIndexStatus.textContent = "Evidence zatím není dostupná.";
+      button.hidden = true;
+      return;
+    }
+    button.hidden = !status.canManage;
+    button.disabled = !index.enabled && (!status.openaiConfigured || !status.accounts.length);
+    button.textContent = index.enabled ? "Pozastavit evidenci" : "Zapnout evidenci";
+    if (!index.enabled) {
+      elements.concertIndexStatus.textContent = "Evidence je vypnutá. Z přehledu se můžeš ptát po jejím zapnutí.";
+      return;
+    }
+    const parts = [];
+    if (index.pending > index.failed) parts.push(`Čeká na zpracování: ${index.pending - index.failed}`);
+    if (index.failed) parts.push(`Vlákna s chybou: ${index.failed}`);
+    if (index.incompleteInboxes) parts.push(`Neaktuální schránky: ${index.incompleteInboxes}`);
+    if (!parts.length) parts.push(index.asOf ? "Přehled je připravený" : "Čeká na synchronizaci Gmailu");
+    if (index.asOf) parts.push(`Stav e-mailů k ${mailDate(index.asOf)}`);
+    elements.concertIndexStatus.textContent = parts.join(" · ");
+  }
+  async function toggleConcertIndex() {
+    const index = mailAgentStatus?.concertIndex;
+    if (!index) return;
+    elements.toggleConcertIndex.disabled = true;
+    try {
+      await api("/mail-agent/concert-index", {
+        method: "POST",
+        body: JSON.stringify({ bandId: activeBandId, enabled: !index.enabled })
+      });
+      await loadMailAgentStatus(true);
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      if (mailAgentStatus) renderConcertIndex(mailAgentStatus);
+    }
   }
   async function loadMailAgentStatus(quiet = false) {
     if (!activeBandId) return; if (mailConversationBandId !== activeBandId) { mailConversationBandId = activeBandId; mailConversation = []; resetMailConversation(); }
@@ -661,6 +705,7 @@
   elements.liveSongCard.addEventListener("pointercancel", () => { liveSwipeStart = null; }); elements.liveSongCard.addEventListener("keydown", event => { if (event.key === "ArrowLeft") moveLiveSong(-1); if (event.key === "ArrowRight") moveLiveSong(1); });
   elements.enableLiveAudio.addEventListener("click", async () => { try { await enableLiveAudio(); showToast("Zvuk metronomu je na tomto zařízení povolený."); } catch (error) { showToast(error.message); } }); elements.startSharedMetronome.addEventListener("click", () => setSharedMetronome("start")); elements.stopSharedMetronome.addEventListener("click", () => setSharedMetronome("stop")); elements.liveCalibration.addEventListener("change", event => { const value = Math.max(-250, Math.min(250, Number(event.target.value) || 0)); event.target.value = String(value); localStorage.setItem("setlister-live-calibration", String(value)); liveLastScheduledBeat = -1; });
   elements.connectGmail.addEventListener("click", connectGmail);
+  elements.toggleConcertIndex.addEventListener("click", toggleConcertIndex);
   elements.mailChatForm.addEventListener("submit", event => { event.preventDefault(); askMailAgent(elements.mailQuestion.value.trim()); });
   elements.mailQuestion.addEventListener("keydown", event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); elements.mailChatForm.requestSubmit(); } });
   elements.mailQuestion.addEventListener("input", event => { event.target.style.height = "auto"; event.target.style.height = Math.min(event.target.scrollHeight, 150) + "px"; });

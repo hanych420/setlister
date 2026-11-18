@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.2
+
+- Mailový agent má volitelnou kapelní evidenci koncertů se zdroji, kterou vlastník zapne po seznámení se zpracováním v OpenAI.
+- Server sestavuje přehledy termínů, měst a změn z uložených doložených faktů. Přehled zobrazuje stáří schránek i nedokončené zpracování.
+- Historická pošta se zpracovává z lokálního indexu. Nový běh zachytí změněná vlákna a placené zpracování má vlastní denní rozpočet.
+- Volné otázky využívají přesné fráze, váhu předmětů a prefixové hledání.
+
 ## 0.12.1
 
 - dočasné síťové chyby Gmailu včetně `Connection reset by peer`, timeoutů, rate limitů a chyb 5xx se automaticky opakují s omezeným počtem pokusů;

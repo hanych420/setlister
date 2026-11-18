@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.12.1 · aktualizováno 18. 11. 2026
+> Stav specifikace: 0.12.2 · aktualizováno 19. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -268,7 +268,7 @@ Připojení je striktně Gmail read-only a maximálně dva účty na kapelu. Age
 3. První synchronizace zapíše až 100 000 zpráv do SQLite a vytvoří FTS5 index. Před stahováním si uloží výchozí Gmail `historyId`, aby následná inkrementální synchronizace zachytila i zprávy doručené během dlouhého prvního importu.
 4. Synchronizace nemá krátký HTTP limit na celou schránku: API požadavek z UI pouze spustí background job a ihned vrátí `202`. Jednotlivý Gmail požadavek má 60sekundový timeout a nejvýše osm pokusů s exponenciální prodlevou. `Connection reset`, timeouty, Google 429 a dočasné chyby 5xx se automaticky opakují; access token se po 401 automaticky obnoví.
 5. Jeden background běh smí trvat nejvýše dvě hodiny. Potom se bezpečně přepne do stavu `paused`, zachová již načtené zprávy a klient nabídne „Pokračovat“. Opakování po chybě ani pokračování po limitu nesmí mazat uložený průběh. Po restartu server označí nedokončený stav jako obnovitelnou chybu místo nekonečného `syncing`.
-6. Stav průběžně zapisuje počet uložených zpráv. Samotná Gmail synchronizace nikdy nevolá OpenAI a nespotřebovává AI tokeny; AI se použije až po odeslání dotazu v chatu.
+6. Stav průběžně zapisuje počet uložených zpráv. Synchronizace Gmailu běží na serveru bez OpenAI. Chat a volitelná evidence koncertů mají vlastní rozpočty.
 7. Server každých pět minut použije Gmail History API a doplní nové/změněné zprávy nebo odstraní lokální kopie smazaných zpráv. Ruční tlačítko umí kontrolu spustit ihned.
 8. Každý záznam i každý FTS dotaz obsahuje `bandId`; backend před každou operací ověří členství. Zprávy dvou kapel nebo dvou odpojených účtů se nesmějí smíchat.
 9. Refresh token se ukládá šifrovaně na serveru a nikdy se neposílá webovému ani mobilnímu klientovi. Odpojení smaže lokální zprávy a jejich vyhledávací index; v Gmailu nic nemění.
@@ -282,6 +282,14 @@ Druhý krok dostane pouze nalezená relevantní vlákna, maximálně 36 000 znak
 Obsah e-mailů je nedůvěryhodný vstup. Instrukci nalezenou uvnitř e-mailu agent pouze cituje nebo shrne; nikdy ji neprovede ani jí nedovolí změnit systémová pravidla. Odpověď se nevyrenderuje jako libovolné HTML. Klient bezpečně podporuje pouze odstavce, seznamy, tučný text a ověřené citace vrácené serverem.
 
 Kvůli nákladům je pro každou kapelu atomicky hlídaný denní limit dotazů; výchozí hodnota je 50 a provozovatel ji může změnit nastavením `public_ai_daily_questions`. Jeden dotaz používá dva malé kroky modelu, ale nikdy neposílá celou schránku. Odpověď má nejvýše 900 výstupních tokenů a OpenAI požadavky mají `store: false`.
+
+### Evidence koncertů
+
+V Mailovém agentovi zobraz stav evidence a tlačítko „Zapnout evidenci“ / „Pozastavit evidenci“ pro vlastníka kapely. Před zapnutím je viditelná informace o zasílání vybraných úryvků koncertní korespondence do OpenAI. Evidence je ve výchozím stavu vypnutá. Po zapnutí server zpracuje již staženou poštu a poté znovu zpracuje jen vlákna s relevantní změnou. Strukturované Culter notifikace lze zpracovat lokálně. Ostatní kandidátní vlákna mohou využít OpenAI s limitem `public_concert_daily_threads` (výchozích 50 volání na kapelu za den) a společným limitem 200 volání za den na instalaci.
+
+Server uchovává doložená fakta včetně zdrojové zprávy, citace a času. Potvrzené koncerty mají doložené konkrétní datum a stav. Rozpory bez výslovné změny si ponechávají oba zdroje. Přehledy termínů, měst, nejbližšího koncertu a změn sestavuje server z evidence. Navazující otázka zachovává rozsah či stav ze související konverzace. Detaily, faktury a čekající odpovědi čerpají z vyhledaných e-mailů. Hledání váží přesné fráze a předměty a umí použít prefix pro české skloňování.
+
+`GET /api/app/gmail/status?bandId=…` obsahuje `concertIndex: { enabled, pending, failed, incompleteInboxes, asOf }`. `POST /api/app/mail-agent/concert-index` s `{ bandId, enabled }` povolí nebo pozastaví zpracování a vyžaduje roli vlastníka. Přehledová odpověď z `/api/app/mail-agent/ask` vrací stejný stav a průběžné odkazy v textu. Zobraz upozornění na neúplnost, když schránka nebo evidence stále dobíhá.
 
 Soukromý `/propadleek` PropsBot zůstává samostatný prototyp a jeho endpointy ani data se ve veřejné aplikaci nepoužívají.
 

@@ -1,5 +1,5 @@
 name: Setlister
-version: "0.12.1"
+version: "0.12.2"
 slug: setlister
 description: Kapelní repertoár, setlisty, tisk a read-only asistent nad kapelními Gmaily.
 url: https://github.com/hanych420/setlister
@@ -36,6 +36,7 @@ options:
   contact_from: Setlister <kontakt@setlister.cz>
   gmail_lookback_days: 730
   public_ai_daily_questions: 50
+  public_concert_daily_threads: 50
 schema:
   base_url: str
   app_host: str
@@ -52,3 +53,4 @@ schema:
   contact_from: str
   gmail_lookback_days: int(30,3650)
   public_ai_daily_questions: int(1,1000)
+  public_concert_daily_threads: int(1,200)

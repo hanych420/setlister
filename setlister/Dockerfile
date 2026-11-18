@@ -7,7 +7,7 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-COPY server.py index.html mvp.css mvp.js mvp-icon.svg mvp-icon-192.png mvp-icon-512.png manifest.webmanifest service-worker.js README.md /app/
+COPY server.py public_concerts.py index.html mvp.css mvp.js mvp-icon.svg mvp-icon-192.png mvp-icon-512.png manifest.webmanifest service-worker.js README.md /app/
 COPY propadleek /app/propadleek
 COPY app /app/app
 COPY brand /app/brand
