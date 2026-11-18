@@ -24,6 +24,8 @@
   let memberDraftCustomInstruments = [];
   let memberDraftSelectedIds = new Set();
   let logoCropState = null;
+  let songPrintFieldDraft = [];
+  let notesPrintFieldDraft = [];
 
   async function api(path, options = {}) {
     const response = await fetch(API + path, { credentials: "same-origin", ...options, headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
@@ -76,6 +78,13 @@
     const source = Array.isArray(value) ? value : String(value || "").split(/[,;|\n]/);
     return [...new Set(source.map(item => String(item).trim().slice(0, 32)).filter(Boolean))].slice(0, 8);
   }
+  function normalizePrintFields(value, legacyTags = []) {
+    const source = Array.isArray(value) ? value : [];
+    const fields = source.filter(item => item && typeof item === "object").map(item => ({ id: String(item.id || uid("field")), label: String(item.label || "").trim().slice(0, 32), value: String(item.value || "").trim().slice(0, 64) }));
+    parsePrintTags(legacyTags).forEach(tag => fields.push({ id: uid("field"), label: "", value: tag }));
+    const seen = new Set(); return fields.filter(field => { const key = normalizedText(field.label) + "|" + normalizedText(field.value); if (!field.label && !field.value || seen.has(key)) return false; seen.add(key); return true; }).slice(0, 8);
+  }
+  function printFieldTexts(fields) { return normalizePrintFields(fields).map(field => field.value ? (field.label ? field.label + ": " + field.value : field.value) : "").filter(Boolean); }
   function normalizedText(value) { return String(value || "").trim().toLocaleLowerCase("cs").normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
   function showStatus(node, message, success = false) { node.textContent = message || ""; node.classList.toggle("success", success); }
   function showToast(message) {
@@ -103,9 +112,9 @@
     state.draft.targetMinutes = Number(state.draft.targetMinutes) || 45;
     state.songs.forEach(song => {
       song.album = song.album || ""; song.energy = Math.min(5, Math.max(1, Number(song.energy) || 3)); song.role = ROLE_LABELS[song.role] ? song.role : "standard";
-      song.bpm = Math.min(300, Math.max(0, Number(song.bpm) || 0)); song.printTags = parsePrintTags(song.printTags);
+      song.bpm = Math.min(300, Math.max(0, Number(song.bpm) || 0)); song.printFields = normalizePrintFields(song.printFields, song.printTags); delete song.printTags;
       song.memberDetails = song.memberDetails && typeof song.memberDetails === "object" ? song.memberDetails : {};
-      Object.values(song.memberDetails).forEach(detail => { if (detail && typeof detail === "object") detail.printTags = parsePrintTags(detail.printTags); });
+      Object.values(song.memberDetails).forEach(detail => { if (detail && typeof detail === "object") { detail.printFields = normalizePrintFields(detail.printFields, detail.printTags); delete detail.printTags; } });
       if ((song.note || Number(song.capo)) && state.members[0]) {
         const first = state.members[0]; song.memberDetails[first.id] = song.memberDetails[first.id] || { note: song.note || "", capo: Number(song.capo) || 0, instrumentId: first.defaultInstrumentId || "none" };
       }
@@ -154,7 +163,7 @@
     if (instrument.kind !== "none") parts.push(instrument.name);
     if ((instrument.kind === "guitar" || instrument.kind === "electric-guitar") && Number(detail.capo)) parts.push("K" + detail.capo);
     if (instrument.kind === "electric-guitar" && detail.preset) parts.push(detail.preset);
-    parts.push(...parsePrintTags(song.printTags), ...parsePrintTags(detail.printTags));
+    parts.push(...printFieldTexts(song.printFields), ...printFieldTexts(detail.printFields));
     if (detail.note) parts.push(detail.note);
     return parts.join(" · ");
   }
@@ -183,7 +192,7 @@
       const number = document.createElement("span"); number.textContent = String(index + 1).padStart(2, "0");
       const detail = songMemberDetail(song, state.draft.viewerMemberId); const info = document.createElement("div"); const title = document.createElement("strong"); title.textContent = state.draft.viewerMemberId === "clean" ? song.title : detail.customTitle || song.title; const note = document.createElement("span"); note.className = "song-note"; note.textContent = detailSummary(song, state.draft.viewerMemberId) || song.album || ROLE_LABELS[song.role]; info.append(title, note);
       const meta = document.createElement("small"); const role = song.role !== "standard" ? ROLE_LABELS[song.role] : ""; meta.textContent = [role, formatTime(song.seconds), song.bpm ? song.bpm + " BPM" : ""].filter(Boolean).join(" · ");
-      const actions = document.createElement("div"); actions.className = "row-actions"; const up = rowButton("↑", "Posunout nahoru", () => moveSong(index, index - 1)); const down = rowButton("↓", "Posunout dolů", () => moveSong(index, index + 1)); const remove = rowButton("×", "Odebrat ze setu", () => { state.draft.songIds.splice(index, 1); changed(); }); up.disabled = index === 0; down.disabled = index === setSongs.length - 1; actions.append(up, down, remove);
+      const actions = document.createElement("div"); actions.className = "row-actions set-song-actions"; const edit = iconAction("edit", "Upravit skladbu", () => openSongDialog(song.id)); const notes = iconAction("member", "Poznámky členů", () => openNotesDialog(song.id)); const up = rowButton("↑", "Posunout nahoru", () => moveSong(index, index - 1)); const down = rowButton("↓", "Posunout dolů", () => moveSong(index, index + 1)); const remove = rowButton("×", "Odebrat ze setu", () => { state.draft.songIds.splice(index, 1); changed(); }); up.disabled = index === 0; down.disabled = index === setSongs.length - 1; actions.append(edit, notes, up, down, remove);
       row.append(number, info, meta, actions); return row;
     }));
     elements.appSetEmpty.hidden = setSongs.length > 0;
@@ -243,9 +252,23 @@
     try { const result = await api("/band-state", { method: "PUT", body: JSON.stringify({ bandId: activeBandId, revision, state: workspace.state }) }); revision = result.revision; elements.saveState.textContent = "Uloženo"; }
     catch (error) { elements.saveState.textContent = "Neuloženo"; if (error.message.includes("Konflikt")) await loadWorkspace(); showToast(error.message); }
   }
+  function printFieldDraft(kind) { return kind === "song" ? songPrintFieldDraft : notesPrintFieldDraft; }
+  function renderPrintFieldEditor(kind, focusLast = false) {
+    const draft = printFieldDraft(kind); const container = kind === "song" ? elements.songPrintFields : elements.notesPrintFields;
+    container.replaceChildren(...draft.map((field, index) => {
+      const row = document.createElement("div"); row.className = "custom-field-row"; const label = document.createElement("label"); const title = document.createElement("span"); title.textContent = field.label || "Štítek"; const input = document.createElement("input"); input.type = "text"; input.maxLength = 64; input.placeholder = "Zadej hodnotu"; input.value = field.value || ""; input.addEventListener("input", () => { field.value = input.value.slice(0, 64); }); label.append(title, input); const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "×"; remove.title = "Odstranit pole " + (field.label || "Štítek"); remove.setAttribute("aria-label", remove.title); remove.addEventListener("click", () => { draft.splice(index, 1); renderPrintFieldEditor(kind); }); row.append(label, remove); return row;
+    }));
+    if (focusLast) container.lastElementChild?.querySelector("input")?.focus();
+  }
+  function addPrintField(kind) {
+    const draft = printFieldDraft(kind); const input = kind === "song" ? elements.songNewFieldLabel : elements.notesNewFieldLabel; const label = input.value.trim().slice(0, 32); if (!label) return;
+    if (draft.length >= 8) { showToast("Ke skladbě lze přidat nejvýše 8 vlastních polí."); return; }
+    if (draft.some(field => normalizedText(field.label) === normalizedText(label))) { showToast("Pole s tímto názvem už existuje."); return; }
+    draft.push({ id: uid("field"), label, value: "" }); input.value = ""; renderPrintFieldEditor(kind, true);
+  }
   function openSongDialog(songId) {
     const song = workspace.state.songs.find(item => item.id === songId); if (!song) return;
-    const form = elements.songEditForm; form.elements.songId.value = song.id; form.elements.title.value = song.title; form.elements.album.value = song.album || ""; form.elements.duration.value = formatTime(song.seconds); form.elements.bpm.value = song.bpm || ""; form.elements.energy.value = String(song.energy); form.elements.role.value = song.role || "standard"; form.elements.printTags.value = parsePrintTags(song.printTags).join(", "); elements.songDialogTitle.textContent = song.title;
+    const form = elements.songEditForm; form.elements.songId.value = song.id; form.elements.title.value = song.title; form.elements.album.value = song.album || ""; form.elements.duration.value = formatTime(song.seconds); form.elements.bpm.value = song.bpm || ""; form.elements.energy.value = String(song.energy); form.elements.role.value = song.role || "standard"; songPrintFieldDraft = normalizePrintFields(song.printFields, song.printTags).map(field => ({ ...field })); elements.songNewFieldLabel.value = ""; renderPrintFieldEditor("song"); elements.songDialogTitle.textContent = song.title;
     enhanceSelects(form); elements.songDialog.showModal();
   }
   function openNotesDialog(songId, requestedMemberId = "") {
@@ -258,14 +281,14 @@
   function populateNotesForm() {
     const song = workspace.state.songs.find(item => item.id === elements.notesForm.elements.songId.value); const member = memberById(elements.notesMemberSelect.value); if (!song || !member) return;
     const detail = songMemberDetail(song, member.id); const defaultInstrument = memberInstrument(member, member.defaultInstrumentId || "none"); elements.notesCustomTitle.value = detail.customTitle || ""; elements.notesInstrument.replaceChildren(option("", "Výchozí — " + defaultInstrument.name), option("none", "Bez nástroje"), ...member.instruments.filter(item => item.id !== "none").map(item => option(item.id, item.name))); elements.notesInstrument.value = detail.instrumentId || "";
-    elements.notesCapo.replaceChildren(...Array.from({ length: 13 }, (_, index) => option(String(index), "K" + index))); elements.notesCapo.value = String(Number(detail.capo) || 0); elements.notesPreset.value = detail.preset || ""; elements.notesPrintTags.value = parsePrintTags(detail.printTags).join(", "); elements.notesText.value = detail.note || ""; updateNotesConditionalFields(); enhanceSelect(elements.notesInstrument); enhanceSelect(elements.notesCapo);
+    elements.notesCapo.replaceChildren(...Array.from({ length: 13 }, (_, index) => option(String(index), "K" + index))); elements.notesCapo.value = String(Number(detail.capo) || 0); elements.notesPreset.value = detail.preset || ""; notesPrintFieldDraft = normalizePrintFields(detail.printFields, detail.printTags).map(field => ({ ...field })); elements.notesNewFieldLabel.value = ""; renderPrintFieldEditor("notes"); elements.notesText.value = detail.note || ""; updateNotesConditionalFields(); enhanceSelect(elements.notesInstrument); enhanceSelect(elements.notesCapo);
   }
   function updateNotesConditionalFields() {
     const member = memberById(elements.notesMemberSelect.value); const instrument = memberInstrument(member, elements.notesInstrument.value || member?.defaultInstrumentId); const guitar = ["guitar", "electric-guitar"].includes(instrument.kind); elements.notesCapoLabel.hidden = !guitar; elements.notesPresetLabel.hidden = instrument.kind !== "electric-guitar"; if (!guitar) elements.notesCapo.value = "0"; if (instrument.kind !== "electric-guitar") elements.notesPreset.value = "";
   }
   function saveNotesForm(form) {
     const song = workspace.state.songs.find(item => item.id === form.elements.songId.value); const member = memberById(elements.notesMemberSelect.value); if (!song || !member) return;
-    const instrument = memberInstrument(member, elements.notesInstrument.value || member.defaultInstrumentId); song.memberDetails = song.memberDetails || {}; song.memberDetails[member.id] = { customTitle: elements.notesCustomTitle.value.trim(), instrumentId: elements.notesInstrument.value, capo: ["guitar", "electric-guitar"].includes(instrument.kind) ? Number(elements.notesCapo.value || 0) : 0, preset: instrument.kind === "electric-guitar" ? elements.notesPreset.value.trim() : "", printTags: parsePrintTags(elements.notesPrintTags.value), note: elements.notesText.value.trim() };
+    const instrument = memberInstrument(member, elements.notesInstrument.value || member.defaultInstrumentId); song.memberDetails = song.memberDetails || {}; song.memberDetails[member.id] = { customTitle: elements.notesCustomTitle.value.trim(), instrumentId: elements.notesInstrument.value, capo: ["guitar", "electric-guitar"].includes(instrument.kind) ? Number(elements.notesCapo.value || 0) : 0, preset: instrument.kind === "electric-guitar" ? elements.notesPreset.value.trim() : "", printFields: normalizePrintFields(notesPrintFieldDraft), note: elements.notesText.value.trim() };
     elements.notesDialog.close(); changed(); showToast("Osobní pokyny pro " + member.name + " jsou uložené.");
   }
   function openMemberDialog(memberId = "") {
@@ -297,7 +320,7 @@
   function saveSongForm(form) {
     const payload = formPayload(form); const song = workspace.state.songs.find(item => item.id === payload.songId); const seconds = parseDuration(payload.duration); if (!song || seconds < 1 || seconds > 3600) { showToast("Délku zadej jako 3:30 nebo počet sekund."); return; }
     const bpm = Number(payload.bpm || 0); if (!Number.isFinite(bpm) || bpm < 0 || bpm > 300) { showToast("BPM musí být mezi 1 a 300."); return; }
-    song.title = payload.title.trim(); song.album = payload.album.trim(); song.seconds = seconds; song.bpm = bpm; song.energy = Number(payload.energy); song.role = payload.role; song.printTags = parsePrintTags(payload.printTags); song.memberDetails = song.memberDetails || {};
+    song.title = payload.title.trim(); song.album = payload.album.trim(); song.seconds = seconds; song.bpm = bpm; song.energy = Number(payload.energy); song.role = payload.role; song.printFields = normalizePrintFields(songPrintFieldDraft); delete song.printTags; song.memberDetails = song.memberDetails || {};
     elements.songDialog.close(); changed();
   }
   function updateExportSummary() {
@@ -310,11 +333,11 @@
     songs.forEach(song => {
       const detail = member ? songMemberDetail(song, member.id) : {}; const instrument = member ? memberInstrument(member, detail.instrumentId || member.defaultInstrumentId || "none") : null; const instrumentChanged = member && instrument.id !== previousInstrument; const item = document.createElement("li");
       const left = document.createElement("span"); left.className = "print-left"; const printTags = [];
-      if (member && ["guitar", "electric-guitar"].includes(instrument.kind) && Number(detail.capo)) printTags.push("K" + detail.capo); if (member) printTags.push(...parsePrintTags(detail.printTags), ...parsePrintTags(song.printTags)); if (member && song.bpm) printTags.push(song.bpm + " BPM"); printTags.forEach(text => { const tag = document.createElement("i"); tag.textContent = text; left.append(tag); });
+      if (member && ["guitar", "electric-guitar"].includes(instrument.kind) && Number(detail.capo)) printTags.push("K" + detail.capo); if (member) printTags.push(...printFieldTexts(detail.printFields), ...printFieldTexts(song.printFields)); if (member && song.bpm) printTags.push(song.bpm + " BPM"); printTags.forEach(text => { const tag = document.createElement("i"); tag.textContent = text; left.append(tag); });
       const title = document.createElement("strong"); title.textContent = clean ? song.title : detail.customTitle || song.title;
       const right = document.createElement("span"); right.className = "print-right"; const instructions = [];
       if (instrumentChanged) instructions.push("→ " + instrument.name); if (instrument?.kind === "electric-guitar" && detail.preset) instructions.push(detail.preset); if (detail.note) instructions.push(detail.note); right.textContent = clean ? "" : instructions.join(" · ");
-      item.append(left, title, right); list.append(item); lineWeight += 1 + (right.textContent.length > 45 ? .45 : 0) + Math.max(0, printTags.length - 1) * .12; previousInstrument = instrument?.id || previousInstrument;
+      const wrappedTagWeight = printTags.reduce((sum, text) => sum + Math.max(0, Math.ceil(text.length / 28) - 1) * .16, 0); item.append(left, title, right); list.append(item); lineWeight += 1 + (right.textContent.length > 45 ? .45 : 0) + Math.max(0, printTags.length - 1) * .12 + wrappedTagWeight; previousInstrument = instrument?.id || previousInstrument;
     });
     const maxFont = clean ? 44 : 34; const minFont = clean ? 15 : 13; const estimated = Math.floor((clean ? 580 : 540) / Math.max(1, lineWeight)); page.style.setProperty("--print-size", (onePage ? Math.max(minFont, Math.min(maxFont, estimated)) : (clean ? 28 : 23)) + "px"); if (songs.length <= 12) list.classList.add("centered"); page.append(list); return page;
   }
@@ -374,7 +397,7 @@
     data.slice(0, 1000).forEach((row, index) => {
       const lineNumber = index + (hasHeader ? 2 : 1); const get = key => positions[key] >= 0 ? row[positions[key]] || "" : ""; const title = get("title").trim(); const seconds = parseDuration(get("duration")); const bpmText = get("bpm").trim(); const bpm = bpmText ? Number(bpmText) : 0; const energyText = get("energy").trim(); const energy = energyText ? Number(energyText) : 3;
       if (!title) { errors.push("Řádek " + lineNumber + ": chybí název."); return; } if (seconds < 1 || seconds > 3600) { errors.push("Řádek " + lineNumber + ": neplatná délka."); return; } if (!Number.isFinite(bpm) || bpm < 0 || bpm > 300) { errors.push("Řádek " + lineNumber + ": BPM musí být 1–300."); return; }
-      songs.push({ id: uid("song"), title: title.slice(0, 120), album: get("album").trim().slice(0, 120), seconds, bpm, energy: Number.isFinite(energy) ? Math.min(5, Math.max(1, Math.round(energy))) : 3, role: parseImportRole(get("role")), printTags: parsePrintTags(get("tags")), memberDetails: {} });
+      songs.push({ id: uid("song"), title: title.slice(0, 120), album: get("album").trim().slice(0, 120), seconds, bpm, energy: Number.isFinite(energy) ? Math.min(5, Math.max(1, Math.round(energy))) : 3, role: parseImportRole(get("role")), printFields: parsePrintTags(get("tags")).map(tag => ({ id: uid("field"), label: "", value: tag })), memberDetails: {} });
     });
     if (data.length > 1000) errors.push("Najednou lze importovat nejvýše 1000 řádků."); return { songs, errors };
   }
@@ -396,9 +419,13 @@
   elements.logoutButton.addEventListener("click", async () => { try { await api("/logout", { method: "POST", body: "{}" }); } catch (_) {} session = null; workspace = null; setScreen("auth"); });
   elements.createBandForm.addEventListener("submit", async event => { event.preventDefault(); showStatus(elements.onboardingStatus, "Zakládám kapelu…"); try { const payload = await api("/bands", { method: "POST", body: JSON.stringify(formPayload(event.currentTarget)) }); activeBandId = payload.band.id; localStorage.setItem(ACTIVE_BAND_KEY, activeBandId); await refreshSession(); } catch (error) { showStatus(elements.onboardingStatus, error.message); } });
   elements.joinBandForm.addEventListener("submit", async event => { event.preventDefault(); showStatus(elements.onboardingStatus, "Připojuji ke kapele…"); try { const payload = await api("/bands/join", { method: "POST", body: JSON.stringify(formPayload(event.currentTarget)) }); activeBandId = payload.band.id; localStorage.setItem(ACTIVE_BAND_KEY, activeBandId); await refreshSession(); } catch (error) { showStatus(elements.onboardingStatus, error.message); } });
-  elements.appSongForm.addEventListener("submit", event => { event.preventDefault(); const payload = formPayload(event.currentTarget); const seconds = parseDuration(payload.duration); const bpm = Number(payload.bpm || 0); if (seconds < 1 || seconds > 3600) { showToast("Délku zadej jako 3:30 nebo počet sekund."); return; } if (!Number.isFinite(bpm) || bpm < 0 || bpm > 300) { showToast("BPM musí být mezi 1 a 300."); return; } workspace.state.songs.push({ id: uid("song"), title: payload.title.trim(), album: payload.album.trim(), seconds, bpm, energy: Number(payload.energy), role: payload.role, printTags: [], memberDetails: {} }); event.currentTarget.reset(); event.currentTarget.elements.duration.value = "3:30"; changed(); });
+  elements.appSongForm.addEventListener("submit", event => { event.preventDefault(); const payload = formPayload(event.currentTarget); const seconds = parseDuration(payload.duration); const bpm = Number(payload.bpm || 0); if (seconds < 1 || seconds > 3600) { showToast("Délku zadej jako 3:30 nebo počet sekund."); return; } if (!Number.isFinite(bpm) || bpm < 0 || bpm > 300) { showToast("BPM musí být mezi 1 a 300."); return; } workspace.state.songs.push({ id: uid("song"), title: payload.title.trim(), album: payload.album.trim(), seconds, bpm, energy: Number(payload.energy), role: payload.role, printFields: [], memberDetails: {} }); event.currentTarget.reset(); event.currentTarget.elements.duration.value = "3:30"; changed(); });
   elements.songEditForm.addEventListener("submit", event => { event.preventDefault(); saveSongForm(event.currentTarget); });
   elements.notesForm.addEventListener("submit", event => { event.preventDefault(); saveNotesForm(event.currentTarget); });
+  elements.addSongPrintField.addEventListener("click", () => addPrintField("song"));
+  elements.songNewFieldLabel.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); addPrintField("song"); } });
+  elements.addNotesPrintField.addEventListener("click", () => addPrintField("notes"));
+  elements.notesNewFieldLabel.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); addPrintField("notes"); } });
   elements.notesMemberSelect.addEventListener("change", populateNotesForm);
   elements.notesInstrument.addEventListener("change", updateNotesConditionalFields);
   elements.memberForm.addEventListener("submit", event => { event.preventDefault(); saveMemberForm(event.currentTarget); });

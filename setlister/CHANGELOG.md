@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.1
+
+- vlastní štítek se nyní zakládá jako pojmenované pole: po zadání názvu a potvrzení Enterem vznikne samostatný box pro jeho hodnotu;
+- pojmenovaná pole lze vytvořit společně pro skladbu i osobně pro konkrétního člena;
+- starší volné štítky se při načtení automaticky převedou bez ztráty dat;
+- skladbu v aktuálním setlistu lze přímo upravit nebo otevřít její poznámky členů, aniž by se musela ze setu odebrat.
+
 ## 0.9.0
 
 - člen kapely má explicitně volitelný výchozí nástroj, který se automaticky použije u skladeb bez vlastní volby;

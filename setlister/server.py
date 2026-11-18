@@ -1495,6 +1495,13 @@ def valid_public_state(value: object) -> bool:
         print_tags = song.get("printTags") or []
         if not isinstance(print_tags, list) or len(print_tags) > 8 or any(len(str(tag)) > 32 for tag in print_tags):
             return False
+        print_fields = song.get("printFields") or []
+        if not isinstance(print_fields, list) or len(print_fields) > 8:
+            return False
+        for field in print_fields:
+            if (not isinstance(field, dict) or not str(field.get("id") or "")
+                    or len(str(field.get("label") or "")) > 32 or len(str(field.get("value") or "")) > 64):
+                return False
         details = song.get("memberDetails") or {}
         if not isinstance(details, dict) or len(details) > 250:
             return False
@@ -1504,6 +1511,13 @@ def valid_public_state(value: object) -> bool:
             detail_tags = detail.get("printTags") or []
             if not isinstance(detail_tags, list) or len(detail_tags) > 8 or any(len(str(tag)) > 32 for tag in detail_tags):
                 return False
+            detail_fields = detail.get("printFields") or []
+            if not isinstance(detail_fields, list) or len(detail_fields) > 8:
+                return False
+            for field in detail_fields:
+                if (not isinstance(field, dict) or not str(field.get("id") or "")
+                        or len(str(field.get("label") or "")) > 32 or len(str(field.get("value") or "")) > 64):
+                    return False
             if len(str(detail.get("customTitle") or "")) > 120 or len(str(detail.get("preset") or "")) > 80 or len(str(detail.get("note") or "")) > 500:
                 return False
     members = value.get("members") or []
@@ -1552,7 +1566,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.9.0"
+    server_version = "Setlister/0.9.1"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 

@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.9.0 · aktualizováno 18. 11. 2026
+> Stav specifikace: 0.9.1 · aktualizováno 18. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -74,14 +74,18 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
       "bpm": 128,
       "energy": 4,
       "role": "standard | opener | encore | closer",
-      "printTags": ["Hanych začíná", "Intro na klik"],
+      "printFields": [
+        { "id": "field-...", "label": "Kdo začíná", "value": "Hanych a Petr" }
+      ],
       "memberDetails": {
         "member-...": {
           "instrumentId": "electric-guitar",
           "customTitle": "Můj vlastní název",
           "capo": 0,
           "preset": "Crunch 04",
-          "printTags": ["FX 12"],
+          "printFields": [
+            { "id": "field-...", "label": "Efekt", "value": "FX 12" }
+          ],
           "note": "V druhé sloce stáhnout volume"
         }
       }
@@ -118,7 +122,9 @@ Každý člen má explicitní `defaultInstrumentId`. Výchozí nástroj musí b�
 
 Každá skladba má název, album, délku, volitelné BPM 1–300, energii 1–5 a roli. Role je běžná, otevírací, přídavková nebo závěrečná. Obecná skladba nemá globální kapodastr ani globální poznámku. Pokyny patří vždy konkrétnímu členovi.
 
-Skladba může mít až osm krátkých globálních `printTags`, každý maximálně 32 znaků (např. „Hanych začíná“). Detail konkrétního člena může mít stejně omezené osobní `printTags` (např. „FX 12“ nebo „Drop D“). Globální i osobní štítky se zobrazují pouze na osobních výtiscích, nikoli na čistém setlistu.
+Skladba může mít až osm pojmenovaných globálních `printFields`. Každé pole má stabilní `id`, vlastní název `label` do 32 znaků a hodnotu `value` do 64 znaků. Uživatel do vstupu „Název štítku“ napíše například „Kdo začíná“ a potvrdí Enterem nebo tlačítkem; aplikace vytvoří samostatný box „Kdo začíná“, do kterého zapíše třeba „Hanych a Petr“. Detail konkrétního člena může mít stejným způsobem až osm osobních polí, například `Efekt: FX 12` nebo `Ladění: Drop D`. Pole bez vyplněné hodnoty zůstane uložené pro pozdější použití, ale nevypisuje se v setlistu ani na A4. Globální i osobní pole se zobrazují pouze v osobním pohledu a na osobních výtiscích, nikoli na čistém setlistu.
+
+Starší nepojmenované `printTags` klient při načtení bezeztrátově převede na `printFields` s prázdným `label`; server je dočasně akceptuje pouze kvůli zpětné kompatibilitě. Nové změny vždy ukládej jako `printFields`.
 
 V detailu skladby zobraz sekci pro každého pódiového člena:
 
@@ -126,9 +132,9 @@ V detailu skladby zobraz sekci pro každého pódiového člena:
 - podmíněný kapodastr;
 - podmíněný zvuk/preset elektrické kytary;
 - soukromou pódiovou poznámku.
-- osobní krátké štítky pro tisk.
+- osobní pojmenovaná pole pro tisk.
 
-Obecná editace skladby a osobní pokyny jsou dvě oddělené akce. Tužka upravuje název, album, délku, BPM, energii, roli a globální štítky. Samostatná akce „Poznámky členů“ nejprve zvolí člena; výchozí je pódiový profil propojený s přihlášeným účtem. Osobní dialog obsahuje vlastní název skladby, zděděný nebo explicitní nástroj, podmíněné kapo/preset, osobní štítky a textovou poznámku.
+Obecná editace skladby a osobní pokyny jsou dvě oddělené akce. Tužka upravuje název, album, délku, BPM, energii, roli a globální pojmenovaná pole. Samostatná akce „Poznámky členů“ nejprve zvolí člena; výchozí je pódiový profil propojený s přihlášeným účtem. Osobní dialog obsahuje vlastní název skladby, zděděný nebo explicitní nástroj, podmíněné kapo/preset, osobní pojmenovaná pole a textovou poznámku.
 
 ### Hromadný import repertoáru
 
@@ -141,6 +147,7 @@ Nevytahuj repertoár ze Spotify odkazu pomocí LLM ani scrapingu. Je to nespoleh
 - Levá / horní část nabídne jen skladby, které ještě nejsou v aktuálním setu.
 - Fulltext hledá v názvu, albu a roli; samostatné filtry vybírají album, energii a roli skladby.
 - Skladbu lze přidat, odebrat a přetřídit drag-and-drop i tlačítky.
+- Každá skladba už vložená do aktuálního setu má přímo v řádku dvě samostatné akce: tužku pro obecnou editaci skladby a ikonu členů pro otevření osobních pokynů/poznámek. Uživatel ji kvůli úpravě nesmí nejprve vracet do repertoáru.
 - Zobraz celkovou délku, cílovou délku a progress.
 - Uživatel může přepnout pohled „Bez poznámek“ nebo konkrétního člena.
 - „Bez poznámek“ nikdy nesmí zobrazit kapodastr, změnu nástroje, preset ani osobní poznámku žádného člena.
