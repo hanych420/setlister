@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.0
+
+- přibyla sekce Koncerty s termínem, městem, místem, kompletní časovou osou dne, kontaktem, praktickou poznámkou a odškrtávacím checklistem;
+- ke koncertu lze přiřadit kterýkoli uložený setlist a jedním kliknutím jej otevřít v editoru;
+- odehraný koncert se ukládá do historie se skutečným pořadím skladeb, časy, hodnocením, poznámkou a porovnáním proti neměnnému snímku původního plánu;
+- live průchod setlistem má kapelního vedoucího: změna skladby se synchronizuje všem zařízením, zatímco každý člen dál vidí svoje osobní pokyny;
+- skutečně navštívené skladby z live režimu lze převzít do historie přiřazeného koncertu;
+- editor nabízí deterministický návrh pořadí podle rolí, energetického oblouku a změn nástrojů, ladění, kapodastrů a presetů;
+- jednotlivé pozice lze před chytrým řazením zamknout a nové pořadí se použije až po zobrazení a potvrzení náhledu.
+
 ## 0.10.1
 
 - live karta už vlastní pole neoznačuje matoucím obecným názvem „Kapela“ nebo „Moje“;

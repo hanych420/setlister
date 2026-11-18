@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.10.1 · aktualizováno 18. 11. 2026
+> Stav specifikace: 0.11.0 · aktualizováno 18. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -18,8 +18,10 @@ Setlister je pracovní prostor kapely pro:
 2. skládání a ukládání koncertních setlistů;
 3. osobní pokyny každého člena ke každé skladbě;
 4. tisk / export čitelných pódiových A4;
-5. pozdějšího read-only AI agenta nad maximálně dvěma kapelními Gmail účty;
-6. budoucí stageplany a technické ridery.
+5. plánování dne koncertu a historii skutečně odehraných setů;
+6. společně vedený live průchod setlistem při zkoušce nebo koncertu;
+7. pozdějšího read-only AI agenta nad maximálně dvěma kapelními Gmail účty;
+8. budoucí stageplany a technické ridery.
 
 Nejde o hudební přehrávač ani veřejný katalog koncertů.
 
@@ -29,7 +31,8 @@ Po přihlášení zobraz spodní navigaci:
 
 - **Setlist** — právě skládaný set, repertoár k přidání, uložené sety, tisk/PDF.
 - **Repertoár** — skladby, jejich obecná metadata a osobní pokyny členů.
-- **Zkouška** — live průchod aktuálním nebo uloženým setlistem, osobní pokyny a synchronizovaný metronom.
+- **Koncerty** — termíny, časový plán dne, checklist, přiřazený uložený setlist a historie skutečně odehraných setů.
+- **Zkouška** — společně vedený live průchod aktuálním nebo uloženým setlistem, osobní pokyny a synchronizovaný metronom.
 - **Mailový agent** — popis, stav synchronizace a později chat nad Gmailem.
 - **Kapela** — logo, pódioví členové, nástroje, pozvánkový kód, účet a předplatné.
 
@@ -96,10 +99,38 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
     "name": "Praha — Roxy",
     "targetMinutes": 45,
     "songIds": ["song-1", "song-2"],
+    "lockedSongIds": ["song-1"],
     "viewerMemberId": "clean nebo member-..."
   },
   "savedSetlists": [
     { "id": "set-...", "name": "45 min festival", "targetMinutes": 45, "songIds": ["song-1"] }
+  ],
+  "events": [
+    {
+      "id": "event-...",
+      "name": "Roxy — Praha",
+      "date": "2027-01-21",
+      "city": "Praha",
+      "venue": "Roxy",
+      "address": "Dlouhá 33, Praha",
+      "arrival": "16:00",
+      "loadIn": "16:30",
+      "soundcheck": "17:30",
+      "showStart": "20:00",
+      "showEnd": "21:00",
+      "setlistId": "set-...",
+      "contactName": "Pořadatel",
+      "contactPhone": "+420...",
+      "note": "Vjezd zezadu",
+      "checklist": [{ "id": "check-...", "label": "Merch", "done": true }],
+      "status": "planned | completed",
+      "actualStart": "20:08",
+      "actualEnd": "21:04",
+      "plannedSongIds": ["song-1"],
+      "playedSongIds": ["song-1", "song-3"],
+      "rating": 4,
+      "performanceNote": "Prohodit prostřední blok."
+    }
   ]
 }
 ```
@@ -158,6 +189,34 @@ Nevytahuj repertoár ze Spotify odkazu pomocí LLM ani scrapingu. Je to nespoleh
 - Aktuální set lze uložit pod názvem a později znovu načíst.
 - Název setlistu je přímo editovatelný a má viditelnou ikonu tužky, aby možnost přejmenování nebyla skrytá jen vzhledem nadpisu.
 
+### Chytré pořadí setlistu
+
+Chytré řazení je deterministický návrh, nikoli generativní AI. Nesmí uživateli set tiše přepsat: nejdřív zobrazí náhled, stručné důvody a porovnání počtu změn, teprve samostatné potvrzení použije nové pořadí. Každou skladbu lze v editoru zamknout na současné pozici pomocí `draft.lockedSongIds`; zamčené pozice algoritmus nikdy nepřesune.
+
+Pořadí se skládá podle těchto pravidel a vah:
+
+1. `opener` patří na začátek, `closer` na konec hlavní části a `encore` úplně na konec; porušení role má výrazně vyšší penalizaci než ostatní preference;
+2. cílový energetický oblouk je přibližně `4.4 → 3.1 → 4.2 → 3.5 → 5.0` v relativních pozicích `0 % → 24 % → 52 % → 72 % → 100 %` setu;
+3. tři skladby s energií 5 za sebou dostávají dodatečnou penalizaci, aby vrchol nebyl monotónní;
+4. změna nástroje kteréhokoli člena stojí 5 bodů, změna osobního pole `Ladění`/`Tuning` 4 body, změna kapodastru na stejné kytaře 2,4 bodu a změna elektrického presetu 0,35 bodu; naposledy použitý kapodastr, ladění a preset se pamatují samostatně pro každý nástroj, takže návrat z elektrické na dříve odloženou akustickou kytaru správně započítá nutnou změnu jejího kapa;
+5. algoritmus nejprve deterministicky doplňuje volné pozice nejlevnější následující skladbou a při shodě zachová původní pořadí; poté zkouší vzájemné výměny pouze nezamčených pozic, dokud se skóre zlepšuje;
+6. pro více než 40 nezamčených skladeb omez počet optimalizačních průchodů na dva, nad 60 použij pouze první rychlý průchod, aby UI nezamrzlo.
+
+Náhled ukáže roli, energii a zamčenou pozici každé skladby a souhrn typu „o 2 méně změn nástroje“. Uživatel může návrh odmítnout bez jakékoli změny dat.
+
+## Koncerty a historie hraní
+
+Koncert je kapelní provozní záznam, ne úložiště smluv. Obsahuje název, datum, město, místo, adresu, arrival, load-in, zvukovku, plánovaný začátek a konec, kontakt, telefon, praktickou poznámku a jednoduchý checklist. Neobsahuje soubory, smlouvy ani potvrzování účasti členů.
+
+- Ke koncertu se vybírá existující uložený setlist pomocí stabilního `setlistId`; jeho karta i zvýrazněný nejbližší koncert musí mít přímou akci, která setlist otevře v editoru.
+- Smazání uloženého setlistu bezpečně zruší jeho přiřazení u budoucích koncertů.
+- Nadcházející koncerty jsou řazené vzestupně podle data; odehrané sestupně.
+- Položky checklistu lze odškrtávat přímo na kartě a stav se synchronizuje s kapelním cloudem.
+- Akce „Zapsat jako odehrané“ přepne událost do historie. Uživatel zadá skutečný začátek/konec, hodnocení 1–5, poznámku a skutečné pořadí skladeb; skladby lze přidat, odebrat i přeskládat.
+- Při prvním dokončení se do `plannedSongIds` uloží neměnný snímek tehdy přiřazeného setlistu. Pozdější úpravy uloženého setlistu proto nezmění historické porovnání.
+- Pokud byl přiřazený set právě veden v live režimu, formulář dokončení předvyplní `playedSongIds` skutečně navštívenými skladbami; jinak použije celý přiřazený setlist.
+- Historie ukazuje počet odehraných skladeb, jejich součet délek, skutečný čas koncertu, počet vynechaných/přidaných skladeb, hodnocení a poznámku.
+
 ## Tisk a PDF
 
 Export je určen pro papír ležící na pódiu, proto je čitelnost důležitější než dekorace.
@@ -174,10 +233,12 @@ Export je určen pro papír ležící na pódiu, proto je čitelnost důležitě
 
 ## Live zkouška
 
-Uživatel může spustit právě skládaný set nebo libovolný uložený setlist. Live obrazovka má velký název aktuální skladby, pozici v setu, délku, BPM, energii a všechny společné i osobní pokyny pódiového profilu propojeného s přihlášeným účtem. Pokud účet nemá propojený profil, použije se první pódiový člen a UI to zřetelně uvede.
+Uživatel může jako vedoucí spustit právě skládaný set nebo libovolný uložený setlist. Server uloží společnou aktivní skladbu pro `bandId` a všechny připojené klienty ji během nejvýše jedné sekundy převezmou. Live obrazovka má velký název aktuální skladby, pozici v setu, délku, BPM, energii a všechny společné i osobní pokyny pódiového profilu propojeného s přihlášeným účtem. Každý tedy sleduje stejnou skladbu, ale vidí svoje vlastní pokyny. Pokud účet nemá propojený profil, použije se první pódiový člen a UI to zřetelně uvede.
 
-- Mezi skladbami lze přecházet tlačítky, klávesami i vodorovným swipe gestem.
-- Swipe mění pouze lokální pozici člena; nemění uložené pořadí setlistu.
+- Mezi skladbami lze přecházet tlačítky, klávesami i vodorovným swipe gestem, ale společnou pozici smí měnit pouze vedoucí setu.
+- Ostatní zařízení jsou sledující: šipky mají neaktivní a při swipe dostanou informaci, kdo set vede.
+- Člen může explicitně převzít vedení spuštěním vybraného setlistu. Vedoucí může společný set ukončit; vlastník kapely jej může ukončit také.
+- `liveSet.playedSongIds` uchovává unikátní skladby, které vedoucí během relace skutečně otevřel, v pořadí prvního navštívení. Po ukončení zůstane záznam v poslední relaci pro předvyplnění historie koncertu.
 - Po změně skladby se BPM metronomu předvyplní z dané skladby, pokud je uvedeno.
 - Názvy a pokyny používají stejné dědění nástroje, `customTitle`, kapodastr, preset, `printFields` a poznámku jako osobní výtisk.
 - Live karta zobrazuje globální i osobní `printFields` jako dvojici jejich skutečného `label` a `value`; nesmí používat matoucí obecné hlavičky „Kapela“ nebo „Moje“. Starší migrované pole bez názvu označí jako „Společný pokyn“, respektive „Můj pokyn“.
@@ -233,8 +294,8 @@ Webové API dnes používá zabezpečenou HttpOnly cookie `setlister_session`, `
 | `PUT` | `/band-state` | `{bandId,revision,state}`; atomicky uloží JSON a zvýší revizi |
 | `GET` | `/repertoire-template.xlsx?bandId=...` | stáhne XLSX šablonu repertoáru; vyžaduje členství |
 | `POST` | `/import-xlsx` | `{bandId,contentBase64}`; bezpečně přečte první list a vrátí `rows` |
-| `GET` | `/live-session?bandId=...` | vrátí `serverTimeMs`, revizi a stav společného metronomu |
-| `POST` | `/live-session` | `{bandId,action:"start|stop",bpm}`; vytvoří sdílený start nebo klik zastaví |
+| `GET` | `/live-session?bandId=...` | vrátí `serverTimeMs`, revizi, stav metronomu a `liveSet` společného průchodu |
+| `POST` | `/live-session` | `{bandId,action:"start|stop",bpm}` pro metronom; `{bandId,action:"start_set",setlistRef:"draft|saved:<id>"}` pro vedení setu; `{bandId,action:"set_song",songIndex}` pro posun vedoucím; `{bandId,action:"stop_set"}` pro ukončení |
 
 Všechny POST/PUT požadavky posílej s `Content-Type: application/json`. Server kontroluje přihlášení, členství kapely a same-origin u webových mutací. Při uložení může vrátit `409 Konflikt změn`; klient pak znovu načte workspace a nesmí tiše přepsat novější serverová data.
 
@@ -272,7 +333,9 @@ Všechny POST/PUT požadavky posílej s `Content-Type: application/json`. Server
 8. Odhlášený uživatel ani člen jiné kapely se k datům nedostane.
 9. Uživatel stáhne XLSX šablonu, vyplní dvě skladby a bez převodu do CSV je naimportuje.
 10. Dva členové otevřou stejnou kapelu, povolí zvuk a po společném startu počítají beaty ze stejného serverového `startedAtMs`; lokální kalibrace jednoho zařízení neovlivní druhé.
-11. V live režimu přihlášený Petr swipuje setlistem a vidí svůj vlastní název, nástroj, kapo, preset, pole i poznámku.
+11. Petr spustí set jako vedoucí a přejde na druhou skladbu; Viky do jedné sekundy uvidí tutéž skladbu, ale svoje vlastní pokyny, a sama nemůže společnou pozici změnit.
+12. Uživatel zamkne první skladbu, otevře chytré řazení, uvidí náhled energetického oblouku a snížení počtu změn; první skladba zůstane na místě i po potvrzení.
+13. Ke koncertu přiřadí uložený setlist, otevře jej jedním kliknutím, po koncertě upraví skutečné pořadí a v historii uvidí rozdíl oproti neměnnému původnímu plánu.
 
 ## Aktuální omezení
 

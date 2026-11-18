@@ -1561,8 +1561,9 @@ def public_default_state(owner: sqlite3.Row | None = None) -> dict[str, Any]:
     ]
     return {"version": 2, "bandProfile": {"logoDataUrl": ""}, "members": members, "songs": songs,
             "draft": {"name": "Nový koncert", "targetMinutes": 45,
-                      "songIds": ["sample-1", "sample-2"], "viewerMemberId": owner_id if members else ""},
-            "savedSetlists": []}
+                      "songIds": ["sample-1", "sample-2"], "lockedSongIds": [],
+                      "viewerMemberId": owner_id if members else ""},
+            "savedSetlists": [], "events": []}
 
 
 def valid_public_state(value: object) -> bool:
@@ -1571,7 +1572,14 @@ def valid_public_state(value: object) -> bool:
     songs, draft = value.get("songs"), value.get("draft")
     if not isinstance(songs, list) or not isinstance(draft, dict) or not isinstance(draft.get("songIds"), list):
         return False
-    if len(songs) > 3000 or len(value.get("savedSetlists") or []) > 1000:
+    locked_song_ids = draft.get("lockedSongIds") or []
+    if not isinstance(locked_song_ids, list) or len(locked_song_ids) > len(draft.get("songIds") or []):
+        return False
+    saved_setlists = value.get("savedSetlists") or []
+    events = value.get("events") or []
+    if len(songs) > 3000 or not isinstance(saved_setlists, list) or len(saved_setlists) > 1000:
+        return False
+    if not isinstance(events, list) or len(events) > 2000:
         return False
     for song in songs:
         if not isinstance(song, dict) or not str(song.get("id") or "") or not str(song.get("title") or ""):
@@ -1640,6 +1648,26 @@ def valid_public_state(value: object) -> bool:
     logo = str(profile.get("logoDataUrl") or "")
     if len(logo) > 700_000:
         return False
+    for event in events:
+        if (not isinstance(event, dict) or not str(event.get("id") or "")
+                or len(str(event.get("name") or "")) > 120
+                or len(str(event.get("city") or "")) > 100
+                or len(str(event.get("venue") or "")) > 120
+                or len(str(event.get("address") or "")) > 200
+                or len(str(event.get("contactName") or "")) > 100
+                or len(str(event.get("contactPhone") or "")) > 40
+                or len(str(event.get("note") or "")) > 800
+                or len(str(event.get("performanceNote") or "")) > 800):
+            return False
+        checklist = event.get("checklist") or []
+        played = event.get("playedSongIds") or []
+        planned = event.get("plannedSongIds") or []
+        if (not isinstance(checklist, list) or len(checklist) > 30
+                or not isinstance(played, list) or len(played) > 3000
+                or not isinstance(planned, list) or len(planned) > 3000):
+            return False
+        if any(not isinstance(item, dict) or len(str(item.get("label") or "")) > 120 for item in checklist):
+            return False
     return True
 
 
@@ -1664,7 +1692,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.10.1"
+    server_version = "Setlister/0.11.0"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -2228,18 +2256,68 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                 payload = self.read_json_body(16 * 1024)
                 band_id = str(payload.get("bandId") or "")
                 action = str(payload.get("action") or "")
-                bpm = int(payload.get("bpm") or 120)
-                if action not in ("start", "stop") or not 30 <= bpm <= 300:
-                    raise ValueError("Neplatné nastavení metronomu.")
+                if action not in ("start", "stop", "start_set", "set_song", "stop_set"):
+                    raise ValueError("Neplatná akce živého režimu.")
                 now_ms = int(time.time() * 1000)
-                state = {"status": "running" if action == "start" else "stopped", "bpm": bpm,
-                         "startedAtMs": now_ms + 2000 if action == "start" else 0,
-                         "leaderUserId": user["id"], "leaderName": user["name"]}
                 with connect_db() as database:
+                    membership = public_membership(database, user["id"], band_id)
+                    if not membership:
+                        self.send_json(HTTPStatus.FORBIDDEN, {"error": "K této kapele nemáš přístup."}); return
                     database.execute("BEGIN IMMEDIATE")
-                    if not public_membership(database, user["id"], band_id):
-                        database.rollback(); self.send_json(HTTPStatus.FORBIDDEN, {"error": "K této kapele nemáš přístup."}); return
-                    current = database.execute("SELECT revision FROM public_live_sessions WHERE band_id=?", (band_id,)).fetchone()
+                    current = database.execute("SELECT revision, state_json FROM public_live_sessions WHERE band_id=?", (band_id,)).fetchone()
+                    state = json.loads(current["state_json"]) if current else {"status": "stopped", "bpm": 120, "startedAtMs": 0, "leaderUserId": "", "leaderName": ""}
+                    if not isinstance(state, dict):
+                        state = {"status": "stopped", "bpm": 120, "startedAtMs": 0, "leaderUserId": "", "leaderName": ""}
+                    if not isinstance(state.get("liveSet"), dict):
+                        state["liveSet"] = {"active": False, "songIds": [], "songIndex": 0,
+                                            "setlistRef": "", "setlistName": "",
+                                            "leaderUserId": "", "leaderName": "",
+                                            "playedSongIds": []}
+                    if action in ("start", "stop"):
+                        bpm = int(payload.get("bpm") or state.get("bpm") or 120)
+                        if not 30 <= bpm <= 300:
+                            raise ValueError("BPM musí být mezi 30 a 300.")
+                        state.update({"status": "running" if action == "start" else "stopped", "bpm": bpm,
+                                      "startedAtMs": now_ms + 2000 if action == "start" else 0,
+                                      "leaderUserId": user["id"], "leaderName": user["name"]})
+                    elif action == "start_set":
+                        setlist_ref = str(payload.get("setlistRef") or "draft")
+                        band_state_row = database.execute("SELECT state_json FROM public_band_state WHERE band_id=?", (band_id,)).fetchone()
+                        band_state = json.loads(band_state_row["state_json"]) if band_state_row else {}
+                        if setlist_ref == "draft":
+                            selected = band_state.get("draft") or {}; setlist_name = str(selected.get("name") or "Aktuální set")
+                        elif setlist_ref.startswith("saved:"):
+                            set_id = setlist_ref.split(":", 1)[1]
+                            selected = next((item for item in band_state.get("savedSetlists") or [] if str(item.get("id")) == set_id), None)
+                            if not selected: raise ValueError("Vybraný setlist už neexistuje.")
+                            setlist_name = str(selected.get("name") or "Setlist")
+                        else:
+                            raise ValueError("Neplatný výběr setlistu.")
+                        song_ids = [str(item) for item in selected.get("songIds") or []]
+                        valid_ids = {str(item.get("id")) for item in band_state.get("songs") or [] if isinstance(item, dict)}
+                        song_ids = [item for item in song_ids if item in valid_ids]
+                        if not song_ids: raise ValueError("Vybraný setlist neobsahuje žádné skladby.")
+                        state["liveSet"] = {"active": True, "songIds": song_ids, "songIndex": 0,
+                                            "setlistRef": setlist_ref, "setlistName": setlist_name[:120],
+                                            "leaderUserId": user["id"], "leaderName": user["name"],
+                                            "playedSongIds": [song_ids[0]], "startedAtMs": now_ms,
+                                            "updatedAtMs": now_ms}
+                    elif action == "set_song":
+                        live_set = state["liveSet"]
+                        if not live_set.get("active") or live_set.get("leaderUserId") != user["id"]:
+                            self.send_json(HTTPStatus.FORBIDDEN, {"error": "Pořadí může měnit pouze vedoucí setu."}); return
+                        song_index = int(payload.get("songIndex"))
+                        song_ids = live_set.get("songIds") or []
+                        if song_index < 0 or song_index >= len(song_ids): raise ValueError("Skladba je mimo setlist.")
+                        live_set["songIndex"] = song_index; live_set["updatedAtMs"] = now_ms
+                        played = list(live_set.get("playedSongIds") or [])
+                        if song_ids[song_index] not in played: played.append(song_ids[song_index])
+                        live_set["playedSongIds"] = played
+                    elif action == "stop_set":
+                        live_set = state["liveSet"]
+                        if live_set.get("active") and live_set.get("leaderUserId") != user["id"] and membership["role"] != "owner":
+                            self.send_json(HTTPStatus.FORBIDDEN, {"error": "Společný set může ukončit vedoucí nebo vlastník kapely."}); return
+                        live_set["active"] = False; live_set["updatedAtMs"] = now_ms
                     revision = (current["revision"] if current else 0) + 1
                     database.execute("""INSERT INTO public_live_sessions (band_id, revision, state_json, updated_at)
                         VALUES (?, ?, ?, ?) ON CONFLICT(band_id) DO UPDATE SET revision=excluded.revision,
