@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.9.1 · aktualizováno 18. 11. 2026
+> Stav specifikace: 0.10.0 · aktualizováno 18. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -29,6 +29,7 @@ Po přihlášení zobraz spodní navigaci:
 
 - **Setlist** — právě skládaný set, repertoár k přidání, uložené sety, tisk/PDF.
 - **Repertoár** — skladby, jejich obecná metadata a osobní pokyny členů.
+- **Zkouška** — live průchod aktuálním nebo uloženým setlistem, osobní pokyny a synchronizovaný metronom.
 - **Mailový agent** — popis, stav synchronizace a později chat nad Gmailem.
 - **Kapela** — logo, pódioví členové, nástroje, pozvánkový kód, účet a předplatné.
 
@@ -138,7 +139,9 @@ Obecná editace skladby a osobní pokyny jsou dvě oddělené akce. Tužka uprav
 
 ### Hromadný import repertoáru
 
-Uživatel může vložit tabulku z Excelu nebo nahrát UTF-8 CSV/TSV/TXT do 2 MB. Podporované sloupce jsou Název, Album, Délka, BPM, Energie, Role a Štítky; povinné jsou Název a platná Délka. Délka přijímá `m:ss` nebo sekundy, role české i interní názvy a více štítků se odděluje znakem `|` nebo čárkou. Jeden import zpracuje nejvýše 1000 řádků, celý repertoár nejvýše 3000 skladeb a duplicity podle normalizované dvojice název + album přeskočí. Klient nabízí stažení CSV šablony.
+Primární cesta hromadného importu je jednoduchý `.xlsx` soubor. Klient stáhne skutečnou XLSX šablonu s prvním listem `Repertoár`, zamknutou hlavičkou, zvýrazněnými názvy sloupců, přednastavenou textovou délkou a validací energie/role. Uživatel ji vyplní v Excelu, Numbers nebo Google Tabulkách a nahraje zpět. Server bez externího cloudu bezpečně rozbalí první list a vrátí řádky klientovi. Soubor smí mít nejvýše 3 MB a import nejvýše 1000 řádků. CSV/TSV/TXT a vložení zkopírovaných buněk zůstávají jako vedlejší kompatibilní možnosti, ne hlavní zákaznická cesta.
+
+Podporované sloupce jsou Název, Album, Délka, BPM, Energie, Role a Štítky; povinné jsou Název a platná Délka. Délka přijímá `m:ss` nebo sekundy, role české i interní názvy a více štítků se odděluje znakem `|` nebo čárkou. Zápis `Kdo začíná: Hanych` se importuje jako pojmenované `printField` s `label` „Kdo začíná“ a `value` „Hanych“. Celý repertoár má nejvýše 3000 skladeb a duplicity podle normalizované dvojice název + album se přeskočí.
 
 Nevytahuj repertoár ze Spotify odkazu pomocí LLM ani scrapingu. Je to nespolehlivé, neposkytne důvěryhodné BPM a neodpovídá současným podmínkám Spotify pro komerční veřejnou aplikaci. Budoucí oficiální katalogový konektor musí být samostatný provider za feature flagem a aktivovat se až po získání písemného oprávnění poskytovatele.
 
@@ -168,6 +171,24 @@ Export je určen pro papír ležící na pódiu, proto je čitelnost důležitě
 - Výchozí režim automaticky volí největší písmo, při kterém se obsah vejde na jednu A4. Uživatel může vynucení jedné stránky vypnout.
 - U malého počtu skladeb seznam vertikálně vystřeď.
 - Výtisk může obsahovat malé logo kapely a název setlistu, ale hlavička nesmí zabírat podstatnou část stránky.
+
+## Live zkouška
+
+Uživatel může spustit právě skládaný set nebo libovolný uložený setlist. Live obrazovka má velký název aktuální skladby, pozici v setu, délku, BPM, energii a všechny společné i osobní pokyny pódiového profilu propojeného s přihlášeným účtem. Pokud účet nemá propojený profil, použije se první pódiový člen a UI to zřetelně uvede.
+
+- Mezi skladbami lze přecházet tlačítky, klávesami i vodorovným swipe gestem.
+- Swipe mění pouze lokální pozici člena; nemění uložené pořadí setlistu.
+- Po změně skladby se BPM metronomu předvyplní z dané skladby, pokud je uvedeno.
+- Názvy a pokyny používají stejné dědění nástroje, `customTitle`, kapodastr, preset, `printFields` a poznámku jako osobní výtisk.
+- Live obrazovka musí zabránit uspání displeje, pokud platforma nabízí Wake Lock / idle timer API; webový fallback může být omezen prohlížečem.
+
+### Synchronizovaný metronom
+
+Metronom je kapelní relace uložená pro `bandId`. Startující klient odešle BPM serveru; server vytvoří autoritativní `startedAtMs` dvě sekundy v budoucnosti. Všechna zařízení opakovaně změří rozdíl svého času vůči `serverTimeMs` metodou midpoint/RTT a plánují jednotlivé beaty lokálním audio enginem podle stejné absolutní časové osy. Web používá Web Audio s krátkým look-ahead schedulerem, iOS má použít `AVAudioEngine`/host time a Android `AudioTrack` nebo Oboe s monotónním časem. Síť neposílá každý klik — přenáší pouze stav, BPM a společný čas začátku.
+
+Každé zařízení musí před prvním během uživatelským gestem povolit audio. Uživatel může uložit lokální kalibraci výstupní latence v rozsahu −250 až +250 ms; tato hodnota nepatří do kapelních dat. Při změně BPM se vytvoří nový společný start a revize relace. Klient průběžně koriguje odhad serverového offsetu, ale nesmí skokově přesouvat již naplánovaný beat.
+
+Nelze slibovat 100% sample-perfect shodu zvuku z nezávislých reproduktorů: zařízení mají rozdílné audio buffery, OS latenci a akustickou vzdálenost. Cílem je praktická synchronizace pro zkoušku. Pro kritický koncertní klik má produkt doporučit jeden zvukový master nebo centrální audio distribuci; ostatní zařízení mohou používat vizuální/haptickou indikaci.
 
 ## Logo kapely
 
@@ -209,6 +230,10 @@ Webové API dnes používá zabezpečenou HttpOnly cookie `setlister_session`, `
 | `POST` | `/bands/rotate-code` | `{bandId}`; pouze vlastník, obnoví pozvánkový kód |
 | `GET` | `/workspace?bandId=...` | vrátí kapelu, roli, účty členů, subscription, `state`, `revision` |
 | `PUT` | `/band-state` | `{bandId,revision,state}`; atomicky uloží JSON a zvýší revizi |
+| `GET` | `/repertoire-template.xlsx?bandId=...` | stáhne XLSX šablonu repertoáru; vyžaduje členství |
+| `POST` | `/import-xlsx` | `{bandId,contentBase64}`; bezpečně přečte první list a vrátí `rows` |
+| `GET` | `/live-session?bandId=...` | vrátí `serverTimeMs`, revizi a stav společného metronomu |
+| `POST` | `/live-session` | `{bandId,action:"start|stop",bpm}`; vytvoří sdílený start nebo klik zastaví |
 
 Všechny POST/PUT požadavky posílej s `Content-Type: application/json`. Server kontroluje přihlášení, členství kapely a same-origin u webových mutací. Při uložení může vrátit `409 Konflikt změn`; klient pak znovu načte workspace a nesmí tiše přepsat novější serverová data.
 
@@ -244,9 +269,13 @@ Všechny POST/PUT požadavky posílej s `Content-Type: application/json`. Server
 6. Stejná kapela a změny jsou po přihlášení vidět na webu, iOS i Androidu.
 7. Současná změna z jiného zařízení vyvolá konflikt revize a klient ji nesmí ztratit.
 8. Odhlášený uživatel ani člen jiné kapely se k datům nedostane.
+9. Uživatel stáhne XLSX šablonu, vyplní dvě skladby a bez převodu do CSV je naimportuje.
+10. Dva členové otevřou stejnou kapelu, povolí zvuk a po společném startu počítají beaty ze stejného serverového `startedAtMs`; lokální kalibrace jednoho zařízení neovlivní druhé.
+11. V live režimu přihlášený Petr swipuje setlistem a vidí svůj vlastní název, nástroj, kapo, preset, pole i poznámku.
 
 ## Aktuální omezení
 
 - Veřejný Gmail agent je zatím pouze produktově a architektonicky popsaný, není aktivní.
 - Ukládání je nyní dokumentové a konflikt načte novější serverovou verzi; jemné slučování změn ještě chybí.
 - PDF na webu používá tiskový dialog prohlížeče; nativní aplikace má vytvořit skutečný PDF soubor se shodným layoutem.
+- Webový metronom je limitovaný audio latencí a pravidly prohlížeče na pozadí; nativní aplikace má přesnější audio scheduler. Nezávislé reproduktory nelze garantovat jako sample-perfect.

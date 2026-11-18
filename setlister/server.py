@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import html
+import io
 import json
 import os
 import re
@@ -15,6 +17,7 @@ import sqlite3
 import threading
 import time
 import unicodedata
+import zipfile
 from datetime import datetime, timedelta, timezone
 from email.utils import parseaddr
 from http.cookies import SimpleCookie
@@ -22,6 +25,7 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlencode, unquote, urlparse
 from urllib.request import Request, urlopen
@@ -76,6 +80,95 @@ def utc_now() -> str:
 
 def prague_now() -> datetime:
     return datetime.now(ZoneInfo("Europe/Prague"))
+
+
+def xlsx_column(index: int) -> str:
+    result = ""
+    while index:
+        index, remainder = divmod(index - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
+
+
+def repertoire_xlsx_template() -> bytes:
+    headings = ["Název", "Album", "Délka", "BPM", "Energie", "Role", "Štítky"]
+    example = ["První píseň", "První album", "3:30", "128", "4", "Otevírací", "Kdo začíná: Hanych"]
+    rows = []
+    for row_number, values in enumerate((headings, example), 1):
+        cells = []
+        for column, value in enumerate(values, 1):
+            style = ' s="1"' if row_number == 1 else (' s="2"' if column == 3 else "")
+            cells.append(f'<c r="{xlsx_column(column)}{row_number}" t="inlineStr"{style}><is><t>{html.escape(value)}</t></is></c>')
+        rows.append(f'<row r="{row_number}">{"".join(cells)}</row>')
+    for row_number in range(3, 203):
+        rows.append(f'<row r="{row_number}"><c r="C{row_number}" s="2"/></row>')
+    worksheet = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols><col min="1" max="1" width="28" customWidth="1"/><col min="2" max="2" width="24" customWidth="1"/><col min="3" max="3" width="12" customWidth="1"/><col min="4" max="5" width="10" customWidth="1"/><col min="6" max="6" width="16" customWidth="1"/><col min="7" max="7" width="28" customWidth="1"/></cols><sheetData>{''.join(rows)}</sheetData><autoFilter ref="A1:G202"/><dataValidations count="2"><dataValidation type="whole" allowBlank="1" operator="between" sqref="E2:E1001"><formula1>1</formula1><formula2>5</formula2></dataValidation><dataValidation type="list" allowBlank="1" sqref="F2:F1001"><formula1>"Běžná,Otevírací,Přídavková,Závěrečná"</formula1></dataValidation></dataValidations></worksheet>'''
+    styles = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><color rgb="FF111315"/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9FF43"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs></styleSheet>'''
+    files = {
+        "[Content_Types].xml": '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>''',
+        "_rels/.rels": '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>''',
+        "xl/workbook.xml": '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Repertoár" sheetId="1" r:id="rId1"/></sheets></workbook>''',
+        "xl/_rels/workbook.xml.rels": '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>''',
+        "xl/worksheets/sheet1.xml": worksheet,
+        "xl/styles.xml": styles,
+    }
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, content in files.items():
+            archive.writestr(name, content.encode("utf-8"))
+    return output.getvalue()
+
+
+def parse_repertoire_xlsx(content: bytes) -> list[list[str]]:
+    if len(content) > 3 * 1024 * 1024 or not content.startswith(b"PK"):
+        raise ValueError("Nahraj platný XLSX soubor do 3 MB.")
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            if (any(info.file_size > 12 * 1024 * 1024 for info in archive.infolist())
+                    or sum(info.file_size for info in archive.infolist()) > 24 * 1024 * 1024):
+                raise ValueError("XLSX obsahuje příliš velká data.")
+            shared: list[str] = []
+            if "xl/sharedStrings.xml" in archive.namelist():
+                root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
+                shared = ["".join(node.text or "" for node in item.findall(".//{*}t")) for item in root.findall(".//{*}si")]
+            sheet_name = "xl/worksheets/sheet1.xml"
+            workbook = ElementTree.fromstring(archive.read("xl/workbook.xml"))
+            first_sheet = workbook.find(".//{*}sheet")
+            relation_id = first_sheet.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id") if first_sheet is not None else None
+            if relation_id and "xl/_rels/workbook.xml.rels" in archive.namelist():
+                relations = ElementTree.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+                relation = next((item for item in relations.findall(".//{*}Relationship") if item.get("Id") == relation_id), None)
+                if relation is not None:
+                    target = str(relation.get("Target") or "worksheets/sheet1.xml").lstrip("/")
+                    sheet_name = target if target.startswith("xl/") else "xl/" + target
+            sheet = ElementTree.fromstring(archive.read(sheet_name))
+            parsed: list[list[str]] = []
+            for row in sheet.findall(".//{*}sheetData/{*}row")[:1001]:
+                values: dict[int, str] = {}
+                for cell in row.findall("{*}c"):
+                    reference = str(cell.get("r") or "A1")
+                    letters = re.match(r"[A-Z]+", reference.upper())
+                    column = 0
+                    for letter in letters.group(0) if letters else "A":
+                        column = column * 26 + ord(letter) - 64
+                    cell_type = cell.get("t")
+                    if cell_type == "inlineStr":
+                        value = "".join(node.text or "" for node in cell.findall(".//{*}t"))
+                    else:
+                        raw = cell.findtext("{*}v") or ""
+                        value = shared[int(raw)] if cell_type == "s" and raw.isdigit() and int(raw) < len(shared) else raw
+                    values[column] = re.sub(r"[\t\r\n]+", " ", value).strip()
+                if values and any(values.values()):
+                    last = min(max(values), 50)
+                    parsed.append([values.get(column, "") for column in range(1, last + 1)])
+            if not parsed:
+                raise ValueError("XLSX neobsahuje žádné řádky.")
+            return parsed
+    except (KeyError, zipfile.BadZipFile, ElementTree.ParseError, IndexError, ValueError) as error:
+        if isinstance(error, ValueError) and str(error).startswith(("XLSX", "Nahraj")):
+            raise
+        raise ValueError("XLSX se nepodařilo přečíst. Použij první list a jednoduchou tabulku.") from error
 
 
 def load_options() -> dict[str, Any]:
@@ -247,6 +340,11 @@ def initialize_database() -> None:
                 id TEXT PRIMARY KEY, band_id TEXT NOT NULL, email TEXT NOT NULL,
                 encrypted_refresh_token TEXT NOT NULL, connected_at TEXT NOT NULL,
                 UNIQUE (band_id, email),
+                FOREIGN KEY (band_id) REFERENCES public_bands(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS public_live_sessions (
+                band_id TEXT PRIMARY KEY, revision INTEGER NOT NULL DEFAULT 0,
+                state_json TEXT NOT NULL, updated_at TEXT NOT NULL,
                 FOREIGN KEY (band_id) REFERENCES public_bands(id) ON DELETE CASCADE
             );
             """
@@ -1566,7 +1664,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.9.1"
+    server_version = "Setlister/0.10.0"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -1600,6 +1698,12 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         encoded = body.encode(); self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8"); self.send_header("Content-Length", str(len(encoded)))
         self.send_header("Cache-Control", "no-store"); self.end_headers(); self.wfile.write(encoded)
+
+    def send_bytes(self, status: int, body: bytes, content_type: str, filename: str | None = None) -> None:
+        self.send_response(status); self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body))); self.send_header("Cache-Control", "no-store")
+        if filename: self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self.end_headers(); self.wfile.write(body)
 
     def read_json_body(self, maximum: int = MAX_BODY_BYTES) -> dict[str, Any]:
         try:
@@ -1798,6 +1902,30 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
             user = self.require_public_user()
             if user:
                 self.send_json(HTTPStatus.OK, self.public_session_payload(user))
+            return
+        if path == "/api/app/repertoire-template.xlsx":
+            user = self.require_public_user()
+            if not user: return
+            band_id = str((query.get("bandId") or [""])[0])
+            with connect_db() as database:
+                membership = public_membership(database, user["id"], band_id)
+            if not membership:
+                self.send_json(HTTPStatus.FORBIDDEN, {"error": "K této kapele nemáš přístup."}); return
+            self.send_bytes(HTTPStatus.OK, repertoire_xlsx_template(),
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            "setlister-repertoar-sablona.xlsx")
+            return
+        if path == "/api/app/live-session":
+            user = self.require_public_user()
+            if not user: return
+            band_id = str((query.get("bandId") or [""])[0])
+            with connect_db() as database:
+                membership = public_membership(database, user["id"], band_id)
+                row = database.execute("SELECT revision, state_json, updated_at FROM public_live_sessions WHERE band_id=?", (band_id,)).fetchone() if membership else None
+            if not membership:
+                self.send_json(HTTPStatus.FORBIDDEN, {"error": "K této kapele nemáš přístup."}); return
+            state = json.loads(row["state_json"]) if row else {"status": "stopped", "bpm": 120, "startedAtMs": 0, "leaderUserId": ""}
+            self.send_json(HTTPStatus.OK, {"serverTimeMs": int(time.time() * 1000), "revision": row["revision"] if row else 0, "state": state})
             return
         if path == "/api/app/workspace":
             user = self.require_public_user()
@@ -2077,6 +2205,50 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
 
         user = self.require_public_user()
         if not user:
+            return
+        if path == "/api/app/import-xlsx":
+            try:
+                payload = self.read_json_body(MAX_BODY_BYTES)
+                band_id = str(payload.get("bandId") or "")
+                encoded = str(payload.get("contentBase64") or "")
+                with connect_db() as database:
+                    membership = public_membership(database, user["id"], band_id)
+                if not membership:
+                    self.send_json(HTTPStatus.FORBIDDEN, {"error": "K této kapele nemáš přístup."}); return
+                try:
+                    content = base64.b64decode(encoded, validate=True)
+                except (ValueError, binascii.Error) as error:
+                    raise ValueError("XLSX soubor má neplatná data.") from error
+                self.send_json(HTTPStatus.OK, {"rows": parse_repertoire_xlsx(content)})
+            except ValueError as error:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == "/api/app/live-session":
+            try:
+                payload = self.read_json_body(16 * 1024)
+                band_id = str(payload.get("bandId") or "")
+                action = str(payload.get("action") or "")
+                bpm = int(payload.get("bpm") or 120)
+                if action not in ("start", "stop") or not 30 <= bpm <= 300:
+                    raise ValueError("Neplatné nastavení metronomu.")
+                now_ms = int(time.time() * 1000)
+                state = {"status": "running" if action == "start" else "stopped", "bpm": bpm,
+                         "startedAtMs": now_ms + 2000 if action == "start" else 0,
+                         "leaderUserId": user["id"], "leaderName": user["name"]}
+                with connect_db() as database:
+                    database.execute("BEGIN IMMEDIATE")
+                    if not public_membership(database, user["id"], band_id):
+                        database.rollback(); self.send_json(HTTPStatus.FORBIDDEN, {"error": "K této kapele nemáš přístup."}); return
+                    current = database.execute("SELECT revision FROM public_live_sessions WHERE band_id=?", (band_id,)).fetchone()
+                    revision = (current["revision"] if current else 0) + 1
+                    database.execute("""INSERT INTO public_live_sessions (band_id, revision, state_json, updated_at)
+                        VALUES (?, ?, ?, ?) ON CONFLICT(band_id) DO UPDATE SET revision=excluded.revision,
+                        state_json=excluded.state_json, updated_at=excluded.updated_at""",
+                        (band_id, revision, json.dumps(state, ensure_ascii=False, separators=(",", ":")), utc_now()))
+                    database.commit()
+                self.send_json(HTTPStatus.OK, {"serverTimeMs": now_ms, "revision": revision, "state": state})
+            except (TypeError, ValueError) as error:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         if path == "/api/app/bands":
             try:

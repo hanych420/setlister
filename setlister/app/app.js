@@ -26,6 +26,18 @@
   let logoCropState = null;
   let songPrintFieldDraft = [];
   let notesPrintFieldDraft = [];
+  let liveSongIds = [];
+  let liveSongIndex = 0;
+  let liveSwipeStart = null;
+  let liveAudioContext = null;
+  let liveSession = { status: "stopped", bpm: 120, startedAtMs: 0, leaderName: "" };
+  let liveSessionRevision = 0;
+  let liveServerOffset = 0;
+  let liveBestRtt = Infinity;
+  let liveLastScheduledBeat = -1;
+  let livePollTimer = null;
+  let liveSchedulerTimer = null;
+  let liveWakeLock = null;
 
   async function api(path, options = {}) {
     const response = await fetch(API + path, { credentials: "same-origin", ...options, headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
@@ -198,7 +210,7 @@
     elements.appSetEmpty.hidden = setSongs.length > 0;
     const total = setSongs.reduce((sum, song) => sum + Number(song.seconds || 0), 0); const target = Math.max(1, Number(state.draft.targetMinutes) || 45) * 60;
     elements.appTotalTime.textContent = formatTime(total); elements.appTargetLabel.textContent = "z " + formatTime(target); elements.appTargetMinutes.value = String(state.draft.targetMinutes || 45); elements.appProgress.style.width = Math.min(100, total / target * 100) + "%"; elements.appProgress.classList.toggle("over", total > target);
-    renderRepertoire(); renderSettings(); renderSavedSetlists(); enhanceSelects(document);
+    renderRepertoire(); renderSettings(); renderSavedSetlists(); renderLiveSetup(); enhanceSelects(document);
   }
   function option(value, label) { const node = document.createElement("option"); node.value = value; node.textContent = label; return node; }
   function rowButton(label, title, action) { const button = document.createElement("button"); button.type = "button"; button.textContent = label; button.title = title; button.addEventListener("click", action); return button; }
@@ -240,6 +252,48 @@
       const row = document.createElement("article"); const info = document.createElement("div"); const title = document.createElement("strong"); title.textContent = set.name; const meta = document.createElement("small"); meta.textContent = set.songIds.length + " skladeb · cíl " + set.targetMinutes + " min"; info.append(title, meta);
       const actions = document.createElement("div"); actions.className = "saved-actions"; actions.append(iconAction("load", "Načíst setlist", () => { workspace.state.draft = { ...workspace.state.draft, name: set.name, targetMinutes: set.targetMinutes, songIds: [...set.songIds] }; changed(); }, true), rowButton("×", "Smazat uložený setlist", () => { workspace.state.savedSetlists = sets.filter(item => item.id !== set.id); changed(); })); row.append(info, actions); return row;
     }));
+  }
+  function liveMember() { return memberById(signedInMemberId()) || workspace?.state.members[0] || null; }
+  function renderLiveSetup() {
+    if (!workspace) return; const current = elements.liveSetSelect.value || "draft"; const options = [option("draft", "Aktuální set — " + workspace.state.draft.name), ...workspace.state.savedSetlists.map(set => option("saved:" + set.id, set.name))]; elements.liveSetSelect.replaceChildren(...options); elements.liveSetSelect.value = options.some(item => item.value === current) ? current : "draft"; elements.liveMemberName.textContent = liveMember()?.name || "Bez přiřazeného člena";
+    if (!elements.liveStage.hidden) renderLiveSong();
+  }
+  function startLiveSet() {
+    const source = elements.liveSetSelect.value; liveSongIds = source === "draft" ? [...workspace.state.draft.songIds] : [...(workspace.state.savedSetlists.find(set => "saved:" + set.id === source)?.songIds || [])]; liveSongIds = liveSongIds.filter(id => workspace.state.songs.some(song => song.id === id)); liveSongIndex = 0;
+    if (!liveSongIds.length) { showToast("Vybraný setlist neobsahuje žádné skladby."); return; }
+    elements.liveEmpty.hidden = true; elements.liveStage.hidden = false; renderLiveSong(); startLivePolling(); requestLiveWakeLock();
+  }
+  async function requestLiveWakeLock() { if (!navigator.wakeLock || document.visibilityState !== "visible") return; try { liveWakeLock = await navigator.wakeLock.request("screen"); } catch (_) {} }
+  function renderLiveSong() {
+    const song = workspace?.state.songs.find(item => item.id === liveSongIds[liveSongIndex]); if (!song) { elements.liveStage.hidden = true; elements.liveEmpty.hidden = false; return; }
+    const member = liveMember(); const detail = member ? songMemberDetail(song, member.id) : {}; const instrument = member ? memberInstrument(member, detail.instrumentId || member.defaultInstrumentId || "none") : null;
+    elements.livePosition.textContent = (liveSongIndex + 1) + " / " + liveSongIds.length; elements.livePositionProgress.style.width = ((liveSongIndex + 1) / liveSongIds.length * 100) + "%"; elements.liveSongRole.textContent = song.role !== "standard" ? ROLE_LABELS[song.role] : song.album || "Skladba"; elements.liveSongTitle.textContent = detail.customTitle || song.title;
+    const meta = [formatTime(song.seconds), song.bpm ? song.bpm + " BPM" : "BPM nezadané", "Energie " + song.energy]; elements.liveSongMeta.replaceChildren(...meta.map(text => { const span = document.createElement("span"); span.textContent = text; return span; }));
+    const instructions = []; if (instrument && instrument.kind !== "none") instructions.push({ label: "Nástroj", value: instrument.name }); if (instrument && ["guitar", "electric-guitar"].includes(instrument.kind) && Number(detail.capo)) instructions.push({ label: "Kapo", value: "K" + detail.capo }); if (instrument?.kind === "electric-guitar" && detail.preset) instructions.push({ label: "Preset", value: detail.preset }); printFieldTexts(song.printFields).forEach(value => instructions.push({ label: "Kapela", value })); printFieldTexts(detail.printFields).forEach(value => instructions.push({ label: "Moje", value })); if (detail.note) instructions.push({ label: "Poznámka", value: detail.note });
+    elements.liveInstructions.replaceChildren(...instructions.map(item => { const row = document.createElement("div"); const label = document.createElement("span"); label.textContent = item.label; const value = document.createElement("strong"); value.textContent = item.value; row.append(label, value); return row; })); if (!instructions.length) { const empty = document.createElement("p"); empty.textContent = "K této skladbě nemáš žádné osobní pokyny."; elements.liveInstructions.append(empty); }
+    elements.livePrevious.disabled = liveSongIndex === 0; elements.liveNext.disabled = liveSongIndex === liveSongIds.length - 1; if (song.bpm) elements.liveBpm.value = String(song.bpm);
+  }
+  function moveLiveSong(direction) { const next = Math.max(0, Math.min(liveSongIds.length - 1, liveSongIndex + direction)); if (next === liveSongIndex) return; liveSongIndex = next; renderLiveSong(); }
+  async function enableLiveAudio() {
+    const AudioEngine = window.AudioContext || window.webkitAudioContext; if (!AudioEngine) throw new Error("Tento prohlížeč nepodporuje Web Audio."); liveAudioContext = liveAudioContext || new AudioEngine({ latencyHint: "interactive" }); await liveAudioContext.resume(); const oscillator = liveAudioContext.createOscillator(); const gain = liveAudioContext.createGain(); gain.gain.value = 0; oscillator.connect(gain).connect(liveAudioContext.destination); oscillator.start(); oscillator.stop(liveAudioContext.currentTime + .01); elements.enableLiveAudio.textContent = "Zvuk povolen"; elements.enableLiveAudio.classList.add("ready"); return liveAudioContext;
+  }
+  function playLiveClick(when, accent) {
+    if (!liveAudioContext || liveAudioContext.state !== "running") return; const oscillator = liveAudioContext.createOscillator(); const gain = liveAudioContext.createGain(); oscillator.frequency.value = accent ? 1700 : 1050; gain.gain.setValueAtTime(accent ? .32 : .2, when); gain.gain.exponentialRampToValueAtTime(.0001, when + .045); oscillator.connect(gain).connect(liveAudioContext.destination); oscillator.start(when); oscillator.stop(when + .05);
+  }
+  function updateBeatDots(beat) { Array.from(elements.liveBeatDots.children).forEach((dot, index) => dot.classList.toggle("active", index === beat % 4)); }
+  function scheduleLiveMetronome() {
+    if (liveSession.status !== "running" || !liveSession.startedAtMs) { updateBeatDots(-1); return; } const nowServer = Date.now() + liveServerOffset; const interval = 60000 / liveSession.bpm; if (nowServer >= liveSession.startedAtMs) updateBeatDots(Math.floor((nowServer - liveSession.startedAtMs) / interval)); else updateBeatDots(-1); if (!liveAudioContext || liveAudioContext.state !== "running") return;
+    const firstCandidate = Math.max(0, Math.floor((nowServer - liveSession.startedAtMs) / interval)); let beat = Math.max(liveLastScheduledBeat + 1, firstCandidate); const horizon = nowServer + 180; const calibration = Math.max(-250, Math.min(250, Number(elements.liveCalibration.value) || 0));
+    while (liveSession.startedAtMs + beat * interval <= horizon) { const serverBeat = liveSession.startedAtMs + beat * interval; const localWall = serverBeat - liveServerOffset - calibration; const delay = (localWall - Date.now()) / 1000; if (delay >= -.03) playLiveClick(liveAudioContext.currentTime + Math.max(.006, delay), beat % 4 === 0); liveLastScheduledBeat = beat; beat += 1; }
+  }
+  function applyLiveSession(payload, requestStarted = Date.now(), requestFinished = Date.now()) {
+    const rtt = requestFinished - requestStarted; const measuredOffset = Number(payload.serverTimeMs) - (requestStarted + requestFinished) / 2; if (rtt <= liveBestRtt + 5) { liveBestRtt = Math.min(liveBestRtt, rtt); liveServerOffset = measuredOffset; }
+    if (payload.revision !== liveSessionRevision || payload.state.startedAtMs !== liveSession.startedAtMs) liveLastScheduledBeat = -1; liveSessionRevision = payload.revision; liveSession = payload.state; elements.liveSyncState.textContent = liveSession.status === "running" ? liveSession.bpm + " BPM · spustil/a " + (liveSession.leaderName || "člen kapely") : "Metronom je zastavený"; elements.liveMetronomeNote.textContent = liveSession.status === "running" ? (liveAudioContext?.state === "running" ? "Zařízení je připojené ke společnému kliku." : "Klik běží. Na tomto zařízení ještě povol zvuk.") : "Pro synchronizaci otevři sekci Zkouška na všech zařízeních."; if (liveSession.status === "running") elements.liveBpm.value = String(liveSession.bpm);
+  }
+  async function pollLiveSession() { if (!workspace || !activeBandId) return; const started = Date.now(); try { const payload = await api("/live-session?bandId=" + encodeURIComponent(activeBandId)); applyLiveSession(payload, started, Date.now()); } catch (_) {} }
+  function startLivePolling() { if (!livePollTimer) livePollTimer = setInterval(pollLiveSession, 1000); if (!liveSchedulerTimer) liveSchedulerTimer = setInterval(scheduleLiveMetronome, 25); pollLiveSession(); }
+  async function setSharedMetronome(action) {
+    try { if (action === "start") await enableLiveAudio(); const bpm = Math.max(30, Math.min(300, Number(elements.liveBpm.value) || 120)); const started = Date.now(); const payload = await api("/live-session", { method: "POST", body: JSON.stringify({ bandId: activeBandId, action, bpm }) }); applyLiveSession(payload, started, Date.now()); showToast(action === "start" ? "Společný klik odstartuje za 2 sekundy." : "Společný klik je zastavený."); startLivePolling(); } catch (error) { showToast(error.message); }
   }
   function renderBandDialog() {
     if (!session) return; elements.bandList.replaceChildren(...session.bands.map(band => {
@@ -387,6 +441,7 @@
   function parseImportRole(value) {
     const role = normalizedText(value); return ({ standard: "standard", bezna: "standard", bezny: "standard", opener: "opener", oteviraci: "opener", encore: "encore", pridavkova: "encore", pridavek: "encore", closer: "closer", zaverecna: "closer", zaviraci: "closer" })[role] || "standard";
   }
+  function parseImportFields(value) { return parsePrintTags(value).map(tag => { const separator = tag.indexOf(":"); return { id: uid("field"), label: separator > 0 ? tag.slice(0, separator).trim().slice(0, 32) : "", value: (separator > 0 ? tag.slice(separator + 1) : tag).trim().slice(0, 64) }; }); }
   function parseBulkImport(text) {
     const lines = String(text || "").replace(/^\uFEFF/, "").split(/\r?\n/).map(line => line.trim()).filter(Boolean); if (!lines.length) return { songs: [], errors: ["Vlož alespoň jeden řádek."] };
     const first = lines[0]; const delimiter = first.includes("\t") ? "\t" : first.includes(";") ? ";" : ","; const rows = lines.map(line => parseDelimitedRow(line, delimiter)); const header = rows[0].map(normalizedText);
@@ -397,7 +452,7 @@
     data.slice(0, 1000).forEach((row, index) => {
       const lineNumber = index + (hasHeader ? 2 : 1); const get = key => positions[key] >= 0 ? row[positions[key]] || "" : ""; const title = get("title").trim(); const seconds = parseDuration(get("duration")); const bpmText = get("bpm").trim(); const bpm = bpmText ? Number(bpmText) : 0; const energyText = get("energy").trim(); const energy = energyText ? Number(energyText) : 3;
       if (!title) { errors.push("Řádek " + lineNumber + ": chybí název."); return; } if (seconds < 1 || seconds > 3600) { errors.push("Řádek " + lineNumber + ": neplatná délka."); return; } if (!Number.isFinite(bpm) || bpm < 0 || bpm > 300) { errors.push("Řádek " + lineNumber + ": BPM musí být 1–300."); return; }
-      songs.push({ id: uid("song"), title: title.slice(0, 120), album: get("album").trim().slice(0, 120), seconds, bpm, energy: Number.isFinite(energy) ? Math.min(5, Math.max(1, Math.round(energy))) : 3, role: parseImportRole(get("role")), printFields: parsePrintTags(get("tags")).map(tag => ({ id: uid("field"), label: "", value: tag })), memberDetails: {} });
+      songs.push({ id: uid("song"), title: title.slice(0, 120), album: get("album").trim().slice(0, 120), seconds, bpm, energy: Number.isFinite(energy) ? Math.min(5, Math.max(1, Math.round(energy))) : 3, role: parseImportRole(get("role")), printFields: parseImportFields(get("tags")), memberDetails: {} });
     });
     if (data.length > 1000) errors.push("Najednou lze importovat nejvýše 1000 řádků."); return { songs, errors };
   }
@@ -408,11 +463,20 @@
     workspace.state.songs.push(...added); elements.bulkImportDialog.close(); elements.bulkImportText.value = ""; changed(); showToast("Importováno " + added.length + " skladeb" + (duplicates ? ", přeskočeno " + duplicates + " duplicit." : "."));
   }
   function downloadImportTemplate() {
-    const content = "\uFEFFNázev;Album;Délka;BPM;Energie;Role;Štítky\r\nPrvní píseň;První album;3:30;128;4;Otevírací;Hanych začíná | Intro na klik\r\n"; const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = "setlister-repertoar-sablona.csv"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const link = document.createElement("a"); link.href = API + "/repertoire-template.xlsx?bandId=" + encodeURIComponent(activeBandId); link.download = "setlister-repertoar-sablona.xlsx"; document.body.append(link); link.click(); link.remove();
+  }
+  function bufferToBase64(buffer) { const bytes = new Uint8Array(buffer); let binary = ""; for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000)); return btoa(binary); }
+  async function loadImportFile(file) {
+    if (!file) return; if (file.size > 3 * 1024 * 1024) throw new Error("Soubor může mít nejvýše 3 MB.");
+    if (file.name.toLocaleLowerCase("cs").endsWith(".xlsx")) {
+      showStatus(elements.bulkImportStatus, "Načítám XLSX…"); const payload = await api("/import-xlsx", { method: "POST", body: JSON.stringify({ bandId: activeBandId, contentBase64: bufferToBase64(await file.arrayBuffer()) }) });
+      elements.bulkImportText.value = payload.rows.map(row => row.map(cell => String(cell || "").replace(/[\t\r\n]+/g, " ")).join("\t")).join("\n");
+    } else elements.bulkImportText.value = await file.text();
+    const parsed = parseBulkImport(elements.bulkImportText.value); showStatus(elements.bulkImportStatus, parsed.songs.length + " připravených skladeb" + (parsed.errors.length ? " · " + parsed.errors.length + " řádků vyžaduje opravu" : ""), !parsed.errors.length);
   }
 
   document.querySelectorAll("[data-auth-tab]").forEach(button => button.addEventListener("click", () => activateAuthTab(button.dataset.authTab)));
-  document.querySelectorAll("[data-view]").forEach(button => button.addEventListener("click", () => { document.querySelectorAll("[data-view]").forEach(item => item.classList.toggle("active", item === button)); document.querySelectorAll("[data-app-view]").forEach(view => view.classList.toggle("active", view.dataset.appView === button.dataset.view)); }));
+  document.querySelectorAll("[data-view]").forEach(button => button.addEventListener("click", () => { document.querySelectorAll("[data-view]").forEach(item => item.classList.toggle("active", item === button)); document.querySelectorAll("[data-app-view]").forEach(view => view.classList.toggle("active", view.dataset.appView === button.dataset.view)); if (button.dataset.view === "live") { startLivePolling(); if (!elements.liveStage.hidden) requestLiveWakeLock(); } else if (liveWakeLock) { liveWakeLock.release().catch(() => {}); liveWakeLock = null; } }));
   document.querySelectorAll("[data-close-dialog]").forEach(button => button.addEventListener("click", () => elements[button.dataset.closeDialog].close()));
   elements.registerForm.addEventListener("submit", async event => { event.preventDefault(); showStatus(elements.authStatus, "Vytvářím účet…"); try { updateSession(await api("/register", { method: "POST", body: JSON.stringify(formPayload(event.currentTarget)) })); } catch (error) { showStatus(elements.authStatus, error.message); } });
   elements.loginForm.addEventListener("submit", async event => { event.preventDefault(); showStatus(elements.authStatus, "Přihlašuji…"); try { updateSession(await api("/login", { method: "POST", body: JSON.stringify(formPayload(event.currentTarget)) })); } catch (error) { showStatus(elements.authStatus, error.message); } });
@@ -433,7 +497,7 @@
   elements.openBulkImport.addEventListener("click", () => { showStatus(elements.bulkImportStatus, ""); elements.bulkImportDialog.showModal(); elements.bulkImportText.focus(); });
   elements.bulkImportForm.addEventListener("submit", event => { event.preventDefault(); importBulkSongs(); });
   elements.downloadImportTemplate.addEventListener("click", downloadImportTemplate);
-  elements.bulkImportFile.addEventListener("change", event => { const file = event.target.files[0]; if (!file) return; if (file.size > 2 * 1024 * 1024) { showStatus(elements.bulkImportStatus, "Soubor může mít nejvýše 2 MB."); event.target.value = ""; return; } const reader = new FileReader(); reader.onload = () => { elements.bulkImportText.value = String(reader.result || ""); const parsed = parseBulkImport(elements.bulkImportText.value); showStatus(elements.bulkImportStatus, parsed.songs.length + " připravených skladeb" + (parsed.errors.length ? " · " + parsed.errors.length + " řádků vyžaduje opravu" : ""), !parsed.errors.length); }; reader.onerror = () => showStatus(elements.bulkImportStatus, "Soubor se nepodařilo načíst."); reader.readAsText(file, "utf-8"); event.target.value = ""; });
+  elements.bulkImportFile.addEventListener("change", async event => { const file = event.target.files[0]; if (!file) return; try { await loadImportFile(file); } catch (error) { showStatus(elements.bulkImportStatus, error.message || "Soubor se nepodařilo načíst."); } event.target.value = ""; });
   elements.appTargetMinutes.addEventListener("input", event => { if (!workspace || event.target.value === "") return; workspace.state.draft.targetMinutes = Math.max(1, Math.min(240, Number(event.target.value))); changed(); });
   elements.appTargetMinutes.addEventListener("blur", event => { if (!event.target.value) { event.target.value = String(workspace.state.draft.targetMinutes || 45); } });
   elements.setName.addEventListener("input", event => { workspace.state.draft.name = event.target.value; clearTimeout(saveTimer); saveTimer = setTimeout(saveWorkspace, 600); });
@@ -441,6 +505,12 @@
   elements.setViewer.addEventListener("change", event => { workspace.state.draft.viewerMemberId = event.target.value; changed(); });
   elements.songSearch.addEventListener("input", renderWorkspace);
   elements.albumFilter.addEventListener("change", renderWorkspace); elements.energyFilter.addEventListener("change", renderWorkspace); elements.roleFilter.addEventListener("change", renderWorkspace);
+  elements.startLiveSet.addEventListener("click", startLiveSet); elements.livePrevious.addEventListener("click", () => moveLiveSong(-1)); elements.liveNext.addEventListener("click", () => moveLiveSong(1));
+  elements.liveSongCard.addEventListener("pointerdown", event => { liveSwipeStart = { id: event.pointerId, x: event.clientX }; elements.liveSongCard.setPointerCapture(event.pointerId); });
+  elements.liveSongCard.addEventListener("pointerup", event => { if (!liveSwipeStart || liveSwipeStart.id !== event.pointerId) return; const distance = event.clientX - liveSwipeStart.x; liveSwipeStart = null; if (Math.abs(distance) >= 55) moveLiveSong(distance < 0 ? 1 : -1); });
+  elements.liveSongCard.addEventListener("pointercancel", () => { liveSwipeStart = null; }); elements.liveSongCard.addEventListener("keydown", event => { if (event.key === "ArrowLeft") moveLiveSong(-1); if (event.key === "ArrowRight") moveLiveSong(1); });
+  elements.enableLiveAudio.addEventListener("click", async () => { try { await enableLiveAudio(); showToast("Zvuk metronomu je na tomto zařízení povolený."); } catch (error) { showToast(error.message); } }); elements.startSharedMetronome.addEventListener("click", () => setSharedMetronome("start")); elements.stopSharedMetronome.addEventListener("click", () => setSharedMetronome("stop")); elements.liveCalibration.addEventListener("change", event => { const value = Math.max(-250, Math.min(250, Number(event.target.value) || 0)); event.target.value = String(value); localStorage.setItem("setlister-live-calibration", String(value)); liveLastScheduledBeat = -1; });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !elements.liveStage.hidden) requestLiveWakeLock(); });
   elements.saveSetlist.addEventListener("click", () => { const draft = workspace.state.draft; const existing = workspace.state.savedSetlists.find(set => set.name.toLocaleLowerCase("cs") === draft.name.toLocaleLowerCase("cs")); if (existing) { existing.songIds = [...draft.songIds]; existing.targetMinutes = draft.targetMinutes; } else workspace.state.savedSetlists.push({ id: uid("set"), name: draft.name || "Setlist", targetMinutes: draft.targetMinutes, songIds: [...draft.songIds] }); changed(); showToast("Setlist je uložený."); });
   elements.openExport.addEventListener("click", () => { updateExportSummary(); elements.exportDialog.showModal(); });
   elements.exportForm.addEventListener("input", updateExportSummary); elements.exportForm.addEventListener("submit", event => { event.preventDefault(); generatePrint(event.currentTarget); });
@@ -464,5 +534,5 @@
   elements.rotateCode.addEventListener("click", async () => { try { const payload = await api("/bands/rotate-code", { method: "POST", body: JSON.stringify({ bandId: activeBandId }) }); workspace.band.inviteCode = payload.inviteCode; renderSettings(); showToast("Kapela má nový pozvánkový kód."); } catch (error) { showToast(error.message); } });
   document.addEventListener("click", () => closeCustomSelects()); document.addEventListener("keydown", event => { if (event.key === "Escape") closeCustomSelects(); });
   if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).catch(() => {});
-  enhanceSelects(document); activateAuthTab("register"); refreshSession();
+  elements.liveCalibration.value = localStorage.getItem("setlister-live-calibration") || "0"; enhanceSelects(document); activateAuthTab("register"); refreshSession();
 })();

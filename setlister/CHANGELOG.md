@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.0
+
+- hlavní šablona repertoáru je skutečný XLSX soubor, který lze otevřít v Excelu, Numbers i Google Tabulkách;
+- hromadný import umí přímo načíst jednoduché XLSX bez převodu do CSV; vložení tabulky a CSV/TSV zůstává podporované;
+- přibyla sekce Zkouška pro spuštění aktuálního nebo uloženého setlistu a listování skladbami tlačítky, klávesami i swipe gestem;
+- live karta zobrazuje osobní název, nástroj, kapodastr, preset, pojmenovaná pole a poznámku přihlášeného člena;
+- přibyl kapelní synchronizovaný metronom se serverovým časem, společným startem s předstihem, Web Audio schedulerem a lokální kalibrací zařízení;
+- mobilní specifikace popisuje stejné XLSX a live/metronome endpointy i limity synchronizace samostatných reproduktorů.
+
 ## 0.9.1
 
 - vlastní štítek se nyní zakládá jako pojmenované pole: po zadání názvu a potvrzení Enterem vznikne samostatný box pro jeho hodnotu;
