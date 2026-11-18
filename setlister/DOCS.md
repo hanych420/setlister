@@ -24,9 +24,11 @@ Nový tunnel ani další token nejsou potřeba. Cloudflare Access musí chránit
 
 ## Nastavení Gmail asistenta
 
-V konfiguraci add-onu doplň Google OAuth Client ID a Client Secret, OpenAI API klíč, Cloudflare Access team domain a Application Audience tag. Přesměrovací adresa Google OAuth klienta musí být `https://setlister.cz/propadleek/oauth/google/callback`.
+V konfiguraci add-onu doplň Google OAuth Client ID a Client Secret, OpenAI API klíč, Cloudflare Access team domain a Application Audience tag. Google OAuth klient musí obsahovat obě přesměrovací adresy: `https://setlister.cz/propadleek/oauth/google/callback` a `https://app.setlister.cz/oauth/google/callback`.
 
 Po restartu otevři **PropsBot → Připojené účty** a autorizuj postupně oba kapelní Gmaily. Setlister žádá pouze `gmail.readonly` a nemůže do Gmailu zapisovat. První synchronizace může podle velikosti schránky trvat několik minut; další synchronizace už načítají jen změny.
+
+Pro obecnou aplikaci otevři na `app.setlister.cz` sekci **Mailový agent**. Vlastník kapely může připojit nejvýše dva Gmaily a u každého jednou spustit **Načíst celou schránku**. Nové zprávy se pak kontrolují automaticky každých pět minut. Všichni členové kapely mohou použít chat, ale účty spravuje pouze vlastník. Volba `public_ai_daily_questions` určuje denní limit dotazů jedné kapely; výchozí hodnota je 50.
 
 Po první synchronizaci PropsBot na pozadí vytvoří interní evidenci koncertů. Průběh je vidět v panelu připojených účtů; samostatná obrazovka evidence se nezobrazuje. Historii konverzací otevře ozubené kolečko po zadání `admin_history_pin` z konfigurace add-onu.
 

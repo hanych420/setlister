@@ -28,7 +28,9 @@ Klientské aplikace pouze čtou stav kapely ze serveru. Nákup z jedné platform
 
 ## Mailový agent
 
-Datový model počítá nejvýše se dvěma Gmail účty na kapelu. Připojení musí zůstat pouze v rozsahu gmail.readonly. Tokeny se ukládají šifrovaně a nikdy se neposílají do prohlížeče. Ve verzi 0.8.0 je v obecné aplikaci přesně popsané cílové chování, ale veřejný tenantový OAuth ještě není aktivní; oddělené indexy jednotlivých kapel a jejich bezpečnostní kontrola budou samostatná další etapa.
+Každá kapela může mít nejvýše dva Gmail účty. OAuth používá jen `gmail.readonly`; tokeny jsou šifrované a nikdy se neposílají do prohlížeče. První ručně spuštěná synchronizace vytvoří tenantově oddělený SQLite/FTS index, následné běhy každých pět minut používají Gmail History API. Připojení, synchronizaci a odpojení spravuje pouze vlastník kapely; chat může použít každý její člen.
+
+Dotaz se nejdřív převede na záměr a rozšířené hledací výrazy s kontextem předchozí konverzace. Teprve potom server vybere relevantní vlákna a pošle modelu omezený důkazní kontext. Odpověď musí citovat zdrojové zprávy a bez důkazu informaci odmítnout doplnit. Denní limit dotazů je atomicky vedený podle `band_id`; výchozí hodnota je 50.
 
 ## Kontakt
 

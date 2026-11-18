@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.0
+
+- veřejná aplikace na `app.setlister.cz` umí ke každé kapele připojit až dva Gmail účty s výhradně read-only oprávněním;
+- vlastník kapely spouští první úplné načtení schránky a může účet synchronizovat nebo odpojit, ostatní členové používají pouze chat;
+- po prvním importu server každých pět minut doplňuje změny přes Gmail History API a bezpečně zachytí i zprávy doručené během dlouhé synchronizace;
+- zprávy a fulltextový index jsou oddělené podle kapely a odpojení odstraní lokální data příslušného účtu;
+- první AI krok pochopí i nepřesný nebo navazující dotaz a rozšíří hledání o kontext a synonyma, druhý odpovídá jen z nalezených e-mailů;
+- každé konkrétní tvrzení musí mít proklik na zdrojovou zprávu; bez důkazu agent výslovně přizná, že odpověď nenašel;
+- výchozí limit 50 dotazů na kapelu a den, omezený důkazní kontext a vypnuté ukládání OpenAI požadavků chrání provozní náklady;
+- responzivní rozhraní ukazuje stav obou schránek, průběh synchronizace, rychlé dotazy a bezpečné citace bez renderování libovolného HTML.
+
 ## 0.11.1
 
 - pódiového člena lze v nastavení propojit s registrovaným účtem kapely podle e-mailu;

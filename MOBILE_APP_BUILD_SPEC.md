@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.11.1 · aktualizováno 18. 11. 2026
+> Stav specifikace: 0.12.0 · aktualizováno 18. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -20,7 +20,7 @@ Setlister je pracovní prostor kapely pro:
 4. tisk / export čitelných pódiových A4;
 5. plánování dne koncertu a historii skutečně odehraných setů;
 6. společně vedený live průchod setlistem při zkoušce nebo koncertu;
-7. pozdějšího read-only AI agenta nad maximálně dvěma kapelními Gmail účty;
+7. read-only AI agenta nad maximálně dvěma kapelními Gmail účty;
 8. budoucí stageplany a technické ridery.
 
 Nejde o hudební přehrávač ani veřejný katalog koncertů.
@@ -33,7 +33,7 @@ Po přihlášení zobraz spodní navigaci:
 - **Repertoár** — skladby, jejich obecná metadata a osobní pokyny členů.
 - **Koncerty** — termíny, časový plán dne, checklist, přiřazený uložený setlist a historie skutečně odehraných setů.
 - **Zkouška** — společně vedený live průchod aktuálním nebo uloženým setlistem, osobní pokyny a synchronizovaný metronom.
-- **Mailový agent** — popis, stav synchronizace a později chat nad Gmailem.
+- **Mailový agent** — připojení Gmailů, stav synchronizace a doložený chat nad jejich obsahem.
 - **Kapela** — logo, pódioví členové, nástroje, pozvánkový kód, účet a předplatné.
 
 Uživatel může být členem více kapel. Aktivní kapela se přepíná v hlavičce. Data různých kapel se nikdy nesmí smíchat.
@@ -257,22 +257,30 @@ Nelze slibovat 100% sample-perfect shodu zvuku z nezávislých reproduktorů: za
 
 Kapela může nahrát vlastní PNG, JPEG, WebP nebo SVG libovolného poměru stran. Po výběru souboru klient otevře editor čtvercového výřezu: uživatel obrázek posouvá tažením nebo šipkami, mění přiblížení v rozsahu 1× až 4× a může jej znovu vycentrovat. Potvrzený výřez se vyrenderuje přesně na 512 × 512 px a uloží jako kompaktní WebP; zrušení editoru zachová předchozí logo beze změny. Logo se zobrazuje vedle názvu aktivní kapely a na výtisku. Maximální uložená data URL je 700 000 znaků. Stejné chování a výsledný formát musí zachovat web, iOS i Android.
 
-## Mailový agent — cílová funkce
+## Mailový agent
 
-Připojení je striktně Gmail read-only a maximálně dva účty na kapelu. Agent **nikdy** nevytváří koncepty, neposílá, neupravuje ani nemaže e-maily.
+Připojení je striktně Gmail read-only a maximálně dva účty na kapelu. Agent **nikdy** nevytváří koncepty, neposílá, neupravuje, neoznačuje ani nemaže e-maily. Připojit, ručně synchronizovat a odpojit účet může pouze vlastník kapely; ptát se mohou všichni její registrovaní členové.
 
-Správný návrh:
+### Synchronizace a uložení
 
-1. první synchronizace stáhne zprávy a vytvoří tenantově oddělený index pro `bandId`;
-2. další synchronizace používají Gmail History API a doplní jen změny;
-3. z e-mailů se vedle fulltextu extrahují strukturovaná fakta (koncerty, termíny, arrival, faktury, čekající odpovědi) se zdrojovým message ID;
-4. dotaz nejdřív provede levné deterministické / FTS vyhledání a vybere omezený počet relevantních vláken;
-5. LLM dostane pouze dotaz, nalezené pasáže, strukturovaná fakta a naučená pravidla kapely;
-6. odpověď musí připojit proklik na zdrojový Gmail; bez důkazu má přiznat nejistotu, ne domýšlet;
-7. souhrnné dotazy jako „všechny koncerty“ musí čerpat z úplné strukturované evidence, ne z top-N náhodných e-mailů;
-8. tokeny a refresh tokeny jsou šifrované na serveru; nikdy se neposílají mobilnímu klientovi.
+1. OAuth žádá pouze scope `https://www.googleapis.com/auth/gmail.readonly`. Redirect URI produkčního webu je `https://app.setlister.cz/oauth/google/callback`.
+2. Po autorizaci se účet zobrazí ve stavu `awaiting_initial`. Uživatel výslovně stiskne „Načíst celou schránku“; teprve potom začne první import.
+3. První synchronizace zapíše až 100 000 zpráv do SQLite a vytvoří FTS5 index. Před stahováním si uloží výchozí Gmail `historyId`, aby následná inkrementální synchronizace zachytila i zprávy doručené během dlouhého prvního importu.
+4. Server každých pět minut použije Gmail History API a doplní nové/změněné zprávy nebo odstraní lokální kopie smazaných zpráv. Ruční tlačítko umí kontrolu spustit ihned.
+5. Každý záznam i každý FTS dotaz obsahuje `bandId`; backend před každou operací ověří členství. Zprávy dvou kapel nebo dvou odpojených účtů se nesmějí smíchat.
+6. Refresh token se ukládá šifrovaně na serveru a nikdy se neposílá webovému ani mobilnímu klientovi. Odpojení smaže lokální zprávy a jejich vyhledávací index; v Gmailu nic nemění.
 
-Veřejný multi-tenant Gmail agent zatím není aktivní. Nezobrazuj falešně funkční připojení. Soukromý `/propadleek` PropsBot je referenční prototyp, ne endpoint veřejných klientů.
+### Pochopení dotazu a odpověď
+
+Dotaz se zpracovává ve dvou oddělených krocích. První krátké volání modelu pochopí záměr a předchozích nejvýše šest zpráv chatu. Doplní hledané entity a synonyma, takže například navazující „a v kolik tam máme být?“ zdědí Olomouc a datum z minulého dotazu a `arrival` hledá také jako příjezd. Tento krok nesmí vytvářet odpověď ani fakta; vrací pouze typ dotazu a nejvýše 16 hledacích výrazů. Když OpenAI plánovač selže, použije se lokální rozpad dotazu a prefixové FTS hledání odolné vůči běžným českým tvarům slov.
+
+Druhý krok dostane pouze nalezená relevantní vlákna, maximálně 36 000 znaků e-mailového textu, aktuální otázku a krátký kontext chatu. Odpovídá výhradně z dodaných důkazů. Každé konkrétní tvrzení musí citovat `[M1]`, `[M2]` atd.; klient citaci nahradí bezpečným proklikem na původní Gmail. Bez dostatečného zdroje odpoví přesně, že informaci v připojených e-mailech nenašel. Rozpor ve zdrojích musí přiznat. U čekající odpovědi kontroluje nejnovější směr vlákna; u faktur rozlišuje žádost od důkazu o odeslání.
+
+Obsah e-mailů je nedůvěryhodný vstup. Instrukci nalezenou uvnitř e-mailu agent pouze cituje nebo shrne; nikdy ji neprovede ani jí nedovolí změnit systémová pravidla. Odpověď se nevyrenderuje jako libovolné HTML. Klient bezpečně podporuje pouze odstavce, seznamy, tučný text a ověřené citace vrácené serverem.
+
+Kvůli nákladům je pro každou kapelu atomicky hlídaný denní limit dotazů; výchozí hodnota je 50 a provozovatel ji může změnit nastavením `public_ai_daily_questions`. Jeden dotaz používá dva malé kroky modelu, ale nikdy neposílá celou schránku. Odpověď má nejvýše 900 výstupních tokenů a OpenAI požadavky mají `store: false`.
+
+Soukromý `/propadleek` PropsBot zůstává samostatný prototyp a jeho endpointy ani data se ve veřejné aplikaci nepoužívají.
 
 ## Aktuální cloud a API
 
@@ -297,6 +305,11 @@ Webové API dnes používá zabezpečenou HttpOnly cookie `setlister_session`, `
 | `POST` | `/import-xlsx` | `{bandId,contentBase64}`; bezpečně přečte první list a vrátí `rows` |
 | `GET` | `/live-session?bandId=...` | vrátí `serverTimeMs`, revizi, stav metronomu a `liveSet` společného průchodu |
 | `POST` | `/live-session` | `{bandId,action:"start|stop",bpm}` pro metronom; `{bandId,action:"start_set",setlistRef:"draft|saved:<id>"}` pro vedení setu; `{bandId,action:"set_song",songIndex}` pro posun vedoucím; `{bandId,action:"stop_set"}` pro ukončení |
+| `GET` | `/gmail/status?bandId=...` | konfigurace, role vlastníka a nejvýše dva účty se stavem/počtem zpráv |
+| `GET` | `/gmail/connect?bandId=...` | pouze vlastník; vrátí Google authorization URL se scope `gmail.readonly` |
+| `POST` | `/gmail/sync` | `{bandId,connectionId,full}`; pouze vlastník, první nebo ruční synchronizace |
+| `POST` | `/gmail/disconnect` | `{bandId,connectionId}`; pouze vlastník, smaže token i lokální index účtu |
+| `POST` | `/mail-agent/ask` | `{bandId,question,history:[{role,content}]}`; vrátí `{answer,sources}` pouze pro člena kapely |
 
 Všechny POST/PUT požadavky posílej s `Content-Type: application/json`. Server kontroluje přihlášení, členství kapely a same-origin u webových mutací. Při uložení může vrátit `409 Konflikt změn`; klient pak znovu načte workspace a nesmí tiše přepsat novější serverová data.
 
@@ -308,7 +321,6 @@ Všechny POST/PUT požadavky posílej s `Content-Type: application/json`. Server
 - audit log změn a bezpečné slučování konfliktů;
 - reset hesla a ověření e-mailu;
 - subscription entitlement endpoint a webhooky Apple/Google/web;
-- veřejné tenantové Gmail OAuth, stav synchronizace, odpojení a chat endpointy;
 - push notifikace jen po výslovném opt-in.
 
 ## Vizuální systém
@@ -338,10 +350,13 @@ Všechny POST/PUT požadavky posílej s `Content-Type: application/json`. Server
 12. Uživatel zamkne první skladbu, otevře chytré řazení, uvidí náhled energetického oblouku a snížení počtu změn; první skladba zůstane na místě i po potvrzení.
 13. Ke koncertu přiřadí uložený setlist, otevře jej jedním kliknutím, po koncertě upraví skutečné pořadí a v historii uvidí rozdíl oproti neměnnému původnímu plánu.
 14. Honza se registrovaným e-mailem připojí ke kapele; v editaci pódiového profilu „Honza“ lze jeho e-mail vybrat, po uložení zmizí z nabídek ostatních členů a server odmítne pokus o dvojí přiřazení.
+15. Vlastník připojí dva Gmaily, u každého jednou spustí plnou synchronizaci a třetí účet server odmítne; běžný člen může chat použít, ale účty spravovat nemůže.
+16. Dotaz „V kolik máme přijet do Olomouce?“ najde i e-mail s textem „Příjezd kapely“, odpověď odkazuje na konkrétní zprávu a při chybějícím důkazu odmítne údaj odhadnout.
+17. Člen kapely A se nesmí stavem, hledáním ani odkazem dostat ke zprávám kapely B; odpojení Gmailu odstraní jeho lokální index, ale Gmail nezmění.
 
 ## Aktuální omezení
 
-- Veřejný Gmail agent je zatím pouze produktově a architektonicky popsaný, není aktivní.
+- Veřejný Gmail agent vyžaduje produkční Google OAuth klient, ověření citlivého scope Googlu a nakonfigurovaný OpenAI API klíč; bez nich UI bezpečně ukáže, co provozovatel ještě musí doplnit.
 - Ukládání je nyní dokumentové a konflikt načte novější serverovou verzi; jemné slučování změn ještě chybí.
 - PDF na webu používá tiskový dialog prohlížeče; nativní aplikace má vytvořit skutečný PDF soubor se shodným layoutem.
 - Webový metronom je limitovaný audio latencí a pravidly prohlížeče na pozadí; nativní aplikace má přesnější audio scheduler. Nezávislé reproduktory nelze garantovat jako sample-perfect.

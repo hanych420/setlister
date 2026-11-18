@@ -75,9 +75,12 @@ V Google OAuth klientovi musí být jako redirect URI přesně:
 
 ```text
 https://setlister.cz/propadleek/oauth/google/callback
+https://app.setlister.cz/oauth/google/callback
 ```
 
 OAuth aplikace žádá výhradně scope `https://www.googleapis.com/auth/gmail.readonly`. Setlister neobsahuje Gmail endpoint pro odesílání, koncepty, úpravy štítků, přesouvání ani mazání. Oba účty se připojují samostatně na stránce **PropsBot → Připojené účty**.
+
+Ve veřejné aplikaci připojuje nejvýše dva účty vlastník kapely v sekci **Mailový agent**. Tlačítkem spustí první úplnou synchronizaci; potom server každých pět minut doplňuje pouze změny. Chat nejdřív pochopí záměr dotazu a jeho kontext, lokálně vyhledá relevantní vlákna a do OpenAI pošle jen omezený výběr zdrojů. Výchozí limit je 50 dotazů na kapelu a den; lze jej změnit volbou `public_ai_daily_questions`.
 
 První synchronizace indexuje zprávy za posledních 730 dní do SQLite. Další běhy používají Gmail History API a stahují pouze změněné zprávy. Gmail refresh tokeny jsou v databázi šifrované klíčem uloženým s právy pouze pro uživatele add-onu.
 

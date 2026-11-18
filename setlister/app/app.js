@@ -40,6 +40,11 @@
   let livePollTimer = null;
   let liveSchedulerTimer = null;
   let liveWakeLock = null;
+  let mailAgentStatus = null;
+  let mailAgentPollTimer = null;
+  let mailAgentWaiting = false;
+  let mailConversation = [];
+  let mailConversationBandId = "";
 
   async function api(path, options = {}) {
     const response = await fetch(API + path, { credentials: "same-origin", ...options, headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
@@ -263,7 +268,57 @@
     }));
   }
   function savedSetlistById(id) { return workspace?.state.savedSetlists.find(set => set.id === id) || null; }
-  function showAppView(name) { document.querySelectorAll("[data-view]").forEach(item => item.classList.toggle("active", item.dataset.view === name)); document.querySelectorAll("[data-app-view]").forEach(view => view.classList.toggle("active", view.dataset.appView === name)); }
+  function showAppView(name) { document.querySelectorAll("[data-view]").forEach(item => item.classList.toggle("active", item.dataset.view === name)); document.querySelectorAll("[data-app-view]").forEach(view => view.classList.toggle("active", view.dataset.appView === name)); if (name === "agent") loadMailAgentStatus(); }
+
+  function mailDate(value) {
+    if (!value) return "Ještě nesynchronizováno";
+    const parsed = new Date(value); return Number.isNaN(parsed.valueOf()) ? value : new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short" }).format(parsed);
+  }
+  function mailNode(tag, className = "", text = "") { const node = document.createElement(tag); if (className) node.className = className; if (text) node.textContent = text; return node; }
+  function updateMailChatAvailability(ready) {
+    elements.mailQuestion.disabled = !ready; elements.mailChatForm.querySelector("button").disabled = !ready || mailAgentWaiting; elements.mailQuickPrompts.querySelectorAll("button").forEach(button => { button.disabled = !ready || mailAgentWaiting; }); elements.mailChatReadiness.textContent = ready ? "Schránka je připravená" : "Nejdřív dokonči synchronizaci"; elements.mailChatReadiness.classList.toggle("ready", ready);
+  }
+  function renderMailAgentStatus(status) {
+    mailAgentStatus = status; const accounts = status.accounts || []; const ready = accounts.some(account => account.sync_state === "ready" && Number(account.message_count) > 0); const syncing = accounts.some(account => account.sync_state === "syncing");
+    if (!status.gmailConfigured) elements.mailAgentStatus.textContent = "Provozovatel ještě musí doplnit Google OAuth údaje."; else if (!status.openaiConfigured) elements.mailAgentStatus.textContent = "Provozovatel ještě musí doplnit OpenAI API klíč."; else elements.mailAgentStatus.textContent = accounts.length ? `Připojeno ${accounts.length} ze 2 účtů` : "Zatím není připojený žádný Gmail.";
+    elements.connectGmail.hidden = !status.canManage; elements.connectGmail.disabled = !status.gmailConfigured || accounts.length >= 2; elements.connectGmail.textContent = accounts.length >= 2 ? "Připojeny oba účty" : "+ Připojit Gmail";
+    const rows = accounts.map(account => {
+      const row = mailNode("article", "gmail-account"); const main = mailNode("div", "gmail-account-main"); const icon = mailNode("span", "gmail-account-icon", account.email.slice(0, 1).toUpperCase()); const text = mailNode("div"); text.append(mailNode("strong", "", account.email), mailNode("small", "", `${Number(account.message_count || 0).toLocaleString("cs-CZ")} zpráv · ${mailDate(account.last_sync_at)}`)); main.append(icon, text);
+      const actions = mailNode("div", "gmail-account-actions"); const stateLabels = { awaiting_initial: "Čeká na první načtení", syncing: "Synchronizuji…", ready: "Aktuální", error: "Chyba synchronizace" }; const state = mailNode("span", `gmail-state ${account.sync_state === "error" ? "error" : account.sync_state === "syncing" ? "syncing" : ""}`, stateLabels[account.sync_state] || "Připojeno"); if (account.last_sync_error) state.title = account.last_sync_error; actions.append(state);
+      if (status.canManage) { const sync = mailNode("button", "secondary-button", account.sync_state === "awaiting_initial" ? "Načíst celou schránku" : account.sync_state === "syncing" ? "Probíhá…" : account.sync_state === "error" ? "Zkusit znovu" : "Načíst nové zprávy"); sync.type = "button"; sync.disabled = account.sync_state === "syncing"; sync.addEventListener("click", () => syncMailConnection(account.id, account.sync_state === "awaiting_initial" || !account.last_sync_at)); const remove = mailNode("button", "quiet-button", "Odpojit"); remove.type = "button"; remove.disabled = account.sync_state === "syncing"; remove.addEventListener("click", () => disconnectMailConnection(account)); actions.append(sync, remove); }
+      row.append(main, actions); return row;
+    });
+    if (!rows.length) rows.push(mailNode("div", "mail-account-empty", status.canManage ? "Připoj první kapelní Gmail. Po autorizaci načteš celou jeho schránku." : "Vlastník kapely zatím nepřipojil žádný Gmail.")); elements.gmailAccountList.replaceChildren(...rows); updateMailChatAvailability(ready);
+    clearTimeout(mailAgentPollTimer); if (syncing) mailAgentPollTimer = setTimeout(() => loadMailAgentStatus(true), 2500);
+  }
+  async function loadMailAgentStatus(quiet = false) {
+    if (!activeBandId) return; if (mailConversationBandId !== activeBandId) { mailConversationBandId = activeBandId; mailConversation = []; resetMailConversation(); }
+    try { renderMailAgentStatus(await api("/gmail/status?bandId=" + encodeURIComponent(activeBandId))); } catch (error) { if (!quiet) showToast(error.message); elements.mailAgentStatus.textContent = error.message; }
+  }
+  async function connectGmail() { try { const result = await api("/gmail/connect?bandId=" + encodeURIComponent(activeBandId)); window.location.assign(result.authorizationUrl); } catch (error) { showToast(error.message); } }
+  async function syncMailConnection(connectionId, full) {
+    try { await api("/gmail/sync", { method: "POST", body: JSON.stringify({ bandId: activeBandId, connectionId, full }) }); showToast(full ? "Načítání celé schránky bylo spuštěné." : "Kontroluji nové zprávy."); await loadMailAgentStatus(true); } catch (error) { showToast(error.message); }
+  }
+  async function disconnectMailConnection(account) {
+    if (!window.confirm(`Odpojit ${account.email}? Lokální index tohoto účtu se odstraní, v Gmailu se nic nezmění.`)) return;
+    try { await api("/gmail/disconnect", { method: "POST", body: JSON.stringify({ bandId: activeBandId, connectionId: account.id }) }); showToast("Gmail byl odpojený. Jeho zprávy byly ze Setlisteru odstraněné."); await loadMailAgentStatus(); } catch (error) { showToast(error.message); }
+  }
+  function resetMailConversation() { elements.mailChatMessages.innerHTML = '<article class="mail-message assistant"><span>A</span><p>Až bude schránka načtená, zeptej se vlastními slovy. Pokud odpověď v e-mailech nenajdu, řeknu to otevřeně.</p></article>'; }
+  function appendMailInline(parent, text, sourceMap) {
+    const pattern = /\*\*([^*]+)\*\*|\[(M\d+)\]/g; let cursor = 0;
+    for (const match of text.matchAll(pattern)) { if (match.index > cursor) parent.append(document.createTextNode(text.slice(cursor, match.index))); if (match[1] !== undefined) parent.append(mailNode("strong", "", match[1])); else { const source = sourceMap.get(match[2]); if (source?.url) { const link = mailNode("a", "", "e-mail ↗"); link.href = source.url; link.target = "_blank"; link.rel = "noopener noreferrer"; link.title = source.subject || "Otevřít zdrojový e-mail"; parent.append(link); } else parent.append(mailNode("span", "", "zdroj")); } cursor = match.index + match[0].length; }
+    if (cursor < text.length) parent.append(document.createTextNode(text.slice(cursor)));
+  }
+  function renderMailAnswer(answer, sources = []) {
+    const root = mailNode("div", "mail-answer"); const sourceMap = new Map(sources.map(source => [source.id, source])); const lines = String(answer || "").replace(/\r/g, "").split("\n"); let index = 0;
+    while (index < lines.length) { const line = lines[index].trim(); if (!line) { index += 1; continue; } const bullet = line.match(/^(?:[-*•]|\d+[.)])\s+(.+)$/); if (bullet) { const ordered = /^\d/.test(line); const list = mailNode(ordered ? "ol" : "ul"); while (index < lines.length) { const item = lines[index].trim().match(ordered ? /^\d+[.)]\s+(.+)$/ : /^(?:[-*•])\s+(.+)$/); if (!item) break; const li = mailNode("li"); appendMailInline(li, item[1], sourceMap); list.append(li); index += 1; } root.append(list); continue; } const paragraph = mailNode("p"); appendMailInline(paragraph, line.replace(/^#{1,4}\s+/, ""), sourceMap); root.append(paragraph); index += 1; }
+    return root;
+  }
+  function addMailMessage(role, content, sources = []) { const message = mailNode("article", "mail-message " + role); if (role === "assistant") message.append(mailNode("span", "", "A")); if (role === "assistant") message.append(renderMailAnswer(content, sources)); else message.append(mailNode("p", "", content)); elements.mailChatMessages.append(message); elements.mailChatMessages.scrollTop = elements.mailChatMessages.scrollHeight; return message; }
+  async function askMailAgent(question) {
+    if (mailAgentWaiting || !question.trim()) return; mailAgentWaiting = true; elements.mailQuestion.value = ""; elements.mailQuestion.style.height = "auto"; addMailMessage("user", question); const loading = mailNode("article", "mail-message assistant"); loading.append(mailNode("span", "", "A")); const dots = mailNode("p", "mail-loading"); dots.append(mailNode("i"), mailNode("i"), mailNode("i")); loading.append(dots); elements.mailChatMessages.append(loading); updateMailChatAvailability(true);
+    try { const result = await api("/mail-agent/ask", { method: "POST", body: JSON.stringify({ bandId: activeBandId, question, history: mailConversation.slice(-6) }) }); loading.remove(); addMailMessage("assistant", result.answer, result.sources || []); mailConversation.push({ role: "user", content: question }, { role: "assistant", content: result.answer }); } catch (error) { loading.remove(); addMailMessage("assistant", "Odpověď se nepodařilo získat: " + error.message); } finally { mailAgentWaiting = false; updateMailChatAvailability((mailAgentStatus?.accounts || []).some(account => account.sync_state === "ready" && Number(account.message_count) > 0)); elements.mailQuestion.focus(); }
+  }
   function loadSavedSetlist(id) {
     const set = savedSetlistById(id); if (!set) { showToast("Přiřazený setlist už neexistuje."); return; }
     workspace.state.draft = { ...workspace.state.draft, name: set.name, targetMinutes: set.targetMinutes, songIds: [...set.songIds], lockedSongIds: [] }; changed(); showAppView("setlist"); showToast("„" + set.name + "“ je otevřený v editoru.");
@@ -573,7 +628,7 @@
   document.querySelectorAll("[data-close-dialog]").forEach(button => button.addEventListener("click", () => elements[button.dataset.closeDialog].close()));
   elements.registerForm.addEventListener("submit", async event => { event.preventDefault(); showStatus(elements.authStatus, "Vytvářím účet…"); try { updateSession(await api("/register", { method: "POST", body: JSON.stringify(formPayload(event.currentTarget)) })); } catch (error) { showStatus(elements.authStatus, error.message); } });
   elements.loginForm.addEventListener("submit", async event => { event.preventDefault(); showStatus(elements.authStatus, "Přihlašuji…"); try { updateSession(await api("/login", { method: "POST", body: JSON.stringify(formPayload(event.currentTarget)) })); } catch (error) { showStatus(elements.authStatus, error.message); } });
-  elements.logoutButton.addEventListener("click", async () => { try { await api("/logout", { method: "POST", body: "{}" }); } catch (_) {} session = null; workspace = null; setScreen("auth"); });
+  elements.logoutButton.addEventListener("click", async () => { try { await api("/logout", { method: "POST", body: "{}" }); } catch (_) {} clearTimeout(mailAgentPollTimer); session = null; workspace = null; mailAgentStatus = null; mailConversation = []; setScreen("auth"); });
   elements.createBandForm.addEventListener("submit", async event => { event.preventDefault(); showStatus(elements.onboardingStatus, "Zakládám kapelu…"); try { const payload = await api("/bands", { method: "POST", body: JSON.stringify(formPayload(event.currentTarget)) }); activeBandId = payload.band.id; localStorage.setItem(ACTIVE_BAND_KEY, activeBandId); await refreshSession(); } catch (error) { showStatus(elements.onboardingStatus, error.message); } });
   elements.joinBandForm.addEventListener("submit", async event => { event.preventDefault(); showStatus(elements.onboardingStatus, "Připojuji ke kapele…"); try { const payload = await api("/bands/join", { method: "POST", body: JSON.stringify(formPayload(event.currentTarget)) }); activeBandId = payload.band.id; localStorage.setItem(ACTIVE_BAND_KEY, activeBandId); await refreshSession(); } catch (error) { showStatus(elements.onboardingStatus, error.message); } });
   elements.appSongForm.addEventListener("submit", event => { event.preventDefault(); const payload = formPayload(event.currentTarget); const seconds = parseDuration(payload.duration); const bpm = Number(payload.bpm || 0); if (seconds < 1 || seconds > 3600) { showToast("Délku zadej jako 3:30 nebo počet sekund."); return; } if (!Number.isFinite(bpm) || bpm < 0 || bpm > 300) { showToast("BPM musí být mezi 1 a 300."); return; } workspace.state.songs.push({ id: uid("song"), title: payload.title.trim(), album: payload.album.trim(), seconds, bpm, energy: Number(payload.energy), role: payload.role, printFields: [], memberDetails: {} }); event.currentTarget.reset(); event.currentTarget.elements.duration.value = "3:30"; changed(); });
@@ -605,6 +660,11 @@
   elements.liveSongCard.addEventListener("pointerup", event => { if (!liveSwipeStart || liveSwipeStart.id !== event.pointerId) return; const distance = event.clientX - liveSwipeStart.x; liveSwipeStart = null; if (Math.abs(distance) >= 55) moveLiveSong(distance < 0 ? 1 : -1); });
   elements.liveSongCard.addEventListener("pointercancel", () => { liveSwipeStart = null; }); elements.liveSongCard.addEventListener("keydown", event => { if (event.key === "ArrowLeft") moveLiveSong(-1); if (event.key === "ArrowRight") moveLiveSong(1); });
   elements.enableLiveAudio.addEventListener("click", async () => { try { await enableLiveAudio(); showToast("Zvuk metronomu je na tomto zařízení povolený."); } catch (error) { showToast(error.message); } }); elements.startSharedMetronome.addEventListener("click", () => setSharedMetronome("start")); elements.stopSharedMetronome.addEventListener("click", () => setSharedMetronome("stop")); elements.liveCalibration.addEventListener("change", event => { const value = Math.max(-250, Math.min(250, Number(event.target.value) || 0)); event.target.value = String(value); localStorage.setItem("setlister-live-calibration", String(value)); liveLastScheduledBeat = -1; });
+  elements.connectGmail.addEventListener("click", connectGmail);
+  elements.mailChatForm.addEventListener("submit", event => { event.preventDefault(); askMailAgent(elements.mailQuestion.value.trim()); });
+  elements.mailQuestion.addEventListener("keydown", event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); elements.mailChatForm.requestSubmit(); } });
+  elements.mailQuestion.addEventListener("input", event => { event.target.style.height = "auto"; event.target.style.height = Math.min(event.target.scrollHeight, 150) + "px"; });
+  elements.mailQuickPrompts.querySelectorAll("button").forEach(button => button.addEventListener("click", () => askMailAgent(button.textContent.trim())));
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !elements.liveStage.hidden) requestLiveWakeLock(); });
   elements.saveSetlist.addEventListener("click", () => { const draft = workspace.state.draft; const existing = workspace.state.savedSetlists.find(set => set.name.toLocaleLowerCase("cs") === draft.name.toLocaleLowerCase("cs")); if (existing) { existing.songIds = [...draft.songIds]; existing.targetMinutes = draft.targetMinutes; } else workspace.state.savedSetlists.push({ id: uid("set"), name: draft.name || "Setlist", targetMinutes: draft.targetMinutes, songIds: [...draft.songIds] }); changed(); showToast("Setlist je uložený."); });
   elements.openExport.addEventListener("click", () => { updateExportSummary(); elements.exportDialog.showModal(); });
@@ -629,5 +689,5 @@
   elements.rotateCode.addEventListener("click", async () => { try { const payload = await api("/bands/rotate-code", { method: "POST", body: JSON.stringify({ bandId: activeBandId }) }); workspace.band.inviteCode = payload.inviteCode; renderSettings(); showToast("Kapela má nový pozvánkový kód."); } catch (error) { showToast(error.message); } });
   document.addEventListener("click", () => closeCustomSelects()); document.addEventListener("keydown", event => { if (event.key === "Escape") closeCustomSelects(); });
   if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).catch(() => {});
-  elements.liveCalibration.value = localStorage.getItem("setlister-live-calibration") || "0"; enhanceSelects(document); activateAuthTab("register"); refreshSession();
+  elements.liveCalibration.value = localStorage.getItem("setlister-live-calibration") || "0"; updateMailChatAvailability(false); enhanceSelects(document); activateAuthTab("register"); refreshSession();
 })();

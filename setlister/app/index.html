@@ -9,7 +9,7 @@
   <link rel="icon" href="/brand/logo-mark.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=0.11.1">
+  <link rel="stylesheet" href="/styles.css?v=0.12.0">
 </head>
 <body>
   <header class="app-header">
@@ -85,10 +85,10 @@
         </section>
 
         <section class="app-view" data-app-view="agent">
-          <header class="view-header"><div><p class="eyebrow">Pouze pro čtení</p><h1>Mailový agent</h1></div><span class="beta-pill">Připravujeme</span></header>
-          <div class="agent-hero"><div><h2>Odpovědi z kapelních e-mailů během pár vteřin</h2><p>Připojíš až dva kapelní Gmaily a pak se jednoduše zeptáš. Setlister najde čas příjezdu, místo koncertu, domluvený honorář, chybějící fakturu nebo zprávu, na kterou jste možná zapomněli odpovědět.</p></div><div class="agent-questions"><span>„V kolik máme být 23. 1. v Olomouci?“</span><span>„Nečeká někdo na fakturu?“</span><span>„Na co jsme zapomněli odpovědět?“</span></div></div>
-          <div class="agent-flow"><article><b>01</b><h3>Zeptej se normálně</h3><p>Nemusíš znát předmět zprávy ani jméno pořadatele.</p></article><article><b>02</b><h3>Dostaneš konkrétní odpověď</h3><p>Termín, čas, místo i další domluvené podrobnosti na jednom místě.</p></article><article><b>03</b><h3>Ověříš původní e-mail</h3><p>U odpovědi najdeš odkaz na zprávu, ze které informace pochází.</p></article></div>
-          <div class="read-only-banner"><strong>Nikdy neposílá, neupravuje ani nemaže e-maily.</strong><span>Veřejné vícekapelové připojení Gmailu spustíme až po samostatné bezpečnostní kontrole a izolaci dat.</span><button class="secondary-button" type="button" disabled>Připojení Gmailu bude doplněno</button></div>
+          <header class="view-header"><div><p class="eyebrow">Pouze pro čtení</p><h1>Mailový agent</h1></div><span class="beta-pill">Read only</span></header>
+          <div class="agent-hero"><div><h2>Zeptej se na to, co už máte domluvené</h2><p>Připoj až dva kapelní Gmaily. Agent pochopí i nepřesný dotaz, najde související komunikaci a odpoví pouze z informací, které může doložit konkrétním e-mailem.</p></div><div class="agent-questions"><span>„V kolik máme být 23. 1. v Olomouci?“</span><span>„Nečeká někdo na fakturu?“</span><span>„Na co jsme zapomněli odpovědět?“</span></div></div>
+          <section class="mail-connection-card"><div class="mail-connection-heading"><div><p class="eyebrow">Kapelní schránky</p><h2>Propojené Gmaily</h2><p id="mailAgentStatus">Načítám stav připojení…</p></div><button class="primary-button" id="connectGmail" type="button">+ Připojit Gmail</button></div><div class="gmail-account-list" id="gmailAccountList"></div><div class="mail-safety"><strong>Nikdy neposílá, neupravuje ani nemaže e-maily.</strong><span>Setlister používá pouze oprávnění Gmail pro čtení. Po odpojení účtu odstraní jeho lokální index.</span></div></section>
+          <section class="mail-chat-panel" id="mailChatPanel"><div class="mail-chat-heading"><div><p class="eyebrow">Ověřené odpovědi</p><h2>Co potřebuješ zjistit?</h2></div><span id="mailChatReadiness">Nejdřív dokonči synchronizaci</span></div><div class="mail-quick-prompts" id="mailQuickPrompts"><button type="button">Jaké potvrzené koncerty nás čekají?</button><button type="button">Čeká někdo na naši odpověď?</button><button type="button">Jsou odeslané všechny požadované faktury?</button></div><div class="mail-chat-messages" id="mailChatMessages"><article class="mail-message assistant"><span>A</span><p>Až bude schránka načtená, zeptej se vlastními slovy. Pokud odpověď v e-mailech nenajdu, řeknu to otevřeně.</p></article></div><form class="mail-composer" id="mailChatForm"><textarea id="mailQuestion" rows="1" maxlength="1000" placeholder="Zeptej se na koncert, domluvu nebo nezodpovězený e-mail…" required></textarea><button class="primary-button" type="submit">Zeptat se</button></form><p class="mail-chat-note">U každé konkrétní informace můžeš otevřít zdrojový e-mail. Důležité údaje si vždy ověř.</p></section>
         </section>
 
         <section class="app-view" data-app-view="settings">
@@ -124,6 +124,6 @@
 
   <div id="printRoot" aria-hidden="true"></div>
   <div class="toast" id="appToast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=0.11.1"></script>
+  <script src="/app.js?v=0.12.0"></script>
 </body>
 </html>
