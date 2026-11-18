@@ -28,7 +28,7 @@ Klientské aplikace pouze čtou stav kapely ze serveru. Nákup z jedné platform
 
 ## Mailový agent
 
-Každá kapela může mít nejvýše dva Gmail účty. OAuth používá jen `gmail.readonly`; tokeny jsou šifrované a nikdy se neposílají do prohlížeče. První ručně spuštěná synchronizace vytvoří tenantově oddělený SQLite/FTS index, následné běhy každých pět minut používají Gmail History API. Připojení, synchronizaci a odpojení spravuje pouze vlastník kapely; chat může použít každý její člen.
+Každá kapela může mít nejvýše dva Gmail účty. OAuth používá jen `gmail.readonly`; tokeny jsou šifrované a nikdy se neposílají do prohlížeče. První ručně spuštěná synchronizace vytvoří tenantově oddělený SQLite/FTS index, následné běhy každých pět minut používají Gmail History API. Připojení, synchronizaci a odpojení spravuje pouze vlastník kapely; chat může použít každý její člen. Dlouhý import má omezené opakování jednotlivých požadavků a dvouhodinový checkpoint; po něm zachová postup a čeká na pokračování. Synchronizace nevolá OpenAI.
 
 Dotaz se nejdřív převede na záměr a rozšířené hledací výrazy s kontextem předchozí konverzace. Teprve potom server vybere relevantní vlákna a pošle modelu omezený důkazní kontext. Odpověď musí citovat zdrojové zprávy a bez důkazu informaci odmítnout doplnit. Denní limit dotazů je atomicky vedený podle `band_id`; výchozí hodnota je 50.
 

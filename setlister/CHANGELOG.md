@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.1
+
+- dočasné síťové chyby Gmailu včetně `Connection reset by peer`, timeoutů, rate limitů a chyb 5xx se automaticky opakují s omezeným počtem pokusů;
+- dlouhá prvotní synchronizace automaticky obnoví expirovaný Google access token a nemá krátký timeout na celou schránku;
+- jeden běh má bezpečnostní limit dvě hodiny, po kterém zachová průběh a nabídne pokračování namísto nekonečného zpracování;
+- opakování po chybě naváže na již uložené zprávy, počet zpracovaných zpráv se průběžně aktualizuje;
+- restart doplňku uvolní osiřelý stav `syncing` a umožní bezpečné pokračování;
+- opravena chybějící hodnota Gmail `historyId`, která mohla shodit dokončení prvního importu;
+- Gmail synchronizace nevolá OpenAI a nemůže sama spotřebovávat AI tokeny.
+
 ## 0.12.0
 
 - veřejná aplikace na `app.setlister.cz` umí ke každé kapele připojit až dva Gmail účty s výhradně read-only oprávněním;

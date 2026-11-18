@@ -51,6 +51,9 @@ MAX_INDEXED_MESSAGES = 10_000
 MAX_PUBLIC_INDEXED_MESSAGES = 100_000
 GMAIL_MIN_REQUEST_INTERVAL_SECONDS = 0.25
 GMAIL_MAX_RETRIES = 7
+GMAIL_REQUEST_TIMEOUT_SECONDS = 60
+PUBLIC_SYNC_MAX_SECONDS = 2 * 60 * 60
+PUBLIC_SYNC_PROGRESS_INTERVAL = 50
 CONCERT_SCAN_INTERVAL_SECONDS = 20
 CONCERT_INDEX_VERSION = "2"
 ADMIN_SESSION_SECONDS = 30 * 60
@@ -398,6 +401,10 @@ def initialize_database() -> None:
         ):
             if name not in connection_columns:
                 database.execute(f"ALTER TABLE public_gmail_connections ADD COLUMN {name} {definition}")
+        database.execute("""UPDATE public_gmail_connections
+            SET sync_state='error', sync_started_at=NULL,
+                last_sync_error='Synchronizace byla přerušená restartem Setlisteru. Spusť ji znovu.'
+            WHERE sync_state='syncing'""")
 
 
 def encryption_box() -> Fernet:
@@ -459,6 +466,8 @@ def form_request(url: str, data: dict[str, str]) -> dict[str, Any]:
             return json.loads(response.read().decode())
     except HTTPError as error:
         raise RuntimeError(f"OAuth odpověděl chybou {error.code}: {error.read().decode(errors='replace')[:1000]}") from error
+    except (URLError, TimeoutError) as error:
+        raise RuntimeError(f"OAuth služba není dostupná: {error}") from error
 
 
 def b64url_decode(value: str) -> bytes:
@@ -513,13 +522,23 @@ def gmail_headers(payload: dict[str, Any]) -> dict[str, str]:
 
 
 def refresh_access_token(account: sqlite3.Row, options: dict[str, Any]) -> str:
-    response = form_request(GOOGLE_TOKEN_URL, {
-        "client_id": options["google_client_id"], "client_secret": options["google_client_secret"],
-        "refresh_token": decrypt_secret(account["encrypted_refresh_token"]), "grant_type": "refresh_token",
-    })
-    if not response.get("access_token"):
-        raise RuntimeError("Google nevrátil přístupový token.")
-    return str(response["access_token"])
+    for attempt in range(5):
+        try:
+            response = form_request(GOOGLE_TOKEN_URL, {
+                "client_id": options["google_client_id"], "client_secret": options["google_client_secret"],
+                "refresh_token": decrypt_secret(account["encrypted_refresh_token"]), "grant_type": "refresh_token",
+            })
+            if not response.get("access_token"):
+                raise RuntimeError("Google nevrátil přístupový token.")
+            return str(response["access_token"])
+        except RuntimeError as error:
+            detail = str(error).lower()
+            retryable = ("není dostupná" in detail or any(
+                f"chybou {code}" in detail for code in (429, 500, 502, 503, 504)))
+            if not retryable or attempt >= 4:
+                raise
+            time.sleep(min((2 ** attempt) + (secrets.randbelow(1000) / 1000), 16))
+    raise RuntimeError("Google přístupový token se nepodařilo obnovit.")
 
 
 def gmail_get(token: str, endpoint: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -535,19 +554,43 @@ def gmail_get(token: str, endpoint: str, params: dict[str, Any] | None = None) -
                 time.sleep(remaining)
             GMAIL_LAST_REQUEST_AT = time.monotonic()
         try:
-            return json_request(url, headers={"Authorization": f"Bearer {token}"})
+            return json_request(url, headers={"Authorization": f"Bearer {token}"},
+                                timeout=GMAIL_REQUEST_TIMEOUT_SECONDS)
         except RuntimeError as error:
             detail = str(error).lower()
             retryable = any(marker in detail for marker in (
                 "rate_limit_exceeded", "ratelimitexceeded", "userratelimitexceeded",
                 "quota exceeded", "quotaexceeded",
                 "chybou 429", "chybou 500", "chybou 502", "chybou 503", "chybou 504",
+                "vzdálená služba není dostupná", "connection reset", "timed out",
+                "temporarily unavailable", "remote end closed connection", "network is unreachable",
             ))
             if not retryable or attempt >= GMAIL_MAX_RETRIES:
                 raise
             delay = min((2 ** attempt) + (secrets.randbelow(1000) / 1000), 64)
             time.sleep(delay)
     raise RuntimeError("Gmail API se nepodařilo načíst.")
+
+
+def gmail_reader(account: sqlite3.Row, options: dict[str, Any]):
+    """Return a GET-only Gmail reader that renews an expired access token once."""
+    token = refresh_access_token(account, options)
+
+    def get(endpoint: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        nonlocal token
+        try:
+            return gmail_get(token, endpoint, params)
+        except RuntimeError as error:
+            if "chybou 401" not in str(error).lower():
+                raise
+            token = refresh_access_token(account, options)
+            return gmail_get(token, endpoint, params)
+
+    return get
+
+
+class PublicSyncPaused(RuntimeError):
+    """A safe checkpoint reached by a long initial public Gmail sync."""
 
 
 def gmail_sync_lock(account_email: str) -> threading.Lock:
@@ -614,14 +657,14 @@ def _sync_account(account_email: str, *, force_full: bool = False) -> None:
     if not account:
         return
     try:
-        token = refresh_access_token(account, options)
+        gmail = gmail_reader(account, options)
         history_id = None if force_full else account["history_id"]
         with connect_db() as database:
             if history_id:
                 try:
                     page_token, latest_history = "", history_id
                     while True:
-                        response = gmail_get(token, "history", {"startHistoryId": history_id,
+                        response = gmail("history", {"startHistoryId": history_id,
                             "maxResults": 500, "pageToken": page_token})
                         for event in response.get("history") or []:
                             latest_history = str(event.get("id") or latest_history)
@@ -630,7 +673,7 @@ def _sync_account(account_email: str, *, force_full: bool = False) -> None:
                                 message_id = (item.get("message") or {}).get("id")
                                 if message_id:
                                     upsert_gmail_message(database, account_email,
-                                                         gmail_get(token, f"messages/{message_id}", {"format": "full"}))
+                                                         gmail(f"messages/{message_id}", {"format": "full"}))
                                     database.commit()
                             for item in event.get("messagesDeleted") or []:
                                 message_id = (item.get("message") or {}).get("id")
@@ -651,7 +694,7 @@ def _sync_account(account_email: str, *, force_full: bool = False) -> None:
                     history_id = None
                     force_full = True
             if not history_id:
-                profile = gmail_get(token, "profile")
+                profile = gmail("profile")
                 baseline_history_id = str(profile.get("historyId") or "")
                 if force_full:
                     database.execute("DELETE FROM gmail_messages WHERE account_email=?", (account_email,))
@@ -661,13 +704,13 @@ def _sync_account(account_email: str, *, force_full: bool = False) -> None:
                     "SELECT message_id FROM gmail_messages WHERE account_email=?", (account_email,)).fetchall()}
                 page_token, fetched = "", 0
                 while fetched < MAX_INDEXED_MESSAGES:
-                    response = gmail_get(token, "messages", {"q": f"newer_than:{options['lookback_days']}d",
+                    response = gmail("messages", {"q": f"newer_than:{options['lookback_days']}d",
                         "maxResults": 500, "pageToken": page_token})
                     for item in response.get("messages") or []:
                         fetched += 1
                         if item["id"] not in existing_ids:
                             upsert_gmail_message(database, account_email,
-                                                 gmail_get(token, f"messages/{item['id']}", {"format": "full"}))
+                                                 gmail(f"messages/{item['id']}", {"format": "full"}))
                             # Never hold SQLite's writer lock while waiting for the next Gmail request.
                             database.commit()
                         if fetched >= MAX_INDEXED_MESSAGES:
@@ -676,9 +719,8 @@ def _sync_account(account_email: str, *, force_full: bool = False) -> None:
                     page_token = str(response.get("nextPageToken") or "")
                     if not page_token or fetched >= MAX_INDEXED_MESSAGES:
                         break
-                profile = gmail_get(token, "profile")
                 database.execute("UPDATE gmail_accounts SET history_id=?, last_sync_at=?, last_sync_error=NULL WHERE email=?",
-                                 (str(profile.get("historyId") or ""), utc_now(), account_email))
+                                 (baseline_history_id, utc_now(), account_email))
             count = database.execute("SELECT COUNT(*) AS count FROM gmail_messages WHERE account_email=?", (account_email,)).fetchone()["count"]
             database.execute("UPDATE gmail_accounts SET message_count=? WHERE email=?", (count, account_email))
             database.commit()
@@ -750,6 +792,15 @@ def sync_public_connection(connection_id: str, *, force_full: bool = False) -> N
 
 def _sync_public_connection(connection_id: str, *, force_full: bool = False) -> None:
     options = load_options()
+    deadline = time.monotonic() + PUBLIC_SYNC_MAX_SECONDS
+
+    def check_deadline() -> None:
+        if time.monotonic() >= deadline:
+            raise PublicSyncPaused(
+                "Synchronizace se po dvou hodinách bezpečně pozastavila. "
+                "Dosavadní průběh je uložený; tlačítkem Pokračovat navážeš."
+            )
+
     with connect_db() as database:
         connection = database.execute(
             "SELECT * FROM public_gmail_connections WHERE id=?", (connection_id,)).fetchone()
@@ -761,14 +812,15 @@ def _sync_public_connection(connection_id: str, *, force_full: bool = False) -> 
     if not connection:
         return
     try:
-        token = refresh_access_token(connection, options)
+        gmail = gmail_reader(connection, options)
         history_id = None if force_full else connection["history_id"]
         with connect_db() as database:
             if history_id:
                 try:
                     page_token, latest_history = "", str(history_id)
                     while True:
-                        response = gmail_get(token, "history", {"startHistoryId": history_id,
+                        check_deadline()
+                        response = gmail("history", {"startHistoryId": history_id,
                             "maxResults": 500, "pageToken": page_token})
                         for event in response.get("history") or []:
                             latest_history = str(event.get("id") or latest_history)
@@ -778,8 +830,9 @@ def _sync_public_connection(connection_id: str, *, force_full: bool = False) -> 
                             for item in changed:
                                 message_id = (item.get("message") or {}).get("id")
                                 if message_id:
+                                    check_deadline()
                                     upsert_public_gmail_message(database, connection,
-                                        gmail_get(token, f"messages/{message_id}", {"format": "full"}))
+                                        gmail(f"messages/{message_id}", {"format": "full"}))
                                     database.commit()
                             for item in event.get("messagesDeleted") or []:
                                 message_id = (item.get("message") or {}).get("id")
@@ -805,6 +858,9 @@ def _sync_public_connection(connection_id: str, *, force_full: bool = False) -> 
                     history_id = None
                     force_full = True
             if not history_id:
+                check_deadline()
+                profile = gmail("profile")
+                baseline_history_id = str(profile.get("historyId") or "")
                 if force_full:
                     database.execute("DELETE FROM public_gmail_messages WHERE connection_id=?", (connection_id,))
                     database.execute("""DELETE FROM public_gmail_messages_fts
@@ -814,12 +870,21 @@ def _sync_public_connection(connection_id: str, *, force_full: bool = False) -> 
                     "SELECT message_id FROM public_gmail_messages WHERE connection_id=?", (connection_id,))}
                 page_token, fetched = "", 0
                 while fetched < MAX_PUBLIC_INDEXED_MESSAGES:
-                    response = gmail_get(token, "messages", {"maxResults": 500, "pageToken": page_token})
+                    check_deadline()
+                    response = gmail("messages", {"maxResults": 500, "pageToken": page_token})
                     for item in response.get("messages") or []:
+                        check_deadline()
                         fetched += 1
                         if item["id"] not in existing_ids:
                             upsert_public_gmail_message(database, connection,
-                                gmail_get(token, f"messages/{item['id']}", {"format": "full"}))
+                                gmail(f"messages/{item['id']}", {"format": "full"}))
+                            database.commit()
+                        if fetched % PUBLIC_SYNC_PROGRESS_INTERVAL == 0:
+                            count = database.execute("""SELECT COUNT(*) AS count
+                                FROM public_gmail_messages WHERE connection_id=?""",
+                                (connection_id,)).fetchone()["count"]
+                            database.execute("""UPDATE public_gmail_connections
+                                SET message_count=? WHERE id=?""", (count, connection_id))
                             database.commit()
                         if fetched >= MAX_PUBLIC_INDEXED_MESSAGES:
                             break
@@ -837,10 +902,21 @@ def _sync_public_connection(connection_id: str, *, force_full: bool = False) -> 
             database.execute("UPDATE public_gmail_connections SET message_count=? WHERE id=?",
                              (count, connection_id))
             database.commit()
+    except PublicSyncPaused as error:
+        with connect_db() as database:
+            count = database.execute("""SELECT COUNT(*) AS count FROM public_gmail_messages
+                WHERE connection_id=?""", (connection_id,)).fetchone()["count"]
+            database.execute("""UPDATE public_gmail_connections SET sync_state='paused',
+                sync_started_at=NULL, last_sync_error=?, message_count=? WHERE id=?""",
+                (str(error), count, connection_id))
+            database.commit()
     except Exception as error:
         with connect_db() as database:
+            count = database.execute("""SELECT COUNT(*) AS count FROM public_gmail_messages
+                WHERE connection_id=?""", (connection_id,)).fetchone()["count"]
             database.execute("""UPDATE public_gmail_connections SET sync_state='error',
-                sync_started_at=NULL, last_sync_error=? WHERE id=?""", (str(error)[:1000], connection_id))
+                sync_started_at=NULL, last_sync_error=?, message_count=? WHERE id=?""",
+                (str(error)[:1000], count, connection_id))
             database.commit()
 
 
@@ -2090,7 +2166,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.12.0"
+    server_version = "Setlister/0.12.1"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -2520,7 +2596,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def public_oauth_result_page(title: str, message: str, success: bool) -> str:
         state = "success" if success else "error"
         return f'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>
-        <link rel="stylesheet" href="/styles.css?v=0.12.0"></head>
+        <link rel="stylesheet" href="/styles.css?v=0.12.1"></head>
         <body class="oauth-result {state}"><main><h1>{html.escape(title)}</h1><p>{html.escape(message)}</p><a href="/">Zpět do Setlisteru</a></main></body></html>'''
 
     def handle_oauth_callback(self, query: dict[str, list[str]]) -> None:

@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.12.0 · aktualizováno 18. 11. 2026
+> Stav specifikace: 0.12.1 · aktualizováno 18. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -266,9 +266,12 @@ Připojení je striktně Gmail read-only a maximálně dva účty na kapelu. Age
 1. OAuth žádá pouze scope `https://www.googleapis.com/auth/gmail.readonly`. Redirect URI produkčního webu je `https://app.setlister.cz/oauth/google/callback`.
 2. Po autorizaci se účet zobrazí ve stavu `awaiting_initial`. Uživatel výslovně stiskne „Načíst celou schránku“; teprve potom začne první import.
 3. První synchronizace zapíše až 100 000 zpráv do SQLite a vytvoří FTS5 index. Před stahováním si uloží výchozí Gmail `historyId`, aby následná inkrementální synchronizace zachytila i zprávy doručené během dlouhého prvního importu.
-4. Server každých pět minut použije Gmail History API a doplní nové/změněné zprávy nebo odstraní lokální kopie smazaných zpráv. Ruční tlačítko umí kontrolu spustit ihned.
-5. Každý záznam i každý FTS dotaz obsahuje `bandId`; backend před každou operací ověří členství. Zprávy dvou kapel nebo dvou odpojených účtů se nesmějí smíchat.
-6. Refresh token se ukládá šifrovaně na serveru a nikdy se neposílá webovému ani mobilnímu klientovi. Odpojení smaže lokální zprávy a jejich vyhledávací index; v Gmailu nic nemění.
+4. Synchronizace nemá krátký HTTP limit na celou schránku: API požadavek z UI pouze spustí background job a ihned vrátí `202`. Jednotlivý Gmail požadavek má 60sekundový timeout a nejvýše osm pokusů s exponenciální prodlevou. `Connection reset`, timeouty, Google 429 a dočasné chyby 5xx se automaticky opakují; access token se po 401 automaticky obnoví.
+5. Jeden background běh smí trvat nejvýše dvě hodiny. Potom se bezpečně přepne do stavu `paused`, zachová již načtené zprávy a klient nabídne „Pokračovat“. Opakování po chybě ani pokračování po limitu nesmí mazat uložený průběh. Po restartu server označí nedokončený stav jako obnovitelnou chybu místo nekonečného `syncing`.
+6. Stav průběžně zapisuje počet uložených zpráv. Samotná Gmail synchronizace nikdy nevolá OpenAI a nespotřebovává AI tokeny; AI se použije až po odeslání dotazu v chatu.
+7. Server každých pět minut použije Gmail History API a doplní nové/změněné zprávy nebo odstraní lokální kopie smazaných zpráv. Ruční tlačítko umí kontrolu spustit ihned.
+8. Každý záznam i každý FTS dotaz obsahuje `bandId`; backend před každou operací ověří členství. Zprávy dvou kapel nebo dvou odpojených účtů se nesmějí smíchat.
+9. Refresh token se ukládá šifrovaně na serveru a nikdy se neposílá webovému ani mobilnímu klientovi. Odpojení smaže lokální zprávy a jejich vyhledávací index; v Gmailu nic nemění.
 
 ### Pochopení dotazu a odpověď
 
