@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.11.0 · aktualizováno 18. 11. 2026
+> Stav specifikace: 0.11.1 · aktualizováno 18. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -44,7 +44,8 @@ Uživatel může být členem více kapel. Aktivní kapela se přepíná v hlavi
 - Po registraci uživatel založí kapelu nebo se připojí osmimístným pozvánkovým kódem.
 - Registrované účty a pódioví členové jsou dvě rozdílné věci.
 - Pódiového člena lze vytvořit, upravit a používat ve výtiscích bez jeho registrace.
-- Pódiový profil může být později propojen s registrovaným účtem pomocí `linkedUserId`.
+- Pódiový profil lze v jeho editaci propojit s registrovaným účtem pomocí `linkedUserId`. Roletka zobrazuje e-mail a jméno pouze účtů, které jsou členy aktivní kapely a nejsou propojené s jiným pódiovým profilem; aktuální propojení editovaného profilu zůstává v nabídce. Jeden účet smí být propojen nejvýše s jedním profilem a server kontroluje jak jedinečnost, tak členství účtu v dané kapele.
+- Samotné připojení registrovaného účtu ke kapele automaticky nevytváří nový pódiový profil. Uživatel nebo správce jej propojí s již založeným členem, například účet `honza@example.cz` s profilem „Honza“.
 - Vlastník může obnovit pozvánkový kód.
 - Předplatné patří k `bandId`, ne zařízení ani platformě. Platba na webu, App Storu či Google Play musí vytvořit stejné serverové oprávnění kapely.
 
@@ -241,7 +242,7 @@ Uživatel může jako vedoucí spustit právě skládaný set nebo libovolný ul
 - `liveSet.playedSongIds` uchovává unikátní skladby, které vedoucí během relace skutečně otevřel, v pořadí prvního navštívení. Po ukončení zůstane záznam v poslední relaci pro předvyplnění historie koncertu.
 - Po změně skladby se BPM metronomu předvyplní z dané skladby, pokud je uvedeno.
 - Názvy a pokyny používají stejné dědění nástroje, `customTitle`, kapodastr, preset, `printFields` a poznámku jako osobní výtisk.
-- Live karta zobrazuje globální i osobní `printFields` jako dvojici jejich skutečného `label` a `value`; nesmí používat matoucí obecné hlavičky „Kapela“ nebo „Moje“. Starší migrované pole bez názvu označí jako „Společný pokyn“, respektive „Můj pokyn“.
+- Live karta zobrazuje globální i osobní `printFields` jako dvojici jejich skutečného `label` a `value`; nesmí používat matoucí obecné hlavičky „Kapela“ nebo „Moje“. Starší nebo importované globální pole bez názvu označí jako „Pokyn pro všechny“, osobní pole bez názvu jako „Můj pokyn“.
 - Live obrazovka musí zabránit uspání displeje, pokud platforma nabízí Wake Lock / idle timer API; webový fallback může být omezen prohlížečem.
 
 ### Synchronizovaný metronom
@@ -336,6 +337,7 @@ Všechny POST/PUT požadavky posílej s `Content-Type: application/json`. Server
 11. Petr spustí set jako vedoucí a přejde na druhou skladbu; Viky do jedné sekundy uvidí tutéž skladbu, ale svoje vlastní pokyny, a sama nemůže společnou pozici změnit.
 12. Uživatel zamkne první skladbu, otevře chytré řazení, uvidí náhled energetického oblouku a snížení počtu změn; první skladba zůstane na místě i po potvrzení.
 13. Ke koncertu přiřadí uložený setlist, otevře jej jedním kliknutím, po koncertě upraví skutečné pořadí a v historii uvidí rozdíl oproti neměnnému původnímu plánu.
+14. Honza se registrovaným e-mailem připojí ke kapele; v editaci pódiového profilu „Honza“ lze jeho e-mail vybrat, po uložení zmizí z nabídek ostatních členů a server odmítne pokus o dvojí přiřazení.
 
 ## Aktuální omezení
 

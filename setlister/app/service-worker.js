@@ -1,6 +1,6 @@
 "use strict";
-const CACHE_NAME = "setlister-app-v0.11.0";
-const SHELL = ["/", "/styles.css?v=0.11.0", "/app.js?v=0.11.0", "/brand/logo-mark.svg", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
+const CACHE_NAME = "setlister-app-v0.11.1";
+const SHELL = ["/", "/styles.css?v=0.11.1", "/app.js?v=0.11.1", "/brand/logo-mark.svg", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 self.addEventListener("install", event => { event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener("activate", event => {
   event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith("setlister-app-") && key !== CACHE_NAME).map(key => caches.delete(key)))).then(() => self.clients.claim()));

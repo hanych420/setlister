@@ -1629,9 +1629,15 @@ def valid_public_state(value: object) -> bool:
     members = value.get("members") or []
     if not isinstance(members, list) or len(members) > 250:
         return False
+    linked_user_ids: set[str] = set()
     for member in members:
         if not isinstance(member, dict) or not str(member.get("id") or "") or not str(member.get("name") or ""):
             return False
+        linked_user_id = str(member.get("linkedUserId") or "")
+        if linked_user_id:
+            if linked_user_id in linked_user_ids:
+                return False
+            linked_user_ids.add(linked_user_id)
         instruments = member.get("instruments") or []
         if not isinstance(instruments, list) or len(instruments) > 50:
             return False
@@ -1692,7 +1698,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.11.0"
+    server_version = "Setlister/0.11.1"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -2460,6 +2466,16 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                         database.rollback()
                         self.send_json(HTTPStatus.FORBIDDEN, {"error": "K této kapele nemáš přístup."})
                         return
+                    linked_user_ids = {str(member.get("linkedUserId") or "")
+                                       for member in state.get("members") or [] if member.get("linkedUserId")}
+                    if linked_user_ids:
+                        band_user_ids = {row["user_id"] for row in database.execute(
+                            "SELECT user_id FROM public_band_members WHERE band_id=?", (band_id,)).fetchall()}
+                        if not linked_user_ids.issubset(band_user_ids):
+                            database.rollback()
+                            self.send_json(HTTPStatus.BAD_REQUEST,
+                                           {"error": "Propojený účet už do této kapely nepatří."})
+                            return
                     row = database.execute("SELECT revision FROM public_band_state WHERE band_id=?",
                                            (band_id,)).fetchone()
                     if not row:

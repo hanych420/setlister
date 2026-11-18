@@ -51,6 +51,7 @@
   const formPayload = form => Object.fromEntries(new FormData(form).entries());
   const instrumentById = id => INSTRUMENTS.find(item => item.id === id);
   const memberById = id => workspace?.state.members.find(member => member.id === id);
+  const accountById = id => workspace?.members.find(account => account.id === id);
   function memberInstrument(member, id) {
     return (member?.instruments || []).find(item => item.id === id) || instrumentById(id) || { id: id || "none", name: "Bez nástroje", kind: "none" };
   }
@@ -141,9 +142,6 @@
         const first = state.members[0]; song.memberDetails[first.id] = song.memberDetails[first.id] || { note: song.note || "", capo: Number(song.capo) || 0, instrumentId: first.defaultInstrumentId || "none" };
       }
       delete song.note; delete song.capo;
-    });
-    (workspace?.members || []).forEach(account => {
-      if (!state.members.some(member => member.linkedUserId === account.id)) state.members.push({ id: uid("member"), name: account.name, linkedUserId: account.id, instruments: [], defaultInstrumentId: "", vocals: false });
     });
     state.members.forEach(member => { member.instruments = Array.isArray(member.instruments) ? member.instruments : []; member.defaultInstrumentId = member.instruments.some(item => item.id === member.defaultInstrumentId) ? member.defaultInstrumentId : "none"; member.vocals = Boolean(member.vocals); });
     state.events = state.events.filter(event => event && event.id).map(event => ({ ...event, status: event.status === "completed" ? "completed" : "planned", checklist: Array.isArray(event.checklist) ? event.checklist.filter(item => item && item.label).map(item => ({ id: String(item.id || uid("check")), label: String(item.label).slice(0, 120), done: Boolean(item.done) })) : [], playedSongIds: Array.isArray(event.playedSongIds) ? event.playedSongIds.filter(id => state.songs.some(song => song.id === id)) : [], plannedSongIds: Array.isArray(event.plannedSongIds) ? event.plannedSongIds.filter(id => state.songs.some(song => song.id === id)) : [] }));
@@ -247,7 +245,7 @@
     elements.inviteCode.textContent = workspace.band.inviteCode; elements.settingsBandName.textContent = workspace.band.name;
     elements.memberList.replaceChildren(...workspace.state.members.map(member => {
       const row = document.createElement("div"); row.className = "member"; const info = document.createElement("div"); const name = document.createElement("strong"); name.textContent = member.name; const instruments = document.createElement("small"); const instrumentNames = member.instruments.map(item => item.name); instruments.textContent = [...instrumentNames, ...(member.vocals ? ["Zpěv"] : []), "Výchozí: " + memberInstrument(member, member.defaultInstrumentId || "none").name].join(" · "); info.append(name, instruments);
-      const status = document.createElement("span"); status.className = "member-status"; status.textContent = member.linkedUserId ? "má účet" : "bez účtu";
+      const status = document.createElement("span"); status.className = "member-status"; status.textContent = accountById(member.linkedUserId)?.email || "bez účtu";
       const actions = document.createElement("div"); actions.className = "row-actions"; actions.append(rowButton("✎", "Upravit člena", () => openMemberDialog(member.id)), rowButton("×", "Odstranit člena", () => deleteMember(member.id))); row.append(info, status, actions); return row;
     }));
     elements.rotateCode.hidden = workspace.membership.role !== "owner";
@@ -361,7 +359,7 @@
     const member = liveMember(); const detail = member ? songMemberDetail(song, member.id) : {}; const instrument = member ? memberInstrument(member, detail.instrumentId || member.defaultInstrumentId || "none") : null;
     elements.livePosition.textContent = (liveSongIndex + 1) + " / " + liveSongIds.length; elements.livePositionProgress.style.width = ((liveSongIndex + 1) / liveSongIds.length * 100) + "%"; elements.liveSongRole.textContent = song.role !== "standard" ? ROLE_LABELS[song.role] : song.album || "Skladba"; elements.liveSongTitle.textContent = detail.customTitle || song.title;
     const meta = [formatTime(song.seconds), song.bpm ? song.bpm + " BPM" : "BPM nezadané", "Energie " + song.energy]; elements.liveSongMeta.replaceChildren(...meta.map(text => { const span = document.createElement("span"); span.textContent = text; return span; }));
-    const instructions = []; if (instrument && instrument.kind !== "none") instructions.push({ label: "Nástroj", value: instrument.name }); if (instrument && ["guitar", "electric-guitar"].includes(instrument.kind) && Number(detail.capo)) instructions.push({ label: "Kapo", value: "K" + detail.capo }); if (instrument?.kind === "electric-guitar" && detail.preset) instructions.push({ label: "Preset", value: detail.preset }); normalizePrintFields(song.printFields).filter(field => field.value).forEach(field => instructions.push({ label: field.label || "Společný pokyn", value: field.value })); normalizePrintFields(detail.printFields).filter(field => field.value).forEach(field => instructions.push({ label: field.label || "Můj pokyn", value: field.value })); if (detail.note) instructions.push({ label: "Poznámka", value: detail.note });
+    const instructions = []; if (instrument && instrument.kind !== "none") instructions.push({ label: "Nástroj", value: instrument.name }); if (instrument && ["guitar", "electric-guitar"].includes(instrument.kind) && Number(detail.capo)) instructions.push({ label: "Kapo", value: "K" + detail.capo }); if (instrument?.kind === "electric-guitar" && detail.preset) instructions.push({ label: "Preset", value: detail.preset }); normalizePrintFields(song.printFields).filter(field => field.value).forEach(field => instructions.push({ label: field.label || "Pokyn pro všechny", value: field.value })); normalizePrintFields(detail.printFields).filter(field => field.value).forEach(field => instructions.push({ label: field.label || "Můj pokyn", value: field.value })); if (detail.note) instructions.push({ label: "Poznámka", value: detail.note });
     elements.liveInstructions.replaceChildren(...instructions.map(item => { const row = document.createElement("div"); const label = document.createElement("span"); label.textContent = item.label; const value = document.createElement("strong"); value.textContent = item.value; row.append(label, value); return row; })); if (!instructions.length) { const empty = document.createElement("p"); empty.textContent = "K této skladbě nemáš žádné osobní pokyny."; elements.liveInstructions.append(empty); }
     elements.livePrevious.disabled = !isLiveLeader() || liveSongIndex === 0; elements.liveNext.disabled = !isLiveLeader() || liveSongIndex === liveSongIds.length - 1; if (song.bpm) elements.liveBpm.value = String(song.bpm);
   }
@@ -441,6 +439,7 @@
   }
   function openMemberDialog(memberId = "") {
     const member = memberId ? memberById(memberId) : null; const form = elements.memberForm; form.reset(); form.elements.memberId.value = member?.id || ""; form.elements.name.value = member?.name || ""; form.elements.vocals.checked = Boolean(member?.vocals); elements.memberDialogTitle.textContent = member ? "Upravit " + member.name : "Přidat člena";
+    const assignedAccountIds = new Set(workspace.state.members.filter(item => item.id !== member?.id && item.linkedUserId).map(item => item.linkedUserId)); const availableAccounts = (workspace.members || []).filter(account => !assignedAccountIds.has(account.id)); elements.linkedUserSelect.replaceChildren(option("", "Bez propojeného účtu"), ...availableAccounts.map(account => option(account.id, account.email + " — " + account.name))); elements.linkedUserSelect.value = availableAccounts.some(account => account.id === member?.linkedUserId) ? member.linkedUserId : ""; enhanceSelect(elements.linkedUserSelect);
     memberDraftCustomInstruments = (member?.instruments || []).filter(item => item.kind === "custom").map(item => ({ ...item })); memberDraftSelectedIds = new Set((member?.instruments || []).map(item => item.id)); elements.defaultInstrumentSelect.dataset.preferred = member?.defaultInstrumentId || "none"; elements.customInstrumentInput.value = ""; renderMemberInstrumentChoices(); elements.memberDialog.showModal();
   }
   function updateDefaultInstrumentOptions() {
@@ -461,7 +460,7 @@
   }
   function saveMemberForm(form) {
     const payload = formPayload(form); const all = [...INSTRUMENTS, ...memberDraftCustomInstruments]; const checked = all.filter(item => memberDraftSelectedIds.has(item.id));
-    const existing = payload.memberId ? memberById(payload.memberId) : null; const member = existing || { id: uid("member"), linkedUserId: "" }; member.name = payload.name.trim(); member.instruments = checked.map(item => ({ ...item })); member.defaultInstrumentId = member.instruments.some(item => item.id === payload.defaultInstrumentId) ? payload.defaultInstrumentId : "none"; member.vocals = form.elements.vocals.checked;
+    const existing = payload.memberId ? memberById(payload.memberId) : null; const linkedUserId = payload.linkedUserId || ""; const duplicate = workspace.state.members.find(item => item.id !== existing?.id && item.linkedUserId === linkedUserId && linkedUserId); if (duplicate) { showToast("Tento e-mail už používá člen " + duplicate.name + "."); return; } if (linkedUserId && !accountById(linkedUserId)) { showToast("Vybraný účet už do kapely nepatří."); return; } const member = existing || { id: uid("member"), linkedUserId: "" }; member.name = payload.name.trim(); member.linkedUserId = linkedUserId; member.instruments = checked.map(item => ({ ...item })); member.defaultInstrumentId = member.instruments.some(item => item.id === payload.defaultInstrumentId) ? payload.defaultInstrumentId : "none"; member.vocals = form.elements.vocals.checked;
     const validInstrumentIds = new Set(["none", ...member.instruments.map(item => item.id)]); workspace.state.songs.forEach(song => { const detail = song.memberDetails?.[member.id]; if (detail && !validInstrumentIds.has(detail.instrumentId)) { detail.instrumentId = "none"; detail.capo = 0; detail.preset = ""; } });
     if (!existing) workspace.state.members.push(member); elements.memberDialog.close(); changed();
   }

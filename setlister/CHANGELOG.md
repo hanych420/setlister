@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.1
+
+- pódiového člena lze v nastavení propojit s registrovaným účtem kapely podle e-mailu;
+- výběr nabízí pouze účty aktivní kapely, které nejsou přiřazené jinému členovi, a server dvojí nebo cizí propojení odmítne;
+- nově připojený účet už automaticky nevytváří duplicitní pódiový profil;
+- seznam členů ukazuje propojený e-mail místo obecného textu „má účet“;
+- nepojmenovaný globální údaj v live režimu se nyní srozumitelně označuje jako „Pokyn pro všechny“.
+
 ## 0.11.0
 
 - přibyla sekce Koncerty s termínem, městem, místem, kompletní časovou osou dne, kontaktem, praktickou poznámkou a odškrtávacím checklistem;
