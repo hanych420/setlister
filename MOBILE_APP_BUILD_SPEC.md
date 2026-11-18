@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.8.3 · aktualizováno 17. 11. 2026
+> Stav specifikace: 0.9.0 · aktualizováno 18. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -71,14 +71,17 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
       "title": "Název",
       "album": "Album nebo singl",
       "seconds": 210,
+      "bpm": 128,
       "energy": 4,
       "role": "standard | opener | encore | closer",
+      "printTags": ["Hanych začíná", "Intro na klik"],
       "memberDetails": {
         "member-...": {
           "instrumentId": "electric-guitar",
           "customTitle": "Můj vlastní název",
           "capo": 0,
           "preset": "Crunch 04",
+          "printTags": ["FX 12"],
           "note": "V druhé sloce stáhnout volume"
         }
       }
@@ -102,6 +105,8 @@ Základní katalog: Bez nástroje, Akustická kytara, Elektrická kytara, Baskyt
 
 Člen může mít současně zvolený libovolný počet nástrojů. Výběr je vizuální sada nezávislých přepínačů, nikoli radio button. Vlastní nástroj se po Enteru nebo potvrzení vloží jako další zaškrtnutá možnost; lze jej odškrtnout i úplně odstranit. Po odstranění nástroje se osobní pokyny skladeb, které jej používaly, bezpečně přepnou na „Bez nástroje“ a zruší kapo i preset.
 
+Každý člen má explicitní `defaultInstrumentId`. Výchozí nástroj musí být jeden z jeho zvolených nástrojů, případně `none`. V osobních pokynech skladby je první volba „Výchozí — název nástroje“ a ukládá prázdný `instrumentId`; tím skladba vždy zdědí aktuální výchozí nástroj člena. Explicitně zvolený jiný nástroj výchozí hodnotu přepíše jen pro danou skladbu.
+
 - `capo` zobraz pouze pokud vybraný nástroj člena v dané skladbě má `kind` `guitar` nebo `electric-guitar`.
 - K0 se ve výtisku nevypisuje. K1–K12 ano.
 - `preset` zobraz pouze pro `kind: electric-guitar`.
@@ -111,7 +116,9 @@ Základní katalog: Bez nástroje, Akustická kytara, Elektrická kytara, Baskyt
 
 ## Repertoár
 
-Každá skladba má název, album, délku, energii 1–5 a roli. Role je běžná, otevírací, přídavková nebo závěrečná. Obecná skladba nemá globální kapodastr ani globální poznámku. Pokyny patří vždy konkrétnímu členovi.
+Každá skladba má název, album, délku, volitelné BPM 1–300, energii 1–5 a roli. Role je běžná, otevírací, přídavková nebo závěrečná. Obecná skladba nemá globální kapodastr ani globální poznámku. Pokyny patří vždy konkrétnímu členovi.
+
+Skladba může mít až osm krátkých globálních `printTags`, každý maximálně 32 znaků (např. „Hanych začíná“). Detail konkrétního člena může mít stejně omezené osobní `printTags` (např. „FX 12“ nebo „Drop D“). Globální i osobní štítky se zobrazují pouze na osobních výtiscích, nikoli na čistém setlistu.
 
 V detailu skladby zobraz sekci pro každého pódiového člena:
 
@@ -119,8 +126,15 @@ V detailu skladby zobraz sekci pro každého pódiového člena:
 - podmíněný kapodastr;
 - podmíněný zvuk/preset elektrické kytary;
 - soukromou pódiovou poznámku.
+- osobní krátké štítky pro tisk.
 
-Obecná editace skladby a osobní pokyny jsou dvě oddělené akce. Tužka upravuje pouze název, album, délku, energii a roli. Samostatná akce „Poznámky členů“ nejprve zvolí člena; výchozí je pódiový profil propojený s přihlášeným účtem. Osobní dialog obsahuje vlastní název skladby, nástroj, podmíněné kapo/preset a textovou poznámku.
+Obecná editace skladby a osobní pokyny jsou dvě oddělené akce. Tužka upravuje název, album, délku, BPM, energii, roli a globální štítky. Samostatná akce „Poznámky členů“ nejprve zvolí člena; výchozí je pódiový profil propojený s přihlášeným účtem. Osobní dialog obsahuje vlastní název skladby, zděděný nebo explicitní nástroj, podmíněné kapo/preset, osobní štítky a textovou poznámku.
+
+### Hromadný import repertoáru
+
+Uživatel může vložit tabulku z Excelu nebo nahrát UTF-8 CSV/TSV/TXT do 2 MB. Podporované sloupce jsou Název, Album, Délka, BPM, Energie, Role a Štítky; povinné jsou Název a platná Délka. Délka přijímá `m:ss` nebo sekundy, role české i interní názvy a více štítků se odděluje znakem `|` nebo čárkou. Jeden import zpracuje nejvýše 1000 řádků, celý repertoár nejvýše 3000 skladeb a duplicity podle normalizované dvojice název + album přeskočí. Klient nabízí stažení CSV šablony.
+
+Nevytahuj repertoár ze Spotify odkazu pomocí LLM ani scrapingu. Je to nespolehlivé, neposkytne důvěryhodné BPM a neodpovídá současným podmínkám Spotify pro komerční veřejnou aplikaci. Budoucí oficiální katalogový konektor musí být samostatný provider za feature flagem a aktivovat se až po získání písemného oprávnění poskytovatele.
 
 ## Skládání setlistu
 
@@ -142,7 +156,7 @@ Export je určen pro papír ležící na pódiu, proto je čitelnost důležitě
 - Uživatel zvolí, zda chce osobní setlisty členů, počet kopií pro každého člena, čisté setlisty a jejich libovolný počet.
 - Výchozí hodnoty: 1 kopie pro každého člena + 6 čistých kopií.
 - Čistý setlist obsahuje pouze názvy skladeb a malou hlavičku; žádné osobní údaje.
-- Osobní setlist má uprostřed tučný název skladby, vlevo kapodastr a vpravo změny nástroje, preset a poznámku.
+- Osobní setlist má uprostřed tučný název skladby, vlevo štítky kapodastru, BPM, globálních i osobních krátkých pokynů a vpravo změny nástroje, preset a delší poznámku.
 - Změna nástroje se uvede jen při skutečné změně oproti naposledy použitému nástroji.
 - Výchozí režim automaticky volí největší písmo, při kterém se obsah vejde na jednu A4. Uživatel může vynucení jedné stránky vypnout.
 - U malého počtu skladeb seznam vertikálně vystřeď.

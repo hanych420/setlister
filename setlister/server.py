@@ -1486,9 +1486,26 @@ def valid_public_state(value: object) -> bool:
             return False
         if len(str(song.get("title") or "")) > 120 or len(str(song.get("album") or "")) > 120:
             return False
+        try:
+            bpm = int(song.get("bpm") or 0)
+        except (TypeError, ValueError):
+            return False
+        if not 0 <= bpm <= 300:
+            return False
+        print_tags = song.get("printTags") or []
+        if not isinstance(print_tags, list) or len(print_tags) > 8 or any(len(str(tag)) > 32 for tag in print_tags):
+            return False
         details = song.get("memberDetails") or {}
         if not isinstance(details, dict) or len(details) > 250:
             return False
+        for detail in details.values():
+            if not isinstance(detail, dict):
+                return False
+            detail_tags = detail.get("printTags") or []
+            if not isinstance(detail_tags, list) or len(detail_tags) > 8 or any(len(str(tag)) > 32 for tag in detail_tags):
+                return False
+            if len(str(detail.get("customTitle") or "")) > 120 or len(str(detail.get("preset") or "")) > 80 or len(str(detail.get("note") or "")) > 500:
+                return False
     members = value.get("members") or []
     if not isinstance(members, list) or len(members) > 250:
         return False
@@ -1497,6 +1514,13 @@ def valid_public_state(value: object) -> bool:
             return False
         instruments = member.get("instruments") or []
         if not isinstance(instruments, list) or len(instruments) > 50:
+            return False
+        valid_instrument_ids = {"none"}
+        for instrument in instruments:
+            if not isinstance(instrument, dict) or not str(instrument.get("id") or "") or len(str(instrument.get("name") or "")) > 80:
+                return False
+            valid_instrument_ids.add(str(instrument.get("id")))
+        if str(member.get("defaultInstrumentId") or "none") not in valid_instrument_ids:
             return False
     profile = value.get("bandProfile") or {}
     if not isinstance(profile, dict):
@@ -1528,7 +1552,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.8.3"
+    server_version = "Setlister/0.9.0"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 

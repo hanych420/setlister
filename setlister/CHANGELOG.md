@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0
+
+- člen kapely má explicitně volitelný výchozí nástroj, který se automaticky použije u skladeb bez vlastní volby;
+- skladby podporují volitelné BPM a globální krátké štítky pro tisk;
+- každý člen může mít u skladby vlastní krátké štítky, například efekt, ladění nebo jiný pódiový pokyn;
+- osobní A4 zobrazuje kapodastr, BPM i vlastní štítky jako kompaktní odznaky vlevo; čisté výtisky zůstávají bez pokynů;
+- repertoár lze hromadně importovat vložením tabulky nebo nahráním CSV/TSV/TXT a stáhnout si hotovou šablonu;
+- import validuje délku a BPM, rozpozná české role a přeskočí duplicity.
+
 ## 0.8.3
 
 - po nahrání loga se otevře vlastní editor čtvercového výřezu;
