@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.1
+
+- live karta už vlastní pole neoznačuje matoucím obecným názvem „Kapela“ nebo „Moje“;
+- pojmenované pole zobrazuje přímo svůj název a hodnotu, například `Kdo začíná — Hanych`;
+- starší nepojmenované hodnoty jsou jasně označené jako společný nebo osobní pokyn.
+
 ## 0.10.0
 
 - hlavní šablona repertoáru je skutečný XLSX soubor, který lze otevřít v Excelu, Numbers i Google Tabulkách;

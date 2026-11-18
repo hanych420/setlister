@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.10.0 · aktualizováno 18. 11. 2026
+> Stav specifikace: 0.10.1 · aktualizováno 18. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -180,6 +180,7 @@ Uživatel může spustit právě skládaný set nebo libovolný uložený setlis
 - Swipe mění pouze lokální pozici člena; nemění uložené pořadí setlistu.
 - Po změně skladby se BPM metronomu předvyplní z dané skladby, pokud je uvedeno.
 - Názvy a pokyny používají stejné dědění nástroje, `customTitle`, kapodastr, preset, `printFields` a poznámku jako osobní výtisk.
+- Live karta zobrazuje globální i osobní `printFields` jako dvojici jejich skutečného `label` a `value`; nesmí používat matoucí obecné hlavičky „Kapela“ nebo „Moje“. Starší migrované pole bez názvu označí jako „Společný pokyn“, respektive „Můj pokyn“.
 - Live obrazovka musí zabránit uspání displeje, pokud platforma nabízí Wake Lock / idle timer API; webový fallback může být omezen prohlížečem.
 
 ### Synchronizovaný metronom
