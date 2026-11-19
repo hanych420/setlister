@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.4
+
+- Chat v Mailovém agentovi je nahoře, připojené schránky a přehled koncertů jsou ve sbalitelném panelu s vysvětlením využití OpenAI.
+- Roletky připravenosti se rozbalují uvnitř řádku. Chytrý plán zkoušky zůstává přehledem přímo ve Zkoušce.
+- Z vybraného dne v kalendáři lze založit koncert nebo vlastní zápis s předvyplněným datem.
+- Úkoly mají samostatná pole osoby a termínu, stabilní ovládání na mobilu a proklik na související koncert s časem hraní.
+- Checklist koncertu má části Organizace a Výbava. Organizace používá stejné položky jako Úkoly. Hotové jsou na konci.
+
 ## 0.12.3
 
 - Checklist je přímo na kartě koncertu a přidávání i odškrtávání položek funguje z agendy.

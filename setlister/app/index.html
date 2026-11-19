@@ -9,7 +9,7 @@
   <link rel="icon" href="/brand/logo-mark.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=0.12.3">
+  <link rel="stylesheet" href="/styles.css?v=0.12.4">
 </head>
 <body>
   <header class="app-header">
@@ -74,7 +74,7 @@
           </div>
           <div id="concertAgenda">
           <div id="nextEventSpotlight" class="event-spotlight"></div>
-          <section class="event-section"><div class="card-heading"><div><span>NADCHÁZEJÍCÍ</span><h2>Napříště hrajeme</h2></div></div><div id="upcomingEvents" class="event-grid"></div></section>
+          <section class="event-section"><div class="card-heading"><h2>Nadcházející koncerty</h2></div><div id="upcomingEvents" class="event-grid"></div></section>
           <section class="event-section"><div class="card-heading"><div><span>HISTORIE</span><h2>Odehrané koncerty</h2></div></div><div id="eventHistory" class="event-grid history-grid"></div></section>
           </div>
           <section id="bandCalendar" class="rehearsal-planner band-calendar" aria-labelledby="bandCalendarMonth" hidden>
@@ -90,7 +90,15 @@
             <div class="band-calendar-week" aria-hidden="true"><span>Po</span><span>Út</span><span>St</span><span>Čt</span><span>Pá</span><span>So</span><span>Ne</span></div>
             <div id="bandCalendarDays" class="band-calendar-days"></div>
             <div id="bandCalendarLegend" class="band-calendar-legend" aria-label="Barvy uživatelů"></div>
-            <section class="calendar-day-details" aria-labelledby="calendarDayHeading"><h3 id="calendarDayHeading"></h3><div id="calendarDayEntries"></div></section>
+            <section class="calendar-day-details" aria-labelledby="calendarDayHeading">
+              <div class="calendar-day-head"><h3 id="calendarDayHeading" tabindex="-1"></h3>
+                <div class="button-row">
+                  <button class="secondary-button compact" id="addConcertOnDay" type="button">Přidat koncert v tento den</button>
+                  <button class="quiet-button compact" id="addCalendarEntryOnDay" type="button">Přidat vlastní zápis</button>
+                </div>
+              </div>
+              <div id="calendarDayEntries"></div>
+            </section>
             <details class="calendar-subscribe" id="calendarSubscribe">
               <summary>Připojit Google nebo Apple Kalendář</summary>
               <p>Odběr obsahuje koncerty a sdílené zápisy kapely. Každý, kdo získá odkaz, je může číst. Odkaz můžeš kdykoli zrušit.</p>
@@ -123,7 +131,6 @@
             <div id="rehearsalPlanPreview" class="rehearsal-preview" hidden>
               <div class="planning-heading">
                 <div><h3>Plán zkoušky</h3><p id="rehearsalPlanSummary" role="status"></p></div>
-                <button class="secondary-button compact" id="saveRehearsalPlan" type="button">Uložit jako zkušební setlist</button>
               </div>
               <ol id="rehearsalPlanItems" class="rehearsal-rows"></ol>
             </div>
@@ -145,20 +152,27 @@
         </section>
 
         <section class="app-view" data-app-view="agent">
-          <header class="view-header"><div><p class="eyebrow">Pouze pro čtení</p><h1>Mailový agent</h1></div><span class="beta-pill">Read only</span></header>
-          <div class="agent-hero"><div><h2>Zeptej se na to, co už máte domluvené</h2><p>Připoj až dva kapelní Gmaily. Agent pochopí i nepřesný dotaz, najde související komunikaci a odpoví pouze z informací, které může doložit konkrétním e-mailem.</p></div><div class="agent-questions"><span>„V kolik máme být 23. 1. v Olomouci?“</span><span>„Nečeká někdo na fakturu?“</span><span>„Na co jsme zapomněli odpovědět?“</span></div></div>
-          <section class="mail-connection-card"><div class="mail-connection-heading"><div><p class="eyebrow">Kapelní schránky</p><h2>Propojené Gmaily</h2><p id="mailAgentStatus">Načítám stav připojení…</p></div><button class="primary-button" id="connectGmail" type="button">+ Připojit Gmail</button></div><div class="gmail-account-list" id="gmailAccountList"></div><div class="mail-safety"><strong>Nikdy neposílá, neupravuje ani nemaže e-maily.</strong><span>Setlister používá pouze oprávnění Gmail pro čtení. Po odpojení účtu odstraní jeho lokální index.</span></div></section>
-          <section class="mail-connection-card" aria-labelledby="concertIndexHeading">
-            <div class="mail-connection-heading">
-              <div>
-                <h2 id="concertIndexHeading">Evidence koncertů</h2>
-                <p id="concertIndexStatus" role="status">Načítám stav evidence…</p>
-              </div>
-              <button class="secondary-button" id="toggleConcertIndex" type="button" hidden>Zapnout evidenci</button>
-            </div>
-            <p class="mail-chat-note">Po zapnutí Setlister na pozadí posílá vybrané úryvky koncertní korespondence do OpenAI. Přehled je dostupný členům kapely.</p>
-          </section>
+          <header class="view-header mail-agent-header"><h1>Mailový agent</h1><span class="beta-pill">Pouze pro čtení</span></header>
           <section class="mail-chat-panel" id="mailChatPanel"><div class="mail-chat-heading"><div><p class="eyebrow">Ověřené odpovědi</p><h2>Co potřebuješ zjistit?</h2></div><span id="mailChatReadiness">Nejdřív dokonči synchronizaci</span></div><div class="mail-quick-prompts" id="mailQuickPrompts"><button type="button">Jaké potvrzené koncerty nás čekají?</button><button type="button">Čeká někdo na naši odpověď?</button><button type="button">Jsou odeslané všechny požadované faktury?</button></div><div class="mail-chat-messages" id="mailChatMessages"><article class="mail-message assistant"><span>A</span><p>Až bude schránka načtená, zeptej se vlastními slovy. Pokud odpověď v e-mailech nenajdu, řeknu to otevřeně.</p></article></div><form class="mail-composer" id="mailChatForm"><textarea id="mailQuestion" rows="1" maxlength="1000" placeholder="Zeptej se na koncert, domluvu nebo nezodpovězený e-mail…" required></textarea><button class="primary-button" type="submit">Zeptat se</button></form><p class="mail-chat-note">U každé konkrétní informace můžeš otevřít zdrojový e-mail. Důležité údaje si vždy ověř.</p></section>
+          <details id="mailAgentSetup" class="mail-agent-setup" open>
+            <summary><strong>Schránky a přehled koncertů</strong><span id="mailSetupSummary"></span></summary>
+            <section class="mail-connection-card">
+              <div class="mail-connection-heading">
+                <div><h2>Propojené Gmaily</h2><p id="mailAgentStatus">Načítám stav připojení…</p></div>
+                <button class="secondary-button compact" id="connectGmail" type="button">Připojit Gmail</button>
+              </div>
+              <div class="gmail-account-list" id="gmailAccountList"></div>
+              <p class="mail-chat-note">Schránky používá Setlister pouze ke čtení. Odpojení odstraní lokální index účtu.</p>
+            </section>
+            <section class="mail-connection-card" aria-labelledby="concertIndexHeading">
+              <div class="mail-connection-heading">
+                <div><h2 id="concertIndexHeading">Přehled koncertů z e-mailů</h2><p id="concertIndexStatus" role="status">Načítám stav přehledu…</p></div>
+                <button class="secondary-button compact" id="toggleConcertIndex" type="button" hidden>Zapnout přehled</button>
+              </div>
+              <p class="mail-explanation">Zapni ho pro otázky jako „Kde všude letos hrajeme?“ Setlister si průběžně ukládá potvrzené termíny, místa a změny i s odkazy na zdrojové zprávy. Přehled je dostupný členům kapely v chatu.</p>
+              <p class="mail-explanation">Vybrané úryvky koncertní korespondence se při zpracování posílají do OpenAI a čerpají kredity. Po pozastavení můžeš dál pokládat otázky ke konkrétním e-mailům.</p>
+            </section>
+          </details>
         </section>
 
         <section class="app-view" data-app-view="tasks">
@@ -169,13 +183,13 @@
               <label>Co je potřeba udělat<input id="taskTitle" name="title" maxlength="160" required placeholder="Např. Připravit příspěvek ke koncertu"></label>
               <label>Kategorie (volitelná)<input name="category" maxlength="40" placeholder="Např. Socky, Nakoupit nebo Vymyslet"></label>
               <label>Termín (volitelný)<input name="deadline" type="text" inputmode="numeric" placeholder="21. 1. 2027" maxlength="14"></label>
-              <label>Odpovídá<select id="taskAssignee" name="assigneeUserId"></select></label>
+              <label>Má na starost<select id="taskAssignee" name="assigneeUserId"></select></label>
               <button class="primary-button" id="saveTask" type="submit">Přidat úkol</button>
               <button class="quiet-button" id="cancelTaskEdit" type="button" hidden>Zrušit úpravu</button>
             </form>
             <div class="task-filters">
               <label>Kategorie<select id="taskCategoryFilter"></select></label>
-              <label>Stav<select id="taskStateFilter"><option value="open">Otevřené</option><option value="completed">Hotové</option><option value="all">Všechny</option></select></label>
+              <label>Stav<select id="taskStateFilter"><option value="all">Všechny</option><option value="open">Otevřené</option><option value="completed">Hotové</option></select></label>
             </div>
             <p id="taskSummary" class="section-help" role="status"></p>
             <ul id="taskList" class="task-list"></ul>
@@ -223,7 +237,7 @@
             <div class="event-calendar-days" id="eventCalendarDays"></div>
             <button class="quiet-button compact" id="eventCalendarToday" type="button">Dnes</button>
           </div>
-        </div><label>Město<input name="city" maxlength="100" required></label><label>Klub / místo<input name="venue" maxlength="120" required></label><label class="wide">Adresa<input name="address" maxlength="200" placeholder="Ulice, město"></label><label>Arrival<input name="arrival" inputmode="numeric" placeholder="15:30"></label><label>Load-in<input name="loadIn" inputmode="numeric" placeholder="16:00"></label><label>Zvukovka<input name="soundcheck" inputmode="numeric" placeholder="17:00"></label><label>Začátek koncertu<input name="showStart" inputmode="numeric" placeholder="20:00"></label><label>Konec koncertu<input name="showEnd" inputmode="numeric" placeholder="21:00"></label><label>Přiřazený setlist<select id="eventSetlist" name="setlistId"></select></label><label>Honorář<input name="feeAmount" inputmode="decimal" maxlength="14" placeholder="Např. 12 000"></label><label>Měna<select name="feeCurrency"><option value="CZK">CZK · Kč</option><option value="EUR">EUR · €</option><option value="GBP">GBP · £</option><option value="USD">USD · $</option><option value="PLN">PLN · zł</option><option value="CHF">CHF</option></select></label><label>Kontaktní osoba<input name="contactName" maxlength="100"></label><label>Telefon<input name="contactPhone" type="tel" maxlength="40"></label><label>Stav<select id="eventStatus" name="status"><option value="planned">Napříště</option><option value="completed">Odehráno</option></select></label><label class="wide">Praktická poznámka<textarea name="note" maxlength="800" rows="3" placeholder="Parkování, vstup do klubu nebo jiná domluva."></textarea></label><label class="wide">Checklist koncertu — jedna položka na řádek<textarea name="checklist" maxlength="1200" rows="4" placeholder="Merch\nNáhradní struny\nBanner"></textarea></label></div><section id="eventHistoryFields" class="history-fields" hidden><div class="card-heading"><div><span>SKUTEČNÝ PRŮBĚH</span><h3>Jak koncert dopadl</h3></div></div><div class="form-grid"><label>Skutečný začátek<input name="actualStart" inputmode="numeric" placeholder="20:08"></label><label>Skutečný konec<input name="actualEnd" inputmode="numeric" placeholder="21:02"></label><label>Jak set fungoval<select name="rating"><option value="0">Bez hodnocení</option><option value="1">1 / 5</option><option value="2">2 / 5</option><option value="3">3 / 5</option><option value="4">4 / 5</option><option value="5">5 / 5</option></select></label><label class="wide">Poznámka po koncertě<textarea name="performanceNote" maxlength="800" rows="3" placeholder="Co fungovalo, co příště změnit."></textarea></label></div><div class="played-editor"><div class="played-editor-head"><div><strong>Skutečně odehrané skladby</strong><small>Výchozí je přiřazený setlist. Skladby lze odebrat, přidat a přeskládat.</small></div><div><select id="eventPlayedSongSelect"></select><button class="secondary-button compact" id="addEventPlayedSong" type="button">Přidat</button></div></div><ol id="eventPlayedSongs" class="played-song-list"></ol></div></section><div class="dialog-actions"><button class="secondary-button" data-close-dialog="eventDialog" type="button">Zrušit</button><button class="primary-button" type="submit">Uložit koncert</button></div></form></dialog>
+        </div><label>Město<input name="city" maxlength="100" required></label><label>Klub / místo<input name="venue" maxlength="120" required></label><label class="wide">Adresa<input name="address" maxlength="200" placeholder="Ulice, město"></label><label>Arrival<input name="arrival" inputmode="numeric" placeholder="15:30"></label><label>Load-in<input name="loadIn" inputmode="numeric" placeholder="16:00"></label><label>Zvukovka<input name="soundcheck" inputmode="numeric" placeholder="17:00"></label><label>Začátek koncertu<input name="showStart" inputmode="numeric" placeholder="20:00"></label><label>Konec koncertu<input name="showEnd" inputmode="numeric" placeholder="21:00"></label><label>Přiřazený setlist<select id="eventSetlist" name="setlistId"></select></label><label>Honorář<input name="feeAmount" inputmode="decimal" maxlength="14" placeholder="Např. 12 000"></label><label>Měna<select name="feeCurrency"><option value="CZK">CZK · Kč</option><option value="EUR">EUR · €</option><option value="GBP">GBP · £</option><option value="USD">USD · $</option><option value="PLN">PLN · zł</option><option value="CHF">CHF</option></select></label><label>Kontaktní osoba<input name="contactName" maxlength="100"></label><label>Telefon<input name="contactPhone" type="tel" maxlength="40"></label><label>Stav<select id="eventStatus" name="status"><option value="planned">Naplánovaný</option><option value="completed">Odehráno</option></select></label><label class="wide">Praktická poznámka<textarea name="note" maxlength="800" rows="3" placeholder="Parkování, vstup do klubu nebo jiná domluva."></textarea></label><label class="wide">Výbava — jedna položka na řádek<textarea name="checklist" maxlength="1200" rows="4" placeholder="Merch\nNáhradní struny\nBanner"></textarea></label></div><section id="eventHistoryFields" class="history-fields" hidden><div class="card-heading"><div><span>SKUTEČNÝ PRŮBĚH</span><h3>Jak koncert dopadl</h3></div></div><div class="form-grid"><label>Skutečný začátek<input name="actualStart" inputmode="numeric" placeholder="20:08"></label><label>Skutečný konec<input name="actualEnd" inputmode="numeric" placeholder="21:02"></label><label>Jak set fungoval<select name="rating"><option value="0">Bez hodnocení</option><option value="1">1 / 5</option><option value="2">2 / 5</option><option value="3">3 / 5</option><option value="4">4 / 5</option><option value="5">5 / 5</option></select></label><label class="wide">Poznámka po koncertě<textarea name="performanceNote" maxlength="800" rows="3" placeholder="Co fungovalo, co příště změnit."></textarea></label></div><div class="played-editor"><div class="played-editor-head"><div><strong>Skutečně odehrané skladby</strong><small>Výchozí je přiřazený setlist. Skladby lze odebrat, přidat a přeskládat.</small></div><div><select id="eventPlayedSongSelect"></select><button class="secondary-button compact" id="addEventPlayedSong" type="button">Přidat</button></div></div><ol id="eventPlayedSongs" class="played-song-list"></ol></div></section><div class="dialog-actions"><button class="secondary-button" data-close-dialog="eventDialog" type="button">Zrušit</button><button class="primary-button" type="submit">Uložit koncert</button></div></form></dialog>
   <dialog id="calendarEntryDialog">
     <div class="dialog-heading"><h2 id="calendarEntryHeading">Vlastní zápis</h2><button data-close-dialog="calendarEntryDialog" aria-label="Zavřít" type="button">×</button></div>
     <form id="calendarEntryForm" class="dialog-form">
@@ -246,7 +260,7 @@
 
   <div id="printRoot" aria-hidden="true"></div>
   <div class="toast" id="appToast" role="status" aria-live="polite"></div>
-  <script src="/planning.js?v=0.12.3"></script>
-  <script src="/app.js?v=0.12.3"></script>
+  <script src="/planning.js?v=0.12.4"></script>
+  <script src="/app.js?v=0.12.4"></script>
 </body>
 </html>

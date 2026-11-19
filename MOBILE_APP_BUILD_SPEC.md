@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.12.3 · aktualizováno 19. 11. 2026
+> Stav specifikace: 0.12.4 · aktualizováno 19. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -141,7 +141,7 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
     { "id": "calendar-...", "userId": "usr_...", "title": "Dovolená", "startDate": "2027-02-01", "endDate": "2027-02-08" }
   ],
   "tasks": [
-    { "id": "task-...", "title": "Připravit příspěvek", "category": "Socky", "deadline": "2027-01-18", "assigneeUserId": "usr_...", "done": false }
+    { "id": "task-...", "title": "Připravit příspěvek", "category": "Socky", "deadline": "2027-01-18", "assigneeUserId": "usr_...", "done": false, "eventId": "event-..." }
   ]
 }
 ```
@@ -222,7 +222,7 @@ Koncert je kapelní provozní záznam, ne úložiště smluv. Obsahuje název, d
 - Ke koncertu se vybírá existující uložený setlist pomocí stabilního `setlistId`; jeho karta i zvýrazněný nejbližší koncert musí mít přímou akci, která setlist otevře v editoru.
 - Smazání uloženého setlistu bezpečně zruší jeho přiřazení u budoucích koncertů.
 - Nadcházející koncerty jsou řazené vzestupně podle data; odehrané sestupně.
-- Checklist je viditelný přímo na kartě i bez položek. Položky lze přidávat a odškrtávat na kartě. V editaci koncertu lze položky upravit nebo odebrat. Karta nejbližšího koncertu má proklik a souhrn hotových položek.
+- Checklist na kartě má části Organizace a Výbava. Organizace vytváří a zobrazuje přímo úkoly s `eventId`; obě obrazovky upravují stejný záznam. Z koncertu se k úkolu otevře jeho editace pro nastavení termínu a osoby. Výbava zůstává v `event.checklist`, včetně starších položek, které lze přesunout do Organizace se zachováním stavu. Dokončené položky jsou dole v obou částech. Karta nejbližšího koncertu má souhrn obou částí.
 - Datum koncertu používá vlastní přístupný měsíční kalendář začínající pondělím. Umožni výběr klávesami i dotykem, krok mezi měsíci a ruční zadání českého nebo ISO data. Protokol ukládá datum jako místní kalendářní den `YYYY-MM-DD`.
 - Honorář je volitelná částka `feeAmount` (prázdná hodnota `null` je odlišná od nuly) s měnou `feeCurrency` v ISO 4217. Zobrazuje se kapelním členům na kartě.
 - Akce „Zapsat jako odehrané“ přepne událost do historie. Uživatel zadá skutečný začátek/konec, hodnocení 1–5, poznámku a skutečné pořadí skladeb; skladby lze přidat, odebrat i přeskládat.
@@ -232,7 +232,7 @@ Koncert je kapelní provozní záznam, ne úložiště smluv. Obsahuje název, d
 
 ### Kapelní kalendář
 
-Přepínač Agenda / Kalendář zobrazí měsíční pohled s koncerty a sdílenými celodenními zápisy členů. Koncerty mají limetkovou barvu a členové barevné klíče podle kapelních účtů. Zobrazení dne obsahuje názvy i autora. Vlastní zápis má název, počáteční den a koncový den včetně. Účet může vytvářet, upravovat a mazat zápisy pod svým ID. Každý registrovaný člen kapely může její kalendář číst.
+Přepínač Agenda / Kalendář zobrazí měsíční pohled s koncerty a sdílenými celodenními zápisy členů. Koncerty mají limetkovou barvu a členové barevné klíče podle kapelních účtů. Po výběru dne nabídni přidání koncertu nebo vlastního zápisu s předvyplněným datem. Zobrazení dne obsahuje názvy, autora osobních zápisů a začátek hraní, pokud je vyplněný. Vlastní zápis má název, počáteční den a koncový den včetně. Účet může vytvářet, upravovat a mazat zápisy pod svým ID. Každý registrovaný člen kapely může její kalendář číst.
 
 Každý člen si může vytvořit nebo zrušit vlastní tajný odkaz k odběru kapelního kalendáře. Před vytvořením vysvětli, že odkaz může číst každý, kdo jej získá. Pro Apple poskytni otevření přes `webcal:` a pro Google kopírování HTTPS odkazu pro funkci Přidat pomocí adresy URL. Odběr vede z aplikace do externích kalendářů a jeho frekvenci určuje poskytovatel. Feed obsahuje název, termín a místo koncertů, plánovaný čas hraní, je-li zadán, a názvy sdílených zápisů se jménem člena. Honoráře, checklisty, e-maily a úkoly jsou pouze v Setlisteru.
 
@@ -240,7 +240,9 @@ Každý člen si může vytvořit nebo zrušit vlastní tajný odkaz k odběru k
 
 Titulek je povinný. Kategorie je volný text do 40 znaků a stávající kategorie se nabízejí jako filtr bez rozlišování velikosti písmen a diakritiky. `deadline` je lokální datum `YYYY-MM-DD` nebo prázdný řetězec. `assigneeUserId` ukazuje na skutečný účet v aktivní kapele, případně je prázdný. Kontrola `done` dovoluje úkol označit jako hotový a zase otevřít. Filtr zobrazuje otevřené, hotové nebo všechny úkoly.
 
-Budoucí iOS a Android klient přidá volitelná upozornění na úkoly přiřazené přihlášenému účtu. Při změně termínu připomínku přeplánuj a zruš ji při dokončení, smazání nebo přeřazení. Pro doručení i bez otevření aplikace použij serverové APNs/FCM registrace s výslovným souhlasem. Web 0.12.3 ukládá potřebná data a upozornění zatím neposílá.
+`eventId` je volitelné propojení na koncert téže kapely. U propojeného úkolu zobraz termín úkolu zvlášť od data a začátku hraní. Na kartě koncertu i v Úkolech ukládej dokončení do stejného `task.done`. Při smazání koncertu ponechej jeho úkoly a smaž jejich `eventId`. Výchozí filtr Úkolů zobrazuje vše s hotovými na konci. Část odpovědné osoby má název „Má na starost“.
+
+Budoucí iOS a Android klient přidá volitelná upozornění na úkoly přiřazené přihlášenému účtu. Při změně termínu připomínku přeplánuj a zruš ji při dokončení, smazání nebo přeřazení. Pro doručení i bez otevření aplikace použij serverové APNs/FCM registrace s výslovným souhlasem. Web ukládá potřebná data pro budoucí připomínky.
 
 ## Tisk a PDF
 
@@ -260,7 +262,7 @@ Export je určen pro papír ležící na pódiu, proto je čitelnost důležitě
 
 V sekci Zkouška je nad společným hraním „Chytrý plán zkoušky“. Kapela vidí připravenost jednotlivých pódiových členů ke skladbě. Výchozí je neutrální „Bez hodnocení“. Volby jsou připraveno, dopilovat nebo nenacvičeno. Přihlášený propojený člen hodnotí sebe, vlastník může zvolit libovolný pódiový profil. Karta koncertu s přiřazeným setlistem ukáže počet skladeb připravených všemi členy a otevře plán pro tento setlist.
 
-Plán vybírá z aktuálního setu, uloženého setlistu nebo celého repertoáru. Zadaný čas je 5 až 360 minut. Váha je 4 body za člena s nenacvičenou skladbou a 2 body za člena se stavem dopilovat. Při shodě rozhoduje počet nenacvičených, počet bez hodnocení a původní pořadí. Rozpočet se počítá z délky skladby a rezervy na procvičení, 3 minuty při nenacvičené skladbě, 2 při dopilování a 1 při neznámé připravenosti. Uveď odhadovaný čas a počet prioritních skladeb, které se nevešly. Plán lze uložit jako samostatný zkušební setlist pro živé hraní.
+Plán vybírá z aktuálního setu, uloženého setlistu nebo celého repertoáru. Zadaný čas je 5 až 360 minut. Váha je 4 body za člena s nenacvičenou skladbou a 2 body za člena se stavem dopilovat. Při shodě rozhoduje počet nenacvičených, počet bez hodnocení a původní pořadí. Rozpočet se počítá z délky skladby a rezervy na procvičení, 3 minuty při nenacvičené skladbě, 2 při dopilování a 1 při neznámé připravenosti. Uveď odhadovaný čas a počet prioritních skladeb, které se nevešly. Plán se zobrazuje jako náhled přímo ve Zkoušce.
 
 Uživatel může jako vedoucí spustit právě skládaný set nebo libovolný uložený setlist. Server uloží společnou aktivní skladbu pro `bandId` a všechny připojené klienty ji během nejvýše jedné sekundy převezmou. Live obrazovka má velký název aktuální skladby, pozici v setu, délku, BPM, energii a všechny společné i osobní pokyny pódiového profilu propojeného s přihlášeným účtem. Každý tedy sleduje stejnou skladbu, ale vidí svoje vlastní pokyny. Pokud účet nemá propojený profil, použije se první pódiový člen a UI to zřetelně uvede.
 
@@ -313,7 +315,7 @@ Kvůli nákladům je pro každou kapelu atomicky hlídaný denní limit dotazů;
 
 ### Evidence koncertů
 
-V Mailovém agentovi zobraz stav evidence a tlačítko „Zapnout evidenci“ / „Pozastavit evidenci“ pro vlastníka kapely. Před zapnutím je viditelná informace o zasílání vybraných úryvků koncertní korespondence do OpenAI. Evidence je ve výchozím stavu vypnutá. Po zapnutí server zpracuje již staženou poštu a poté znovu zpracuje jen vlákna s relevantní změnou. Strukturované Culter notifikace lze zpracovat lokálně. Ostatní kandidátní vlákna mohou využít OpenAI s limitem `public_concert_daily_threads` (výchozích 50 volání na kapelu za den) a společným limitem 200 volání za den na instalaci.
+Chat patří na začátek obrazovky. Panel „Schránky a přehled koncertů“ je pod ním a po prvním načtení schránky se ve výchozím stavu sbalí. V panelu zobraz stav a tlačítko „Zapnout přehled“ / „Pozastavit přehled“ pro vlastníka kapely. Před zapnutím vysvětli, že přehled podporuje souhrnné otázky a že zpracování vybraných úryvků koncertní korespondence v OpenAI čerpá kredity. Evidence je ve výchozím stavu vypnutá. Po zapnutí server zpracuje již staženou poštu a poté znovu zpracuje jen vlákna s relevantní změnou. Strukturované Culter notifikace lze zpracovat lokálně. Ostatní kandidátní vlákna mohou využít OpenAI s limitem `public_concert_daily_threads` (výchozích 50 volání na kapelu za den) a společným limitem 200 volání za den na instalaci.
 
 Server uchovává doložená fakta včetně zdrojové zprávy, citace a času. Potvrzené koncerty mají doložené konkrétní datum a stav. Rozpory bez výslovné změny si ponechávají oba zdroje. Přehledy termínů, měst, nejbližšího koncertu a změn sestavuje server z evidence. Navazující otázka zachovává rozsah či stav ze související konverzace. Detaily, faktury a čekající odpovědi čerpají z vyhledaných e-mailů. Hledání váží přesné fráze a předměty a umí použít prefix pro české skloňování.
 

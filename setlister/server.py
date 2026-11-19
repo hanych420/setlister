@@ -1949,8 +1949,9 @@ def public_concert_summary(band_id, plan):
         status = public_concerts.status(database, band_id)
         events = public_concerts.read_events(database, band_id) if status["enabled"] else []
     if not status["enabled"]:
-        return {"answer": "Pro souhrnný přehled zapni v Mailovém agentovi evidenci koncertů. "
-                          "Zapnout ji může vlastník kapely.", "sources": [], "concertIndex": status}
+        return {"answer": "Souhrnný přehled může vlastník kapely zapnout v Mailovém agentovi "
+                          "pod „Schránky a přehled koncertů“. Přehled ukládá doložené termíny a změny z e-mailů.",
+                "sources": [], "concertIndex": status}
 
     def iso_day(value):
         try:
@@ -2473,12 +2474,16 @@ def valid_public_state(value: object) -> bool:
     entries = value.get("calendarEntries", [])
     if not isinstance(tasks, list) or not isinstance(entries, list) or len(tasks) > 1000 or len(entries) > 1000:
         return False
+    event_ids = {str(event["id"]) for event in events}
     for task in tasks:
         if (not isinstance(task, dict) or not valid_id(task.get("id"))
                 or not valid_text(task.get("title"), 160) or not valid_text(task.get("category"), 40, optional=True)
                 or not valid_text(task.get("assigneeUserId"), 160, optional=True)
                 or not isinstance(task.get("done"), bool)
                 or (task.get("deadline") != "" and not band_calendar.valid_day(task.get("deadline")))):
+            return False
+        event_id = task.get("eventId", "")
+        if not isinstance(event_id, str) or (event_id and event_id not in event_ids):
             return False
     for entry in entries:
         if (not isinstance(entry, dict) or not valid_id(entry.get("id")) or not valid_id(entry.get("userId"))
@@ -2540,7 +2545,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.12.3"
+    server_version = "Setlister/0.12.4"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -3031,7 +3036,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def public_oauth_result_page(title: str, message: str, success: bool) -> str:
         state = "success" if success else "error"
         return f'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>
-        <link rel="stylesheet" href="/styles.css?v=0.12.3"></head>
+        <link rel="stylesheet" href="/styles.css?v=0.12.4"></head>
         <body class="oauth-result {state}"><main><h1>{html.escape(title)}</h1><p>{html.escape(message)}</p><a href="/">Zpět do Setlisteru</a></main></body></html>'''
 
     def handle_oauth_callback(self, query: dict[str, list[str]]) -> None:

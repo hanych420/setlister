@@ -60,3 +60,15 @@ class BandPlanningTests(unittest.TestCase):
                 self.assertFalse(server.valid_public_state(invalid))
         self.state["events"][0]["feeAmount"] = -1
         self.assertFalse(server.valid_public_state(self.state))
+
+    def test_concert_checklist_tasks_use_a_valid_event_link(self):
+        task = self.state["tasks"][0]
+        self.assertTrue(server.valid_public_state(self.state))
+        task["eventId"] = "gig"
+        self.assertTrue(server.valid_public_state(self.state))
+        task["done"] = True
+        self.assertTrue(server.valid_public_state(self.state))
+        self.state["events"].clear()
+        self.assertFalse(server.valid_public_state(self.state))
+        task.pop("eventId")
+        self.assertTrue(server.valid_public_state(self.state))
