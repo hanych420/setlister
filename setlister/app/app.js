@@ -27,7 +27,7 @@
   let songPrintFieldDraft = [];
   let notesPrintFieldDraft = [];
   let eventPlayedSongDraft = [];
-  let eventCalendarCursor = null;
+  let datePicker = null;
   let bandCalendarDate = new Date();
   let calendarFeedBand = "";
   let rehearsalPlanShown = false;
@@ -753,35 +753,52 @@
     changed();
     elements.taskTitle.focus();
   }
-  function closeEventCalendar(restoreFocus = false) {
-    elements.eventCalendar.hidden = true;
-    elements.eventCalendarToggle.setAttribute("aria-expanded", "false");
-    if (restoreFocus) elements.eventCalendarToggle.focus();
+  function openDatePicker(input, trigger, label) {
+    const selected = parseEventDate(input.value);
+    const fallback = parseEventDate(elements[input.dataset.dateFallback]?.value);
+    const start = selected || fallback;
+    datePicker = { input, trigger, cursor: start ? SetlisterPlanning.dateFromKey(start) : new Date() };
+    closeCustomSelects();
+    trigger.setAttribute("aria-expanded", "true");
+    elements.datePickerTitle.textContent = label;
+    renderDatePicker();
+    elements.datePickerDialog.showModal();
+    elements.datePickerDays.querySelector('[tabindex="0"]')?.focus();
   }
-  function chooseEventDate(day) {
-    elements.eventDateInput.value = formatEventDate(SetlisterPlanning.dateKey(day));
-    elements.eventDateInput.setCustomValidity("");
-    closeEventCalendar(true);
+  function chooseDate(day) {
+    const { input } = datePicker;
+    input.value = formatEventDate(SetlisterPlanning.dateKey(day));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    closeDatePicker();
   }
-  function renderEventCalendar(focusDay = false) {
-    const month = eventCalendarCursor.getMonth();
-    const year = eventCalendarCursor.getFullYear();
-    const selected = parseEventDate(elements.eventDateInput.value);
+  function closeDatePicker() {
+    const { trigger } = datePicker;
+    datePicker = null;
+    trigger.setAttribute("aria-expanded", "false");
+    elements.datePickerDialog.close();
+    trigger.focus();
+  }
+  function renderDatePicker(focusDay = false) {
+    const { input, cursor } = datePicker;
+    const month = cursor.getMonth();
+    const year = cursor.getFullYear();
+    const selected = parseEventDate(input.value);
     const today = SetlisterPlanning.dateKey(new Date());
-    const focusKey = SetlisterPlanning.dateKey(eventCalendarCursor);
+    const focusKey = SetlisterPlanning.dateKey(cursor);
     const fullFormatter = new Intl.DateTimeFormat("cs-CZ", {
       weekday: "long", day: "numeric", month: "long", year: "numeric",
     });
-    elements.eventCalendarMonth.textContent = new Intl.DateTimeFormat("cs-CZ", {
+    elements.datePickerMonth.textContent = new Intl.DateTimeFormat("cs-CZ", {
       month: "long", year: "numeric",
-    }).format(eventCalendarCursor);
-    elements.eventCalendarPrevious.disabled = year === 1900 && month === 0;
-    elements.eventCalendarNext.disabled = year === 9999 && month === 11;
+    }).format(cursor);
+    elements.datePickerPrevious.disabled = year === 1900 && month === 0;
+    elements.datePickerNext.disabled = year === 9999 && month === 11;
     let target;
-    const buttons = SetlisterPlanning.calendarDays(eventCalendarCursor).map(day => {
+    const buttons = SetlisterPlanning.calendarDays(cursor).map(day => {
       const key = SetlisterPlanning.dateKey(day);
-      const button = rowButton(String(day.getDate()), fullFormatter.format(day), () => chooseEventDate(day));
-      button.setAttribute("aria-label", fullFormatter.format(day));
+      const label = fullFormatter.format(day);
+      const button = rowButton(String(day.getDate()), label, () => chooseDate(day));
+      button.setAttribute("aria-label", label);
       button.setAttribute("aria-pressed", String(key === selected));
       if (key === today) button.setAttribute("aria-current", "date");
       button.classList.toggle("outside", day.getMonth() !== month);
@@ -794,28 +811,41 @@
         event.preventDefault();
         const next = new Date(day.getFullYear(), day.getMonth(), day.getDate() + offset);
         if (next.getFullYear() < 1900 || next.getFullYear() > 9999) return;
-        eventCalendarCursor = next;
-        renderEventCalendar(true);
+        datePicker.cursor = next;
+        renderDatePicker(true);
       });
       return button;
     });
-    elements.eventCalendarDays.replaceChildren(...buttons);
+    elements.datePickerDays.replaceChildren(...buttons);
     if (focusDay) target?.focus();
   }
-  function toggleEventCalendar() {
-    if (!elements.eventCalendar.hidden) return closeEventCalendar(true);
-    const selected = parseEventDate(elements.eventDateInput.value);
-    eventCalendarCursor = selected ? SetlisterPlanning.dateFromKey(selected) : new Date();
-    closeCustomSelects();
-    elements.eventCalendar.hidden = false;
-    elements.eventCalendarToggle.setAttribute("aria-expanded", "true");
-    renderEventCalendar(true);
-  }
-  function moveEventCalendarMonth(offset) {
-    const next = new Date(eventCalendarCursor.getFullYear(), eventCalendarCursor.getMonth() + offset, 1);
+  function moveDatePickerMonth(offset) {
+    const { cursor } = datePicker;
+    const next = new Date(cursor.getFullYear(), cursor.getMonth() + offset, 1);
     if (next.getFullYear() < 1900 || next.getFullYear() > 9999) return;
-    eventCalendarCursor = next;
-    renderEventCalendar();
+    datePicker.cursor = next;
+    renderDatePicker();
+    if (document.activeElement === document.body) elements.datePickerDays.querySelector('[tabindex="0"]')?.focus();
+  }
+  function setupDatePickers() {
+    for (const input of document.querySelectorAll("input[data-date-picker]")) {
+      const label = input.labels[0].textContent.trim();
+      const trigger = elements.datePickerButton.content.firstElementChild.cloneNode(true);
+      trigger.setAttribute("aria-label", "Vybrat datum – " + label);
+      trigger.addEventListener("click", () => openDatePicker(input, trigger, label));
+      const control = mailNode("div", "date-control");
+      input.before(control);
+      control.append(input, trigger);
+      input.addEventListener("input", () => input.setCustomValidity(""));
+    }
+    elements.datePickerPrevious.addEventListener("click", () => moveDatePickerMonth(-1));
+    elements.datePickerNext.addEventListener("click", () => moveDatePickerMonth(1));
+    elements.datePickerToday.addEventListener("click", () => chooseDate(new Date()));
+    elements.datePickerClose.addEventListener("click", closeDatePicker);
+    elements.datePickerDialog.addEventListener("cancel", event => {
+      event.preventDefault();
+      closeDatePicker();
+    });
   }
   const calendarPalette = ["#73c3ff", "#ff92ae", "#c1a6ff", "#ffba76", "#4fdcb7", "#f69cff", "#ffe382", "#abc4ff"];
   function calendarColor(userId) {
@@ -1111,7 +1141,7 @@
   }
   function toggleEventHistoryFields() { const completed = elements.eventStatus.value === "completed"; elements.eventHistoryFields.hidden = !completed; if (completed && !eventPlayedSongDraft.length) eventPlayedSongDraft = [...(savedSetlistById(elements.eventSetlist.value)?.songIds || [])]; renderEventPlayedSongs(); }
   function openEventDialog(eventId = "", forceCompleted = false, selectedDate = "") {
-    const event = workspace.state.events.find(item => item.id === eventId); const form = elements.eventForm; form.reset(); closeEventCalendar(); elements.eventDateInput.setCustomValidity(""); form.elements.eventId.value = event?.id || ""; form.elements.name.value = event?.name || ""; const eventDate = event?.date || selectedDate; form.elements.date.value = eventDate ? formatEventDate(eventDate) : ""; form.elements.feeAmount.value = event?.feeAmount ?? ""; form.elements.feeCurrency.value = event?.feeCurrency || "CZK"; enhanceSelect(form.elements.feeCurrency); ["city", "venue", "address", "arrival", "loadIn", "soundcheck", "showStart", "showEnd", "contactName", "contactPhone", "note", "actualStart", "actualEnd", "performanceNote"].forEach(key => { form.elements[key].value = event?.[key] || ""; }); form.elements.status.value = forceCompleted ? "completed" : event?.status || "planned"; form.elements.rating.value = String(event?.rating || 0); form.elements.checklist.value = (event?.checklist || []).map(item => item.label).join("\n"); refreshEventSetlistOptions(event?.setlistId || ""); eventPlayedSongDraft = [...(event?.playedSongIds || [])]; const matchingLiveSet = event?.setlistId && liveSession.liveSet?.setlistRef === "saved:" + event.setlistId ? liveSession.liveSet : null; if (forceCompleted && !eventPlayedSongDraft.length && matchingLiveSet?.playedSongIds?.length) eventPlayedSongDraft = [...matchingLiveSet.playedSongIds]; if ((forceCompleted || event?.status === "completed") && !eventPlayedSongDraft.length) eventPlayedSongDraft = [...(eventSetlist(event)?.songIds || [])]; elements.eventDialogTitle.textContent = event ? "Upravit koncert" : "Přidat koncert"; toggleEventHistoryFields(); enhanceSelect(elements.eventStatus); enhanceSelect(form.elements.rating); elements.eventDialog.showModal();
+    const event = workspace.state.events.find(item => item.id === eventId); const form = elements.eventForm; form.reset(); elements.eventDateInput.setCustomValidity(""); form.elements.eventId.value = event?.id || ""; form.elements.name.value = event?.name || ""; const eventDate = event?.date || selectedDate; form.elements.date.value = eventDate ? formatEventDate(eventDate) : ""; form.elements.feeAmount.value = event?.feeAmount ?? ""; form.elements.feeCurrency.value = event?.feeCurrency || "CZK"; enhanceSelect(form.elements.feeCurrency); ["city", "venue", "address", "arrival", "loadIn", "soundcheck", "showStart", "showEnd", "contactName", "contactPhone", "note", "actualStart", "actualEnd", "performanceNote"].forEach(key => { form.elements[key].value = event?.[key] || ""; }); form.elements.status.value = forceCompleted ? "completed" : event?.status || "planned"; form.elements.rating.value = String(event?.rating || 0); form.elements.checklist.value = (event?.checklist || []).map(item => item.label).join("\n"); refreshEventSetlistOptions(event?.setlistId || ""); eventPlayedSongDraft = [...(event?.playedSongIds || [])]; const matchingLiveSet = event?.setlistId && liveSession.liveSet?.setlistRef === "saved:" + event.setlistId ? liveSession.liveSet : null; if (forceCompleted && !eventPlayedSongDraft.length && matchingLiveSet?.playedSongIds?.length) eventPlayedSongDraft = [...matchingLiveSet.playedSongIds]; if ((forceCompleted || event?.status === "completed") && !eventPlayedSongDraft.length) eventPlayedSongDraft = [...(eventSetlist(event)?.songIds || [])]; elements.eventDialogTitle.textContent = event ? "Upravit koncert" : "Přidat koncert"; toggleEventHistoryFields(); enhanceSelect(elements.eventStatus); enhanceSelect(form.elements.rating); elements.eventDialog.showModal();
   }
   function saveEventForm(form) {
     const data = formPayload(form); const date = parseEventDate(data.date); if (!date) { elements.eventDateInput.setCustomValidity("Zadej platné datum nebo ho vyber v kalendáři."); elements.eventDateInput.reportValidity(); return; } const times = ["arrival", "loadIn", "soundcheck", "showStart", "showEnd", "actualStart", "actualEnd"]; for (const key of times) if (data[key] && !parseClock(data[key])) { showToast("Zkontroluj čas. Použij formát 16:30."); return; }
@@ -1280,7 +1310,7 @@
     elements.notesDialog.close(); changed(); showToast("Osobní pokyny pro " + member.name + " jsou uložené.");
   }
   function openMemberDialog(memberId = "") {
-    const member = memberId ? memberById(memberId) : null; const form = elements.memberForm; form.reset(); form.elements.memberId.value = member?.id || ""; form.elements.name.value = member?.name || ""; form.elements.vocals.checked = Boolean(member?.vocals); elements.memberDialogTitle.textContent = member ? "Upravit " + member.name : "Přidat člena";
+    const member = memberId ? memberById(memberId) : null; const form = elements.memberForm; form.reset(); form.elements.memberId.value = member?.id || ""; form.elements.name.value = member?.name || ""; form.elements.vocals.checked = Boolean(member?.vocals); form.elements.printBpm.checked = member?.printBpm === true; elements.memberDialogTitle.textContent = member ? "Upravit " + member.name : "Přidat člena";
     const assignedAccountIds = new Set(workspace.state.members.filter(item => item.id !== member?.id && item.linkedUserId).map(item => item.linkedUserId)); const availableAccounts = (workspace.members || []).filter(account => !assignedAccountIds.has(account.id)); elements.linkedUserSelect.replaceChildren(option("", "Bez propojeného účtu"), ...availableAccounts.map(account => option(account.id, account.email + " — " + account.name))); elements.linkedUserSelect.value = availableAccounts.some(account => account.id === member?.linkedUserId) ? member.linkedUserId : ""; enhanceSelect(elements.linkedUserSelect);
     memberDraftCustomInstruments = (member?.instruments || []).filter(item => item.kind === "custom").map(item => ({ ...item })); memberDraftSelectedIds = new Set((member?.instruments || []).map(item => item.id)); elements.defaultInstrumentSelect.dataset.preferred = member?.defaultInstrumentId || "none"; elements.customInstrumentInput.value = ""; renderMemberInstrumentChoices(); elements.memberDialog.showModal();
   }
@@ -1312,7 +1342,7 @@
   }
   function saveMemberForm(form) {
     const payload = formPayload(form); const all = [...INSTRUMENTS, ...memberDraftCustomInstruments]; const checked = all.filter(item => memberDraftSelectedIds.has(item.id));
-    const existing = payload.memberId ? memberById(payload.memberId) : null; const linkedUserId = payload.linkedUserId || ""; const duplicate = workspace.state.members.find(item => item.id !== existing?.id && item.linkedUserId === linkedUserId && linkedUserId); if (duplicate) { showToast("Tento e-mail už používá člen " + duplicate.name + "."); return; } if (linkedUserId && !accountById(linkedUserId)) { showToast("Vybraný účet už do kapely nepatří."); return; } const member = existing || { id: uid("member"), linkedUserId: "" }; member.name = payload.name.trim(); member.linkedUserId = linkedUserId; member.instruments = checked.map(item => ({ ...item })); member.defaultInstrumentId = member.instruments.some(item => item.id === payload.defaultInstrumentId) ? payload.defaultInstrumentId : "none"; member.vocals = form.elements.vocals.checked;
+    const existing = payload.memberId ? memberById(payload.memberId) : null; const linkedUserId = payload.linkedUserId || ""; const duplicate = workspace.state.members.find(item => item.id !== existing?.id && item.linkedUserId === linkedUserId && linkedUserId); if (duplicate) { showToast("Tento e-mail už používá člen " + duplicate.name + "."); return; } if (linkedUserId && !accountById(linkedUserId)) { showToast("Vybraný účet už do kapely nepatří."); return; } const member = existing || { id: uid("member"), linkedUserId: "" }; member.name = payload.name.trim(); member.linkedUserId = linkedUserId; member.instruments = checked.map(item => ({ ...item })); member.defaultInstrumentId = member.instruments.some(item => item.id === payload.defaultInstrumentId) ? payload.defaultInstrumentId : "none"; member.vocals = form.elements.vocals.checked; member.printBpm = form.elements.printBpm.checked;
     const validInstrumentIds = new Set(["", "none", ...member.instruments.map(item => item.id)]); workspace.state.songs.forEach(song => { const detail = song.memberDetails?.[member.id]; if (detail && !validInstrumentIds.has(detail.instrumentId || "")) { detail.instrumentId = "none"; detail.capo = 0; detail.manualTuning = false; detail.preset = ""; } });
     if (!existing) workspace.state.members.push(member); elements.memberDialog.close(); changed();
   }
@@ -1325,47 +1355,140 @@
   function updateExportSummary() {
     const form = elements.exportForm; const memberPages = form.elements.memberPages.checked ? workspace.state.members.length * Math.max(1, Number(form.elements.memberCopies.value) || 1) : 0; const cleanPages = form.elements.cleanPages.checked ? Math.max(0, Number(form.elements.cleanCopies.value) || 0) : 0; elements.exportSummary.textContent = "Připraveno přibližně " + (memberPages + cleanPages) + " výtisků. V tiskovém dialogu lze zvolit tiskárnu nebo Uložit jako PDF.";
   }
-  function buildPrintPage(member, onePage, clean = false) {
+  function printSongSides(song, detail, instrument, printBpm) {
+    const left = mailNode("div", "print-side print-left");
+    const right = mailNode("div", "print-side print-right");
+    const leftTags = usesCapo(instrument) && Number(detail.capo) ? ["K" + detail.capo] : [];
+    const rightTags = instrument.kind === "electric-guitar" && detail.preset ? [detail.preset] : [];
+    const fields = [...printFieldTexts(detail.printFields), ...printFieldTexts(song.printFields)];
+    if (printBpm && song.bpm) fields.push(song.bpm + " BPM");
+    const tagWidth = text => Math.min(32, text.length) + 4;
+    let leftWidth = leftTags.reduce((width, text) => width + tagWidth(text), 0);
+    let rightWidth = rightTags.reduce((width, text) => width + tagWidth(text), 0);
+    if (detail.note) rightWidth += Math.min(32, detail.note.length);
+
+    for (const text of fields) {
+      if (leftWidth <= rightWidth) {
+        leftTags.push(text);
+        leftWidth += tagWidth(text);
+      } else {
+        rightTags.push(text);
+        rightWidth += tagWidth(text);
+      }
+    }
+
+    left.append(...leftTags.map(text => mailNode("span", "print-tag", text)));
+    right.append(...rightTags.map(text => mailNode("span", "print-tag", text)));
+    if (detail.note) right.append(mailNode("span", "print-note", detail.note));
+    return { left, right };
+  }
+  function buildPrintPage(member, onePage) {
     const draft = workspace.state.draft;
     const entries = setlistEntries(draft);
     const songsById = new Map(workspace.state.songs.map(song => [song.id, song]));
     const tuning = SetlisterPlanning.tuningPlan(draft.songIds.map(id => songsById.get(id)), member, memberInstrument);
-    const page = document.createElement("section");
-    page.className = "print-page" + (onePage ? " one-page" : " flow-page");
-    const header = document.createElement("header"); const logo = bandLogo(); if (logo) { const img = document.createElement("img"); img.src = logo; img.alt = ""; header.append(img); } const headerText = document.createElement("div"); const name = document.createElement("strong"); name.textContent = workspace.state.draft.name; const owner = document.createElement("span"); owner.textContent = clean ? "Čistý setlist" : member.name; headerText.append(name, owner); header.append(headerText); page.append(header);
-    const list = document.createElement("ol"); list.className = "print-set"; let previousInstrument = member ? member.defaultInstrumentId || "none" : "none"; let lineWeight = 0;
+    const page = mailNode("section", "print-page " + (onePage ? "one-page" : "flow-page"));
+    page.style.setProperty("--print-size", member ? "23px" : "28px");
+
+    const header = document.createElement("header");
+    const logo = bandLogo();
+    if (logo) {
+      const img = document.createElement("img");
+      img.src = logo;
+      img.alt = "";
+      header.append(img);
+    }
+    const heading = document.createElement("div");
+    heading.append(mailNode("strong", "", draft.name), mailNode("span", "", member?.name || "Čistý setlist"));
+    header.append(heading);
+    const list = mailNode("ol", "print-set");
+    let previousInstrument = member?.defaultInstrumentId || "none";
     let songIndex = 0;
-    entries.forEach(entry => {
+
+    for (const entry of entries) {
       if (entry.kind === "interlude") {
         const text = entry.seconds ? entry.title + " · " + formatTime(entry.seconds) : entry.title;
         const item = mailNode("li", "print-interlude");
         item.append(mailNode("strong", "", text));
         list.append(item);
-        lineWeight += .75;
-        return;
+        continue;
       }
+
       const song = songsById.get(entry.id);
       const cue = tuning[songIndex++];
-      const detail = member ? songMemberDetail(song, member.id) : {}; const instrument = member ? memberInstrument(member, detail.instrumentId || member.defaultInstrumentId || "none") : null; const instrumentChanged = member && instrument.id !== previousInstrument; const item = document.createElement("li");
-      const left = document.createElement("span"); left.className = "print-left"; const printTags = [];
-      if (member && usesCapo(instrument) && Number(detail.capo)) printTags.push("K" + detail.capo); if (member) printTags.push(...printFieldTexts(detail.printFields), ...printFieldTexts(song.printFields)); if (member && song.bpm) printTags.push(song.bpm + " BPM"); printTags.forEach(text => { const tag = document.createElement("i"); tag.textContent = text; left.append(tag); });
-      const title = document.createElement("strong"); title.textContent = clean ? song.title : detail.customTitle || song.title;
-      const right = document.createElement("span"); right.className = "print-right"; const instructions = [];
-      if (instrumentChanged) instructions.push("→ " + instrument.name); if (instrument?.kind === "electric-guitar" && detail.preset) instructions.push(detail.preset); if (detail.note) instructions.push(detail.note); right.textContent = clean ? "" : instructions.join(" · ");
-      const wrappedTagWeight = printTags.reduce((sum, text) => sum + Math.max(0, Math.ceil(text.length / 28) - 1) * .16, 0); if (cue) {
-        item.append(mailNode("span", "print-tuning", "Ladění · " + cue));
-        lineWeight += .65;
+      const item = document.createElement("li");
+      const detail = member ? songMemberDetail(song, member.id) : {};
+      const title = mailNode("strong", "print-song-title", detail.customTitle || song.title);
+      if (member) {
+        const instrument = memberInstrument(member, detail.instrumentId || member.defaultInstrumentId || "none");
+        const instrumentChanged = instrument.id !== previousInstrument;
+        previousInstrument = instrument.id;
+        if (instrumentChanged || cue) {
+          const transition = mailNode("div", "print-transition");
+          if (instrumentChanged) transition.append(mailNode("span", "print-instrument", "→ " + instrument.name));
+          if (cue) {
+            const tuningText = instrumentChanged && (cue === instrument.name || cue.startsWith(instrument.name + " · "))
+              ? cue.slice(instrument.name.length).trimStart() : "· " + cue;
+            transition.append(mailNode("span", "print-tuning", ["Ladění", tuningText].filter(Boolean).join(" ")));
+          }
+          item.append(transition);
+        }
+        const { left, right } = printSongSides(song, detail, instrument, member.printBpm === true);
+        if (left.hasChildNodes() || right.hasChildNodes()) {
+          item.append(left, title, right);
+          list.append(item);
+          continue;
+        }
       }
-      item.append(left, title, right); list.append(item); lineWeight += 1 + (right.textContent.length > 45 ? .45 : 0) + Math.max(0, printTags.length - 1) * .12 + wrappedTagWeight; previousInstrument = instrument?.id || previousInstrument;
-    });
-    const maxFont = clean ? 44 : 34; const minFont = clean ? 15 : 13; const estimated = Math.floor((clean ? 580 : 540) / Math.max(1, lineWeight)); page.style.setProperty("--print-size", (onePage ? Math.max(minFont, Math.min(maxFont, estimated)) : (clean ? 28 : 23)) + "px"); if (entries.length <= 12) list.classList.add("centered"); page.append(list); return page;
+      item.classList.add("print-title-only");
+      item.append(title);
+      list.append(item);
+    }
+
+    page.append(header, list);
+    return page;
+  }
+  function fitPrintPage(page) {
+    const targetHeight = parseFloat(getComputedStyle(page).minHeight);
+    let minimum = 14;
+    let maximum = 54;
+    let best = minimum;
+    while (minimum <= maximum) {
+      const size = Math.floor((minimum + maximum) / 2);
+      page.style.setProperty("--print-size", size + "px");
+      if (page.getBoundingClientRect().height <= targetHeight + .5) {
+        best = size;
+        minimum = size + 1;
+      } else {
+        maximum = size - 1;
+      }
+    }
+    page.style.setProperty("--print-size", best + "px");
+    if (page.getBoundingClientRect().height > targetHeight + .5) {
+      page.classList.replace("one-page", "flow-page");
+    }
   }
   function generatePrint(form) {
-    elements.printRoot.replaceChildren(); const onePage = form.elements.onePage.checked;
-    if (form.elements.memberPages.checked) workspace.state.members.forEach(member => { for (let copy = 0; copy < Math.max(1, Number(form.elements.memberCopies.value) || 1); copy += 1) elements.printRoot.append(buildPrintPage(member, onePage, false)); });
-    if (form.elements.cleanPages.checked) for (let copy = 0; copy < Math.max(0, Number(form.elements.cleanCopies.value) || 0); copy += 1) elements.printRoot.append(buildPrintPage(null, onePage, true));
-    if (!elements.printRoot.children.length) { showToast("Vyber alespoň jeden výtisk."); return; }
-    elements.exportDialog.close(); requestAnimationFrame(() => window.print());
+    const root = elements.printRoot;
+    root.replaceChildren();
+    const onePage = form.elements.onePage.checked;
+    const memberCopies = form.elements.memberPages.checked ? Math.max(1, Number(form.elements.memberCopies.value) || 1) : 0;
+    const cleanCopies = form.elements.cleanPages.checked ? Math.max(0, Number(form.elements.cleanCopies.value) || 0) : 0;
+    const members = memberCopies ? workspace.state.members : [];
+    const printJobs = members.map(member => ({ member, copies: memberCopies }));
+    if (cleanCopies) printJobs.push({ member: null, copies: cleanCopies });
+    if (!printJobs.length) { showToast("Vyber alespoň jeden výtisk."); return; }
+
+    root.classList.toggle("measuring-print", onePage);
+    for (const { member, copies } of printJobs) {
+      const page = buildPrintPage(member, onePage);
+      root.append(page);
+      if (onePage) fitPrintPage(page);
+      for (let copy = 1; copy < copies; copy += 1) root.append(page.cloneNode(true));
+    }
+    root.classList.remove("measuring-print");
+    elements.exportDialog.close();
+    requestAnimationFrame(() => window.print());
   }
   async function loadLogoImage(file) {
     if (!file || file.size > 5 * 1024 * 1024) throw new Error("Logo může mít nejvýše 5 MB.");
@@ -1472,24 +1595,7 @@
   elements.albumFilter.addEventListener("change", renderWorkspace); elements.energyFilter.addEventListener("change", renderWorkspace); elements.roleFilter.addEventListener("change", renderWorkspace);
   elements.smartOrderSet.addEventListener("click", openSmartOrderDialog); elements.applySmartOrder.addEventListener("click", () => { if (!smartOrderDraft.length) return; workspace.state.draft.songIds = [...smartOrderDraft]; elements.smartOrderDialog.close(); changed(); showToast("Návrh pořadí je použitý."); });
   elements.addEvent.addEventListener("click", () => openEventDialog()); elements.eventForm.addEventListener("submit", event => { event.preventDefault(); saveEventForm(event.currentTarget); }); elements.eventStatus.addEventListener("change", toggleEventHistoryFields); elements.eventSetlist.addEventListener("change", () => { if (elements.eventStatus.value === "completed") eventPlayedSongDraft = [...(savedSetlistById(elements.eventSetlist.value)?.songIds || [])]; renderEventPlayedSongs(); }); elements.addEventPlayedSong.addEventListener("click", () => { const id = elements.eventPlayedSongSelect.value; if (!id || eventPlayedSongDraft.includes(id)) return; eventPlayedSongDraft.push(id); renderEventPlayedSongs(); });
-  elements.eventCalendarToggle.addEventListener("click", toggleEventCalendar);
-  elements.eventCalendarPrevious.addEventListener("click", () => moveEventCalendarMonth(-1));
-  elements.eventCalendarNext.addEventListener("click", () => moveEventCalendarMonth(1));
-  elements.eventCalendarToday.addEventListener("click", () => chooseEventDate(new Date()));
-  elements.eventDateInput.addEventListener("input", () => {
-    elements.eventDateInput.setCustomValidity("");
-    if (!elements.eventCalendar.hidden) {
-      const selected = parseEventDate(elements.eventDateInput.value);
-      if (selected) eventCalendarCursor = SetlisterPlanning.dateFromKey(selected);
-      renderEventCalendar();
-    }
-  });
-  elements.eventDialog.addEventListener("cancel", event => {
-    if (!elements.eventCalendar.hidden) { event.preventDefault(); closeEventCalendar(true); }
-  });
-  elements.eventDialog.addEventListener("click", event => {
-    if (!elements.eventCalendar.hidden && !elements.eventDateField.contains(event.target)) closeEventCalendar();
-  });
+  setupDatePickers();
   elements.rehearsalForm.addEventListener("submit", event => {
     event.preventDefault(); rehearsalPlanShown = true; renderRehearsalPreview();
   });

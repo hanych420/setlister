@@ -2438,6 +2438,8 @@ def valid_public_state(value: object) -> bool:
     for member in members:
         if not isinstance(member, dict) or not str(member.get("id") or "") or not str(member.get("name") or ""):
             return False
+        if type(member.get("printBpm", False)) is not bool:
+            return False
         linked_user_id = str(member.get("linkedUserId") or "")
         if linked_user_id:
             if linked_user_id in linked_user_ids:
@@ -2562,7 +2564,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.12.5"
+    server_version = "Setlister/0.12.6"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -3053,7 +3055,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def public_oauth_result_page(title: str, message: str, success: bool) -> str:
         state = "success" if success else "error"
         return f'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>
-        <link rel="stylesheet" href="/styles.css?v=0.12.5"></head>
+        <link rel="stylesheet" href="/styles.css?v=0.12.6"></head>
         <body class="oauth-result {state}"><main><h1>{html.escape(title)}</h1><p>{html.escape(message)}</p><a href="/">Zpět do Setlisteru</a></main></body></html>'''
 
     def handle_oauth_callback(self, query: dict[str, list[str]]) -> None:

@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.12.5 · aktualizováno 19. 11. 2026
+> Stav specifikace: 0.12.6 · aktualizováno 19. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -68,7 +68,8 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
         { "id": "electric-guitar", "name": "Elektrická kytara", "kind": "electric-guitar" }
       ],
       "defaultInstrumentId": "acoustic-guitar",
-      "vocals": false
+      "vocals": false,
+      "printBpm": false
     }
   ],
   "songs": [
@@ -257,10 +258,13 @@ Export je určen pro papír ležící na pódiu, proto je čitelnost důležitě
 - Uživatel zvolí, zda chce osobní setlisty členů, počet kopií pro každého člena, čisté setlisty a jejich libovolný počet.
 - Výchozí hodnoty: 1 kopie pro každého člena + 6 čistých kopií.
 - Čistý setlist obsahuje názvy skladeb, pauzy a malou hlavičku. Osobní pokyny, kapo a ladění patří do osobních výtisků.
-- Osobní setlist má uprostřed tučný název skladby, vlevo štítky kapodastru, BPM, globálních i osobních krátkých pokynů a vpravo změny nástroje, preset a delší poznámku. Ladění je kompaktní samostatný řádek těsně nad příslušnou skladbou. Pauzy jsou menším písmem a zahrnují délku, pokud byla zadána.
+- Osobní setlist má uprostřed tučný název skladby. Kapo patří vlevo, preset a delší poznámka vpravo. Krátké společné i osobní štítky rozlož po obou stranách podle jejich délky. Na každé straně se řadí vodorovně a zalomí se až při nedostatku místa.
+- V editaci pódiového člena je volba „Tisknout BPM na osobním setlistu“. Ulož ji jako volitelný boolean `members[].printBpm`. Výchozí je false i u starších profilů. Zapnutá volba přidá štítek BPM u skladeb s vyplněnou hodnotou na výtisku tohoto člena. Metronom a BPM v aplikaci se touto volbou neřídí.
+- Změna nástroje a ladění patří do jednoho kompaktního řádku těsně před příslušnou skladbou. Když se týkají stejného nástroje, jeho název stačí uvést jednou. Přechodový pokyn drž na stejné stránce jako následující skladbu. Pauzy jsou menším písmem a zahrnují délku, pokud byla zadána.
 - Změna nástroje se uvede jen při skutečné změně oproti naposledy použitému nástroji.
 - Výchozí režim automaticky volí největší písmo, při kterém se obsah vejde na jednu A4. Uživatel může vynucení jedné stránky vypnout.
 - U malého počtu skladeb seznam vertikálně vystřeď.
+- Při tisku na jednu A4 vyber největší písmo podle skutečné výšky zalomených názvů, štítků a pokynů. Když se výtisk nevejde v čitelné velikosti, pokračuj na další stránce.
 - Výtisk může obsahovat malé logo kapely a název setlistu, ale hlavička nesmí zabírat podstatnou část stránky.
 
 ## Live zkouška
@@ -327,6 +331,10 @@ Server uchovává doložená fakta včetně zdrojové zprávy, citace a času. P
 `GET /api/app/gmail/status?bandId=…` obsahuje `concertIndex: { enabled, pending, failed, incompleteInboxes, asOf }`. Pole `enabled` je kvůli kompatibilitě vždy `true`. Klient nemá ovládání pro vypnutí. Přehledová odpověď z `/api/app/mail-agent/ask` vrací stejný stav a průběžné odkazy v textu. Zobraz upozornění na neúplnost, když schránka nebo evidence stále dobíhá.
 
 Soukromý `/propadleek` PropsBot zůstává samostatný prototyp a jeho endpointy ani data se ve veřejné aplikaci nepoužívají.
+
+## Výběr data
+
+Datum koncertu, termín úkolu a obě pole vlastního kalendářového zápisu mají vlastní kalendář s českými názvy dnů a měsíců, šipkami pro změnu měsíce a volbou Dnes. Každé datum lze také napsat do textového pole ve formátu `D. M. RRRR`. Web po kliknutí na ikonu otevírá stejný kalendář jako samostatný dialog a zachová hodnoty v rozepsaném formuláři. Na mobilu skládej pole Od a Do včetně pod sebe, pokud nemají dost místa vedle sebe. U nezadaného konce otevři kalendář na začátku rozsahu. Prázdné Do včetně při uložení znamená stejný den. API dál používá datum `YYYY-MM-DD`.
 
 ## Aktuální cloud a API
 

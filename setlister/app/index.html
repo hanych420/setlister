@@ -9,7 +9,7 @@
   <link rel="icon" href="/brand/logo-mark.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=0.12.5">
+  <link rel="stylesheet" href="/styles.css?v=0.12.6">
 </head>
 <body>
   <header class="app-header">
@@ -181,7 +181,7 @@
               <input type="hidden" name="taskId">
               <label>Co je potřeba udělat<input id="taskTitle" name="title" maxlength="160" required placeholder="Např. Připravit příspěvek ke koncertu"></label>
               <label>Kategorie (volitelná)<input name="category" maxlength="40" placeholder="Např. Socky, Nakoupit nebo Vymyslet"></label>
-              <label>Termín (volitelný)<input name="deadline" type="text" inputmode="numeric" placeholder="21. 1. 2027" maxlength="14"></label>
+              <div class="date-field"><label for="taskDeadline">Termín (volitelný)</label><input id="taskDeadline" name="deadline" type="text" data-date-picker autocomplete="off" placeholder="21. 1. 2027" maxlength="14"></div>
               <label>Má na starost<select id="taskAssignee" name="assigneeUserId"></select></label>
               <button class="primary-button" id="saveTask" type="submit">Přidat úkol</button>
               <button class="quiet-button" id="cancelTaskEdit" type="button" hidden>Zrušit úpravu</button>
@@ -214,41 +214,44 @@
 
   <dialog id="notesDialog" class="wide-dialog"><div class="dialog-heading"><div><p class="form-kicker">Osobní nastavení skladby</p><h2 id="notesDialogTitle">Poznámky členů</h2></div><button data-close-dialog="notesDialog" aria-label="Zavřít" type="button">×</button></div><form id="notesForm" class="dialog-form"><input type="hidden" name="songId"><label class="member-picker">Upravuji pokyny pro<select id="notesMemberSelect" name="memberId"></select></label><div class="personal-note-card"><div class="form-grid"><label>Vlastní název skladby<input id="notesCustomTitle" name="customTitle" maxlength="120" placeholder="Pokud ji člen zná pod jiným názvem"></label><label>Nástroj v této skladbě<select id="notesInstrument" name="instrumentId"></select></label><label id="notesCapoLabel">Kapodastr<select id="notesCapo" name="capo"></select></label><label id="notesPresetLabel">Zvuk / preset<input id="notesPreset" name="preset" maxlength="80"></label><label class="check-row wide" id="notesManualTuningLabel" hidden><input type="checkbox" id="notesManualTuning"> Připomenout ladění před skladbou</label><label class="wide">Vlastní poznámka<textarea id="notesText" name="note" maxlength="500" rows="4" placeholder="Jen pro osobní pohled a výtisk tohoto člena"></textarea></label></div><fieldset class="custom-fields"><legend>Moje vlastní štítky</legend><p class="field-help">Například „Efekt“, „Ladění“ nebo jiný krátký údaj jen pro tohoto člena.</p><div class="custom-field-entry"><input id="notesNewFieldLabel" maxlength="32" placeholder="Název štítku"><button id="addNotesPrintField" class="secondary-button" type="button">Přidat pole</button></div><div id="notesPrintFields" class="custom-field-list"></div></fieldset></div><div class="dialog-actions"><button class="secondary-button" data-close-dialog="notesDialog" type="button">Zrušit</button><button class="primary-button" type="submit">Uložit osobní pokyny</button></div></form></dialog>
 
-  <dialog id="memberDialog" class="member-dialog"><div class="dialog-heading"><div><p class="form-kicker">Pódiový profil</p><h2 id="memberDialogTitle">Přidat člena</h2></div><button data-close-dialog="memberDialog" aria-label="Zavřít" type="button">×</button></div><form id="memberForm" class="dialog-form"><input type="hidden" name="memberId"><label>Jméno<input name="name" maxlength="80" required></label><label>Propojený účet<select id="linkedUserSelect" name="linkedUserId"></select><small>V nabídce jsou pouze registrované e-maily této kapely, které nejsou propojené s jiným členem.</small></label><fieldset><legend>Nástroje</legend><p class="field-help">Vyber libovolný počet nástrojů. Opětovným kliknutím nástroj odebereš.</p><div class="instrument-grid" id="instrumentChoices"></div><div class="custom-instrument-entry"><input id="customInstrumentInput" maxlength="80" placeholder="Vlastní nástroj, např. mandolína"><button id="addCustomInstrument" class="secondary-button" type="button">Přidat</button></div><small>Vlastní nástroj přidáš také klávesou Enter.</small></fieldset><label>Výchozí nástroj<select id="defaultInstrumentSelect" name="defaultInstrumentId"></select><small>Automaticky se použije u skladeb, kde člen nemá vybraný jiný nástroj.</small></label><label class="check-row"><input name="vocals" type="checkbox"> Zpěv / vokály</label><div class="dialog-actions"><button class="secondary-button" data-close-dialog="memberDialog" type="button">Zrušit</button><button class="primary-button" type="submit">Uložit člena</button></div></form></dialog>
+  <dialog id="memberDialog" class="member-dialog"><div class="dialog-heading"><div><p class="form-kicker">Pódiový profil</p><h2 id="memberDialogTitle">Přidat člena</h2></div><button data-close-dialog="memberDialog" aria-label="Zavřít" type="button">×</button></div><form id="memberForm" class="dialog-form"><input type="hidden" name="memberId"><label>Jméno<input name="name" maxlength="80" required></label><label>Propojený účet<select id="linkedUserSelect" name="linkedUserId"></select><small>V nabídce jsou pouze registrované e-maily této kapely, které nejsou propojené s jiným členem.</small></label><fieldset><legend>Nástroje</legend><p class="field-help">Vyber libovolný počet nástrojů. Opětovným kliknutím nástroj odebereš.</p><div class="instrument-grid" id="instrumentChoices"></div><div class="custom-instrument-entry"><input id="customInstrumentInput" maxlength="80" placeholder="Vlastní nástroj, např. mandolína"><button id="addCustomInstrument" class="secondary-button" type="button">Přidat</button></div><small>Vlastní nástroj přidáš také klávesou Enter.</small></fieldset><label>Výchozí nástroj<select id="defaultInstrumentSelect" name="defaultInstrumentId"></select><small>Automaticky se použije u skladeb, kde člen nemá vybraný jiný nástroj.</small></label><label class="check-row"><input name="vocals" type="checkbox"> Zpěv / vokály</label><label class="check-row"><input name="printBpm" type="checkbox"> Tisknout BPM na osobním setlistu</label><div class="dialog-actions"><button class="secondary-button" data-close-dialog="memberDialog" type="button">Zrušit</button><button class="primary-button" type="submit">Uložit člena</button></div></form></dialog>
 
   <dialog id="bulkImportDialog" class="wide-dialog"><div class="dialog-heading"><div><p class="form-kicker">Rychlé naplnění repertoáru</p><h2>Hromadný import skladeb</h2></div><button data-close-dialog="bulkImportDialog" aria-label="Zavřít" type="button">×</button></div><form id="bulkImportForm" class="dialog-form"><p class="section-help">Nejjednodušší je stáhnout XLSX šablonu, vyplnit ji v Excelu nebo Google Tabulkách a nahrát zpět. Sloupce: Název, Album, Délka, BPM, Energie, Role a Štítky.</p><textarea id="bulkImportText" rows="8" spellcheck="false" placeholder="Sem můžeš také vložit zkopírované řádky z Excelu."></textarea><div class="bulk-import-actions"><label class="secondary-button file-button">Nahrát XLSX<input id="bulkImportFile" type="file" accept=".xlsx,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/tab-separated-values,text/plain"></label><button class="quiet-button" id="downloadImportTemplate" type="button">Stáhnout XLSX šablonu</button></div><p class="form-status import-status" id="bulkImportStatus" role="status" aria-live="polite"></p><div class="dialog-actions"><button class="secondary-button" data-close-dialog="bulkImportDialog" type="button">Zrušit</button><button class="primary-button" type="submit">Importovat skladby</button></div></form></dialog>
 
-  <dialog id="eventDialog" class="wide-dialog event-dialog"><div class="dialog-heading"><div><p class="form-kicker">Den koncertu</p><h2 id="eventDialogTitle">Přidat koncert</h2></div><button data-close-dialog="eventDialog" aria-label="Zavřít" type="button">×</button></div><form id="eventForm" class="dialog-form"><input type="hidden" name="eventId"><div class="form-grid event-form-grid"><label>Název koncertu<input name="name" maxlength="120" placeholder="Např. Roxy — Praha" required></label><div class="event-date-field" id="eventDateField">
+  <dialog id="eventDialog" class="wide-dialog event-dialog"><div class="dialog-heading"><div><p class="form-kicker">Den koncertu</p><h2 id="eventDialogTitle">Přidat koncert</h2></div><button data-close-dialog="eventDialog" aria-label="Zavřít" type="button">×</button></div><form id="eventForm" class="dialog-form"><input type="hidden" name="eventId"><div class="form-grid event-form-grid"><label>Název koncertu<input name="name" maxlength="120" placeholder="Např. Roxy — Praha" required></label><div class="date-field">
           <label for="eventDateInput">Datum koncertu</label>
-          <div class="event-date-control">
-            <input id="eventDateInput" name="date" type="text" inputmode="numeric" placeholder="21. 1. 2027" autocomplete="off" required>
-            <button id="eventCalendarToggle" type="button" aria-label="Vybrat datum v kalendáři" aria-controls="eventCalendar" aria-expanded="false">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4m8-4v4M3 10h18m-13 5h2m4 0h2"/></svg>
-            </button>
-          </div>
-          <div class="event-calendar" id="eventCalendar" role="group" aria-label="Kalendář koncertu" hidden>
-            <div class="event-calendar-header">
-              <button id="eventCalendarPrevious" aria-label="Předchozí měsíc" type="button">‹</button>
-              <strong id="eventCalendarMonth" aria-live="polite"></strong>
-              <button id="eventCalendarNext" aria-label="Další měsíc" type="button">›</button>
-            </div>
-            <div class="event-calendar-week" aria-hidden="true"><span>Po</span><span>Út</span><span>St</span><span>Čt</span><span>Pá</span><span>So</span><span>Ne</span></div>
-            <div class="event-calendar-days" id="eventCalendarDays"></div>
-            <button class="quiet-button compact" id="eventCalendarToday" type="button">Dnes</button>
-          </div>
+          <input id="eventDateInput" name="date" type="text" data-date-picker placeholder="21. 1. 2027" autocomplete="off" maxlength="14" required>
         </div><label>Město<input name="city" maxlength="100" required></label><label>Klub / místo<input name="venue" maxlength="120" required></label><label class="wide">Adresa<input name="address" maxlength="200" placeholder="Ulice, město"></label><label>Arrival<input name="arrival" inputmode="numeric" placeholder="15:30"></label><label>Load-in<input name="loadIn" inputmode="numeric" placeholder="16:00"></label><label>Zvukovka<input name="soundcheck" inputmode="numeric" placeholder="17:00"></label><label>Začátek koncertu<input name="showStart" inputmode="numeric" placeholder="20:00"></label><label>Konec koncertu<input name="showEnd" inputmode="numeric" placeholder="21:00"></label><label>Přiřazený setlist<select id="eventSetlist" name="setlistId"></select></label><label>Honorář<input name="feeAmount" inputmode="decimal" maxlength="14" placeholder="Např. 12 000"></label><label>Měna<select name="feeCurrency"><option value="CZK">CZK · Kč</option><option value="EUR">EUR · €</option><option value="GBP">GBP · £</option><option value="USD">USD · $</option><option value="PLN">PLN · zł</option><option value="CHF">CHF</option></select></label><label>Kontaktní osoba<input name="contactName" maxlength="100"></label><label>Telefon<input name="contactPhone" type="tel" maxlength="40"></label><label>Stav<select id="eventStatus" name="status"><option value="planned">Naplánovaný</option><option value="completed">Odehráno</option></select></label><label class="wide">Praktická poznámka<textarea name="note" maxlength="800" rows="3" placeholder="Parkování, vstup do klubu nebo jiná domluva."></textarea></label><label class="wide">Výbava — jedna položka na řádek<textarea name="checklist" maxlength="1200" rows="4" placeholder="Merch\nNáhradní struny\nBanner"></textarea></label></div><section id="eventHistoryFields" class="history-fields" hidden><div class="card-heading"><div><span>SKUTEČNÝ PRŮBĚH</span><h3>Jak koncert dopadl</h3></div></div><div class="form-grid"><label>Skutečný začátek<input name="actualStart" inputmode="numeric" placeholder="20:08"></label><label>Skutečný konec<input name="actualEnd" inputmode="numeric" placeholder="21:02"></label><label>Jak set fungoval<select name="rating"><option value="0">Bez hodnocení</option><option value="1">1 / 5</option><option value="2">2 / 5</option><option value="3">3 / 5</option><option value="4">4 / 5</option><option value="5">5 / 5</option></select></label><label class="wide">Poznámka po koncertě<textarea name="performanceNote" maxlength="800" rows="3" placeholder="Co fungovalo, co příště změnit."></textarea></label></div><div class="played-editor"><div class="played-editor-head"><div><strong>Skutečně odehrané skladby</strong><small>Výchozí je přiřazený setlist. Skladby lze odebrat, přidat a přeskládat.</small></div><div><select id="eventPlayedSongSelect"></select><button class="secondary-button compact" id="addEventPlayedSong" type="button">Přidat</button></div></div><ol id="eventPlayedSongs" class="played-song-list"></ol></div></section><div class="dialog-actions"><button class="secondary-button" data-close-dialog="eventDialog" type="button">Zrušit</button><button class="primary-button" type="submit">Uložit koncert</button></div></form></dialog>
   <dialog id="calendarEntryDialog">
     <div class="dialog-heading"><h2 id="calendarEntryHeading">Vlastní zápis</h2><button data-close-dialog="calendarEntryDialog" aria-label="Zavřít" type="button">×</button></div>
     <form id="calendarEntryForm" class="dialog-form">
       <input name="entryId" type="hidden">
       <label>Název<input name="title" required maxlength="120" placeholder="Např. Dovolená"></label>
-      <div class="form-grid">
-        <label>Od<input name="startDate" type="text" inputmode="numeric" required placeholder="21. 1. 2027"></label>
-        <label>Do včetně<input name="endDate" type="text" inputmode="numeric" placeholder="Stejný den"></label>
+      <div class="calendar-entry-dates">
+        <div class="date-field"><label for="calendarStartDate">Od</label><input id="calendarStartDate" name="startDate" type="text" data-date-picker autocomplete="off" maxlength="14" required placeholder="21. 1. 2027"></div>
+        <div class="date-field"><label for="calendarEndDate">Do včetně</label><input id="calendarEndDate" name="endDate" type="text" data-date-picker data-date-fallback="calendarStartDate" autocomplete="off" maxlength="14" placeholder="Stejný den"></div>
       </div>
       <p class="section-help">Zápis uvidí ostatní členové kapely a objeví se v připojených kalendářích.</p>
       <div class="dialog-actions"><button class="quiet-button" id="deleteCalendarEntry" type="button" hidden>Odstranit zápis</button><button class="primary-button" type="submit">Uložit zápis</button></div>
     </form>
+  </dialog>
+
+  <template id="datePickerButton">
+    <button type="button" aria-haspopup="dialog" aria-controls="datePickerDialog" aria-expanded="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4m8-4v4M3 10h18m-13 5h2m4 0h2"/></svg>
+    </button>
+  </template>
+
+  <dialog id="datePickerDialog" class="date-picker" aria-labelledby="datePickerTitle">
+    <div class="dialog-heading"><h2 id="datePickerTitle">Vybrat datum</h2><button id="datePickerClose" aria-label="Zavřít kalendář" type="button">×</button></div>
+    <div class="date-picker-header">
+      <button id="datePickerPrevious" aria-label="Předchozí měsíc" type="button">‹</button>
+      <strong id="datePickerMonth" aria-live="polite"></strong>
+      <button id="datePickerNext" aria-label="Další měsíc" type="button">›</button>
+    </div>
+    <div class="date-picker-week" aria-hidden="true"><span>Po</span><span>Út</span><span>St</span><span>Čt</span><span>Pá</span><span>So</span><span>Ne</span></div>
+    <div class="date-picker-days" id="datePickerDays"></div>
+    <button class="quiet-button compact" id="datePickerToday" type="button">Dnes</button>
   </dialog>
 
   <dialog id="interludeDialog" class="member-dialog">
@@ -270,7 +273,7 @@
 
   <div id="printRoot" aria-hidden="true"></div>
   <div class="toast" id="appToast" role="status" aria-live="polite"></div>
-  <script src="/planning.js?v=0.12.5"></script>
-  <script src="/app.js?v=0.12.5"></script>
+  <script src="/planning.js?v=0.12.6"></script>
+  <script src="/app.js?v=0.12.6"></script>
 </body>
 </html>

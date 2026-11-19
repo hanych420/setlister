@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.6
+
+- Datum koncertu, termín úkolu a obě data vlastního zápisu lze zadat ručně nebo vybrat ve stejném vlastním kalendáři. Pole rozsahu vlastního zápisu se už nepřekrývají.
+- Krátké štítky se v osobním výtisku rozkládají vedle názvu skladby na obě strany.
+- Změna nástroje je před skladbou ve stejném řádku jako ladění. BPM se tiskne jen členovi, který si jej povolí v profilu.
+- Při přizpůsobení na jednu A4 se velikost písma stanoví podle skutečně zalomeného obsahu.
+
 ## 0.12.5
 
 - Mailový agent tvoří přehled koncertů automaticky s limitem 50 volání OpenAI na kapelu za den a 200 na instalaci.
