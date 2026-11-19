@@ -1766,7 +1766,6 @@ def process_public_concert_thread() -> bool:
         job = database.execute("""
             SELECT t.*, g.band_id FROM public_concert_threads t
             JOIN public_gmail_connections g ON g.id=t.connection_id
-            JOIN public_concert_settings s ON s.band_id=g.band_id AND s.enabled=1
             WHERE t.revision!=t.processed_revision AND t.attempts<3 AND t.retry_after<=?
               AND g.last_sync_at IS NOT NULL AND g.sync_state='ready'
             ORDER BY t.retry_after, t.rowid LIMIT 1
@@ -1788,10 +1787,6 @@ def process_public_concert_thread() -> bool:
                 facts = public_concerts.validate_events(local, excerpts, messages)
             else:
                 with connect_db() as database:
-                    enabled = database.execute("SELECT enabled FROM public_concert_settings WHERE band_id=?",
-                                               (job["band_id"],)).fetchone()
-                    if not enabled or not enabled["enabled"]:
-                        return True
                     if not options["openai_api_key"] or not public_concerts.reserve(
                             database, job["band_id"], options["public_concert_daily_threads"], now):
                         database.execute("""UPDATE public_concert_threads SET retry_after=?
@@ -1947,11 +1942,7 @@ def public_concert_summary(band_id, plan):
         return None
     with connect_db() as database:
         status = public_concerts.status(database, band_id)
-        events = public_concerts.read_events(database, band_id) if status["enabled"] else []
-    if not status["enabled"]:
-        return {"answer": "Souhrnný přehled může vlastník kapely zapnout v Mailovém agentovi "
-                          "pod „Schránky a přehled koncertů“. Přehled ukládá doložené termíny a změny z e-mailů.",
-                "sources": [], "concertIndex": status}
+        events = public_concerts.read_events(database, band_id)
 
     def iso_day(value):
         try:
@@ -2346,9 +2337,31 @@ def public_default_state(owner: sqlite3.Row | None = None) -> dict[str, Any]:
     ]
     return {"version": 2, "bandProfile": {"logoDataUrl": ""}, "members": members, "songs": songs,
             "draft": {"name": "Nový koncert", "targetMinutes": 45,
-                      "songIds": ["sample-1", "sample-2"], "lockedSongIds": [],
+                      "songIds": ["sample-1", "sample-2"], "lockedSongIds": [], "interludes": [],
                       "viewerMemberId": owner_id if members else ""},
             "savedSetlists": [], "events": []}
+
+
+def valid_setlist_interludes(setlist: object) -> bool:
+    if not isinstance(setlist, dict) or not isinstance(setlist.get("songIds"), list):
+        return False
+    interludes = setlist.get("interludes", [])
+    if not isinstance(interludes, list) or len(interludes) > 50:
+        return False
+    song_count = len(setlist["songIds"])
+    ids = set()
+    for item in interludes:
+        if not isinstance(item, dict):
+            return False
+        item_id, title = item.get("id"), item.get("title")
+        position, seconds = item.get("position"), item.get("seconds")
+        if (not isinstance(item_id, str) or not 0 < len(item_id) <= 160 or item_id in ids
+                or not isinstance(title, str) or not title.strip() or len(title) > 120
+                or type(position) is not int or not 0 <= position <= song_count
+                or type(seconds) is not int or not 0 <= seconds <= 3600):
+            return False
+        ids.add(item_id)
+    return True
 
 
 def valid_public_state(value: object) -> bool:
@@ -2363,6 +2376,8 @@ def valid_public_state(value: object) -> bool:
     saved_setlists = value.get("savedSetlists") or []
     events = value.get("events") or []
     if len(songs) > 3000 or not isinstance(saved_setlists, list) or len(saved_setlists) > 1000:
+        return False
+    if not valid_setlist_interludes(draft) or not all(map(valid_setlist_interludes, saved_setlists)):
         return False
     if not isinstance(events, list) or len(events) > 2000:
         return False
@@ -2402,7 +2417,7 @@ def valid_public_state(value: object) -> bool:
         if not isinstance(details, dict) or len(details) > 250:
             return False
         for detail in details.values():
-            if not isinstance(detail, dict):
+            if not isinstance(detail, dict) or type(detail.get("manualTuning", False)) is not bool:
                 return False
             detail_tags = detail.get("printTags") or []
             if not isinstance(detail_tags, list) or len(detail_tags) > 8 or any(len(str(tag)) > 32 for tag in detail_tags):
@@ -2434,6 +2449,8 @@ def valid_public_state(value: object) -> bool:
         valid_instrument_ids = {"none"}
         for instrument in instruments:
             if not isinstance(instrument, dict) or not str(instrument.get("id") or "") or len(str(instrument.get("name") or "")) > 80:
+                return False
+            if type(instrument.get("usesCapo", False)) is not bool:
                 return False
             valid_instrument_ids.add(str(instrument.get("id")))
         if str(member.get("defaultInstrumentId") or "none") not in valid_instrument_ids:
@@ -2545,7 +2562,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.12.4"
+    server_version = "Setlister/0.12.5"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -3036,7 +3053,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def public_oauth_result_page(title: str, message: str, success: bool) -> str:
         state = "success" if success else "error"
         return f'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>
-        <link rel="stylesheet" href="/styles.css?v=0.12.4"></head>
+        <link rel="stylesheet" href="/styles.css?v=0.12.5"></head>
         <body class="oauth-result {state}"><main><h1>{html.escape(title)}</h1><p>{html.escape(message)}</p><a href="/">Zpět do Setlisteru</a></main></body></html>'''
 
     def handle_oauth_callback(self, query: dict[str, list[str]]) -> None:
@@ -3331,27 +3348,6 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                                      (connection_id, band_id))
                     database.commit()
                 self.send_json(HTTPStatus.OK, {"ok": True})
-            except ValueError as error:
-                self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
-            return
-        if path == "/api/app/mail-agent/concert-index":
-            try:
-                payload = self.read_json_body(4096)
-                band_id = str(payload.get("bandId") or "")
-                enabled = payload.get("enabled")
-                if not isinstance(enabled, bool):
-                    raise ValueError("Vyber, zda chceš evidenci povolit.")
-                with connect_db() as database:
-                    membership = public_membership(database, user["id"], band_id)
-                    if not membership or membership["role"] != "owner":
-                        self.send_json(HTTPStatus.FORBIDDEN, {"error": "Evidenci koncertů spravuje vlastník kapely."}); return
-                    database.execute("""INSERT INTO public_concert_settings VALUES (?, ?)
-                        ON CONFLICT(band_id) DO UPDATE SET enabled=excluded.enabled""", (band_id, int(enabled)))
-                    if enabled:
-                        database.execute("""UPDATE public_concert_threads SET attempts=0, retry_after=0
-                            WHERE attempts>=3 AND revision!=processed_revision AND connection_id IN
-                              (SELECT id FROM public_gmail_connections WHERE band_id=?)""", (band_id,))
-                self.send_json(HTTPStatus.OK, {"enabled": enabled})
             except ValueError as error:
                 self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return

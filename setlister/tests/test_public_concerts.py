@@ -38,10 +38,6 @@ class PublicConcertTests(unittest.TestCase):
                  f"Město: {city}\nKlub: {venue}\nStav: {status}\nArrival: {arrival}\nZvukovka: 18:00",
                  f"https://mail.google.com/mail/u/0/#all/{msg}"))
 
-    def enable(self, band):
-        with server.connect_db() as db:
-            db.execute("INSERT INTO public_concert_settings VALUES (?,1)", (band,))
-
     def drain(self):
         with patch.object(server, "json_request", side_effect=AssertionError("Culter should parse locally")):
             for _ in range(20):
@@ -50,8 +46,6 @@ class PublicConcertTests(unittest.TestCase):
         self.fail("Queue did not drain")
 
     def test_city_and_follow_up_use_same_event_set(self):
-        self.enable("a")
-        self.enable("b")
         self.mail("a", "roxy", 10)
         self.mail("a", "brno", 20, "Brno", "Kabinet Múz")
         self.mail("a", "option", 20, "Praha", "Pouhá opce", "OPTION")
@@ -77,10 +71,12 @@ class PublicConcertTests(unittest.TestCase):
         self.assertNotIn("Pouhá opce", result["answer"])
         self.assertEqual(len(result["sources"]), 2)
 
-    def test_opt_in_updates_cancellation_and_disconnect(self):
+    def test_existing_opt_out_does_not_block_updates_cancellation_or_disconnect(self):
+        with server.connect_db() as db:
+            db.execute("CREATE TABLE public_concert_settings (band_id TEXT PRIMARY KEY, enabled INTEGER)")
+            db.execute("INSERT INTO public_concert_settings VALUES ('a', 0)")
+            self.assertTrue(public_concerts.status(db, "a")["enabled"])
         self.mail("a", "original", 10)
-        self.assertFalse(server.process_public_concert_thread())
-        self.enable("a")
         self.drain()
         self.mail("a", "update", 20, arrival="17:30")
         with server.connect_db() as db:
@@ -117,6 +113,24 @@ class PublicConcertTests(unittest.TestCase):
         with server.connect_db() as db:
             self.assertFalse(public_concerts.reserve(db, "a", 1, 100))
             self.assertEqual(db.execute("SELECT COUNT(*) FROM public_ai_usage").fetchone()[0], 0)
+
+    def test_background_uses_no_model_until_there_is_a_new_candidate_and_keeps_its_budget(self):
+        self.mail("a", "roxy", 10)
+        self.drain()
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "synthetic", "PUBLIC_CONCERT_DAILY_THREADS": "1"}), \
+                patch.object(public_concerts, "culter_events", return_value=None), \
+                patch.object(server, "extract_public_concert_facts", return_value=[]) as extract:
+            self.assertFalse(server.process_public_concert_thread())
+            extract.assert_not_called()
+            self.mail("a", "change", 20)
+            self.assertTrue(server.process_public_concert_thread())
+            extract.assert_called_once()
+            self.mail("a", "second-thread", 30, "Brno", "Kabinet Múz")
+            self.assertTrue(server.process_public_concert_thread())
+            extract.assert_called_once()
+            with server.connect_db() as db:
+                self.assertEqual(public_concerts.status(db, "a")["pending"], 1)
+                self.assertEqual(db.execute("SELECT SUM(calls) FROM public_concert_usage").fetchone()[0], 1)
 
     def test_unsupported_date_and_excerpt_are_rejected(self):
         row = {"message_id": "msg", "internal_date": 100, "web_url": "https://mail.google.com/",

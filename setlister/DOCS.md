@@ -30,6 +30,8 @@ Po restartu otevři **PropsBot → Připojené účty** a autorizuj postupně ob
 
 Pro obecnou aplikaci otevři na `app.setlister.cz` sekci **Mailový agent**. Vlastník kapely může připojit nejvýše dva Gmaily a u každého jednou spustit **Načíst celou schránku**. Nové zprávy se pak kontrolují automaticky každých pět minut. Všichni členové kapely mohou použít chat, ale účty spravuje pouze vlastník. Volba `public_ai_daily_questions` určuje denní limit dotazů jedné kapely; výchozí hodnota je 50.
 
+Ve veřejném Mailovém agentovi se po načtení Gmailu automaticky tvoří přehled koncertů. Úvodní zpracování použije již staženou poštu. Poté se zpracovávají jen nová a změněná vlákna, která souvisejí s koncerty. Oznámení z Culteru Setlister čte lokálně. Pokud je potřeba OpenAI, platí výchozí denní limit 50 volání na kapelu (`public_concert_daily_threads`) a společný limit 200 na instalaci. Po vyčerpání limitu zbývající vlákna počkají.
+
 Po první synchronizaci PropsBot na pozadí vytvoří interní evidenci koncertů. Průběh je vidět v panelu připojených účtů; samostatná obrazovka evidence se nezobrazuje. Historii konverzací otevře ozubené kolečko po zadání `admin_history_pin` z konfigurace add-onu.
 
 Při změně pravidel extrakce se pouze odvozená evidence koncertů jednorázově přestaví z již uloženého lokálního indexu e-mailů. Gmail účty, OAuth tokeny, e-mailový index, poučení ani historie konverzací se tím nemažou.

@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.12.4 · aktualizováno 19. 11. 2026
+> Stav specifikace: 0.12.5 · aktualizováno 19. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -89,6 +89,7 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
           "instrumentId": "electric-guitar",
           "customTitle": "Můj vlastní název",
           "capo": 0,
+          "manualTuning": false,
           "preset": "Crunch 04",
           "printFields": [
             { "id": "field-...", "label": "Efekt", "value": "FX 12" }
@@ -102,11 +103,12 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
     "name": "Praha — Roxy",
     "targetMinutes": 45,
     "songIds": ["song-1", "song-2"],
+    "interludes": [{ "id": "interlude-1", "title": "Pauza", "seconds": 120, "position": 1 }],
     "lockedSongIds": ["song-1"],
     "viewerMemberId": "clean nebo member-..."
   },
   "savedSetlists": [
-    { "id": "set-...", "name": "45 min festival", "targetMinutes": 45, "songIds": ["song-1"] }
+    { "id": "set-...", "name": "45 min festival", "targetMinutes": 45, "songIds": ["song-1"], "interludes": [] }
   ],
   "events": [
     {
@@ -193,9 +195,12 @@ Nevytahuj repertoár ze Spotify odkazu pomocí LLM ani scrapingu. Je to nespoleh
 - Fulltext hledá v názvu, albu a roli; samostatné filtry vybírají album, energii a roli skladby.
 - Skladbu lze přidat, odebrat a přetřídit drag-and-drop i tlačítky.
 - Každá skladba už vložená do aktuálního setu má přímo v řádku dvě samostatné akce: tužku pro obecnou editaci skladby a ikonu členů pro otevření osobních pokynů/poznámek. Uživatel ji kvůli úpravě nesmí nejprve vracet do repertoáru.
-- Zobraz celkovou délku, cílovou délku a progress.
+- Zobraz celkovou a cílovou délku a ukazatel průběhu. Kompaktní akcí „+ Pauza / intermezzo“ přidej pojmenovanou položku s volitelnou délkou. Posouvej ji stejně jako skladbu a dovol ji upravit nebo odebrat.
+- Skládaný i uložený set má volitelné pole `interludes`. Každá položka má unikátní `id`, `title` do 120 znaků, `seconds` od 0 do 3600 (0 znamená bez délky) a celočíselné `position` od 0 do počtu skladeb. Pozice udává počet skladeb před pauzou. Více pauz na stejné pozici zachová pořadí z pole. Maximum je 50 položek v setlistu. Chybějící pole znamená prázdný seznam. Kopíruj pauzy při ukládání i načítání setlistu a počítej jejich délku do celkového času. Chytré řazení zachová pozice pauz. Zkouška, její plán a historie odehraných skladeb pracují pouze s `songIds`.
 - Uživatel může přepnout pohled „Bez poznámek“ nebo konkrétního člena.
-- „Bez poznámek“ nikdy nesmí zobrazit kapodastr, změnu nástroje, preset ani osobní poznámku žádného člena.
+- „Bez poznámek“ skrývá kapodastr, ladění, změnu nástroje, preset i osobní poznámku.
+- Před skladbou zobraz osobní pokyn „Ladění“ při změně kapa vůči poslední skladbě, na které daný člen hrál na stejný nástroj. Sleduj stav podle ID nástroje a člena i přes přepnutí nástroje, stav „Bez nástroje“ a pauzy. První použití nastaví výchozí hodnotu a chybějící capo je K0. Pokyn uvádí nástroj a přechod například „Akustická kytara · K1 → K4“.
+- V osobních pokynech u pole Kapodastr je kompaktní volba „Připomenout ladění před skladbou“. Ulož ji jako `memberDetails[memberId].manualTuning` (výchozí false); platí i při stejném kapu a s automatickým pokynem se sloučí. Kapodastr a ladění jsou dostupné pro `guitar`, `electric-guitar` a `custom` s `usesCapo: true`. V editaci člena má vlastní nástroj volbu „Kapo“, která toto pole uloží. Zkouška a osobní tisk počítají stejný plán ze svého pořadí skladeb.
 - V osobním pohledu i osobním výtisku se použije `customTitle`, pokud jej člen vyplnil. Čistý setlist vždy používá hlavní název skladby.
 - Aktuální set lze uložit pod názvem a později znovu načíst.
 - Název setlistu je přímo editovatelný a má viditelnou ikonu tužky, aby možnost přejmenování nebyla skrytá jen vzhledem nadpisu.
@@ -251,8 +256,8 @@ Export je určen pro papír ležící na pódiu, proto je čitelnost důležitě
 - Formát A4 portrait.
 - Uživatel zvolí, zda chce osobní setlisty členů, počet kopií pro každého člena, čisté setlisty a jejich libovolný počet.
 - Výchozí hodnoty: 1 kopie pro každého člena + 6 čistých kopií.
-- Čistý setlist obsahuje pouze názvy skladeb a malou hlavičku; žádné osobní údaje.
-- Osobní setlist má uprostřed tučný název skladby, vlevo štítky kapodastru, BPM, globálních i osobních krátkých pokynů a vpravo změny nástroje, preset a delší poznámku.
+- Čistý setlist obsahuje názvy skladeb, pauzy a malou hlavičku. Osobní pokyny, kapo a ladění patří do osobních výtisků.
+- Osobní setlist má uprostřed tučný název skladby, vlevo štítky kapodastru, BPM, globálních i osobních krátkých pokynů a vpravo změny nástroje, preset a delší poznámku. Ladění je kompaktní samostatný řádek těsně nad příslušnou skladbou. Pauzy jsou menším písmem a zahrnují délku, pokud byla zadána.
 - Změna nástroje se uvede jen při skutečné změně oproti naposledy použitému nástroji.
 - Výchozí režim automaticky volí největší písmo, při kterém se obsah vejde na jednu A4. Uživatel může vynucení jedné stránky vypnout.
 - U malého počtu skladeb seznam vertikálně vystřeď.
@@ -315,11 +320,11 @@ Kvůli nákladům je pro každou kapelu atomicky hlídaný denní limit dotazů;
 
 ### Evidence koncertů
 
-Chat patří na začátek obrazovky. Panel „Schránky a přehled koncertů“ je pod ním a po prvním načtení schránky se ve výchozím stavu sbalí. V panelu zobraz stav a tlačítko „Zapnout přehled“ / „Pozastavit přehled“ pro vlastníka kapely. Před zapnutím vysvětli, že přehled podporuje souhrnné otázky a že zpracování vybraných úryvků koncertní korespondence v OpenAI čerpá kredity. Evidence je ve výchozím stavu vypnutá. Po zapnutí server zpracuje již staženou poštu a poté znovu zpracuje jen vlákna s relevantní změnou. Strukturované Culter notifikace lze zpracovat lokálně. Ostatní kandidátní vlákna mohou využít OpenAI s limitem `public_concert_daily_threads` (výchozích 50 volání na kapelu za den) a společným limitem 200 volání za den na instalaci.
+Chat patří na začátek obrazovky. Panel „Schránky a přehled koncertů“ je pod ním a po prvním načtení schránky se ve výchozím stavu sbalí. Přehled koncertů se spouští automaticky po načtení Gmailu, včetně dříve připojených schránek. Panel zobrazuje průběh a vysvětluje zpracování vybraných úryvků přes OpenAI. Server zpracuje již staženou poštu a poté jen nová a relevantně změněná vlákna. Strukturovaná oznámení Culter zpracuje lokálně. Ostatní kandidátní vlákna mohou využít OpenAI s limitem `public_concert_daily_threads` (výchozích 50 volání na kapelu za den) a společným limitem 200 volání za den na instalaci. Po vyčerpání limitu vlákna čekají ve frontě.
 
 Server uchovává doložená fakta včetně zdrojové zprávy, citace a času. Potvrzené koncerty mají doložené konkrétní datum a stav. Rozpory bez výslovné změny si ponechávají oba zdroje. Přehledy termínů, měst, nejbližšího koncertu a změn sestavuje server z evidence. Navazující otázka zachovává rozsah či stav ze související konverzace. Detaily, faktury a čekající odpovědi čerpají z vyhledaných e-mailů. Hledání váží přesné fráze a předměty a umí použít prefix pro české skloňování.
 
-`GET /api/app/gmail/status?bandId=…` obsahuje `concertIndex: { enabled, pending, failed, incompleteInboxes, asOf }`. `POST /api/app/mail-agent/concert-index` s `{ bandId, enabled }` povolí nebo pozastaví zpracování a vyžaduje roli vlastníka. Přehledová odpověď z `/api/app/mail-agent/ask` vrací stejný stav a průběžné odkazy v textu. Zobraz upozornění na neúplnost, když schránka nebo evidence stále dobíhá.
+`GET /api/app/gmail/status?bandId=…` obsahuje `concertIndex: { enabled, pending, failed, incompleteInboxes, asOf }`. Pole `enabled` je kvůli kompatibilitě vždy `true`. Klient nemá ovládání pro vypnutí. Přehledová odpověď z `/api/app/mail-agent/ask` vrací stejný stav a průběžné odkazy v textu. Zobraz upozornění na neúplnost, když schránka nebo evidence stále dobíhá.
 
 Soukromý `/propadleek` PropsBot zůstává samostatný prototyp a jeho endpointy ani data se ve veřejné aplikaci nepoužívají.
 
@@ -397,6 +402,9 @@ Všechny POST/PUT požadavky posílej s `Content-Type: application/json`. Server
 15. Vlastník připojí dva Gmaily, u každého jednou spustí plnou synchronizaci a třetí účet server odmítne; běžný člen může chat použít, ale účty spravovat nemůže.
 16. Dotaz „V kolik máme přijet do Olomouce?“ najde i e-mail s textem „Příjezd kapely“, odpověď odkazuje na konkrétní zprávu a při chybějícím důkazu odmítne údaj odhadnout.
 17. Člen kapely A se nesmí stavem, hledáním ani odkazem dostat ke zprávám kapely B; odpojení Gmailu odstraní jeho lokální index, ale Gmail nezmění.
+
+18. Vlož mezi skladby dvouminutové intermezzo, přesuň jej, ulož a načti setlist. V náhledu i tisku má stejnou pozici, jeho délka vstupuje do času setu a v živé zkoušce lze přejít přímo na následující skladbu.
+19. Petr má v pořadí akustickou K1, elektrickou K2 a akustickou K4. Před třetí skladbou se zobrazí ladění „Akustická kytara · K1 → K4“ v osobním pohledu, zkoušce a osobním tisku. Ruční volba vyvolá pokyn i při stejném kapu.
 
 ## Aktuální omezení
 

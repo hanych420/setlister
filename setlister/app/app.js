@@ -124,6 +124,7 @@
   function printFieldTexts(fields) { return normalizePrintFields(fields).map(field => field.value ? (field.label ? field.label + ": " + field.value : field.value) : "").filter(Boolean); }
   function normalizedText(value) { return String(value || "").trim().toLocaleLowerCase("cs").normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
   function parseClock(value) { const text = String(value || "").trim(); return /^(?:[01]?\d|2[0-3]):[0-5]\d$/.test(text) ? text.padStart(5, "0") : ""; }
+  const { setlistEntries, updateSetlistEntries, usesCapo } = SetlisterPlanning;
   const parseEventDate = SetlisterPlanning.parseDate;
   function formatEventDate(value, long = false) { if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return "Datum neuvedeno"; const [year, month, day] = value.split("-").map(Number); return new Intl.DateTimeFormat("cs-CZ", long ? { weekday: "long", day: "numeric", month: "long", year: "numeric" } : { day: "numeric", month: "numeric", year: "numeric" }).format(new Date(year, month - 1, day)); }
   function showStatus(node, message, success = false) { node.textContent = message || ""; node.classList.toggle("success", success); }
@@ -151,7 +152,9 @@
     state.calendarEntries = Array.isArray(state.calendarEntries) ? state.calendarEntries : [];
     state.draft = state.draft || { name: "Nový koncert", targetMinutes: 45, songIds: [] };
     state.draft.name = state.draft.name || "Nový koncert";
-    state.draft.songIds = Array.isArray(state.draft.songIds) ? state.draft.songIds : [];
+    const songIds = new Set(state.songs.map(song => song.id));
+    [state.draft, ...state.savedSetlists].forEach(set => updateSetlistEntries(set,
+      setlistEntries(set).filter(entry => entry.kind !== "song" || songIds.has(entry.id))));
     state.draft.lockedSongIds = Array.isArray(state.draft.lockedSongIds) ? state.draft.lockedSongIds.filter(id => state.draft.songIds.includes(id)) : [];
     state.draft.targetMinutes = Number(state.draft.targetMinutes) || 45;
     state.songs.forEach(song => {
@@ -216,7 +219,7 @@
     const member = memberById(memberId); const detail = songMemberDetail(song, memberId); const instrument = memberInstrument(member, detail.instrumentId || member?.defaultInstrumentId || "none");
     const parts = [];
     if (instrument.kind !== "none") parts.push(instrument.name);
-    if ((instrument.kind === "guitar" || instrument.kind === "electric-guitar") && Number(detail.capo)) parts.push("K" + detail.capo);
+    if (usesCapo(instrument) && Number(detail.capo)) parts.push("K" + detail.capo);
     if (instrument.kind === "electric-guitar" && detail.preset) parts.push(detail.preset);
     parts.push(...printFieldTexts(song.printFields), ...printFieldTexts(detail.printFields));
     if (detail.note) parts.push(detail.note);
@@ -229,7 +232,12 @@
     const currentAlbum = elements.albumFilter.value || "all"; const albums = [...new Set(state.songs.map(song => song.album).filter(Boolean))].sort((a, b) => a.localeCompare(b, "cs"));
     elements.albumFilter.replaceChildren(option("all", "Všechna alba"), ...albums.map(album => option(album, album))); elements.albumFilter.value = albums.includes(currentAlbum) ? currentAlbum : "all";
     const available = state.songs.filter(song => !selected.has(song.id)).filter(song => !query || (song.title + " " + song.album + " " + ROLE_LABELS[song.role]).toLocaleLowerCase("cs").includes(query)).filter(song => elements.albumFilter.value === "all" || song.album === elements.albumFilter.value).filter(song => elements.energyFilter.value === "all" || String(song.energy) === elements.energyFilter.value).filter(song => elements.roleFilter.value === "all" || song.role === elements.roleFilter.value);
-    const setSongs = state.draft.songIds.map(id => state.songs.find(song => song.id === id)).filter(Boolean);
+    const setEntries = setlistEntries(state.draft);
+    const songsById = new Map(state.songs.map(song => [song.id, song]));
+    const setSongs = state.draft.songIds.map(id => songsById.get(id));
+    const viewer = memberById(state.draft.viewerMemberId);
+    const tuning = SetlisterPlanning.tuningPlan(setSongs, viewer, memberInstrument);
+    let songIndex = 0;
     elements.setName.value = state.draft.name; elements.appAvailableCount.textContent = String(available.length);
     elements.setViewer.replaceChildren(option("clean", "Bez poznámek"), ...state.members.map(member => option(member.id, member.name)));
     elements.setViewer.value = state.draft.viewerMemberId || "clean";
@@ -237,21 +245,79 @@
       const row = document.createElement("article"); row.className = "song-item";
       const info = document.createElement("div"); const title = document.createElement("strong"); title.textContent = song.title; const album = document.createElement("span"); album.className = "song-note"; album.textContent = song.album || "Bez alba"; info.append(title, album);
       const meta = document.createElement("small"); meta.textContent = [formatTime(song.seconds), song.bpm ? song.bpm + " BPM" : "", "E" + song.energy].filter(Boolean).join(" · ");
-      const actions = document.createElement("div"); actions.className = "library-actions"; actions.append(iconAction("edit", "Upravit skladbu", () => openSongDialog(song.id)), iconAction("member", "Poznámky členů", () => openNotesDialog(song.id)), iconAction("add", "Přidat do setu", () => { state.draft.songIds.push(song.id); changed(); }, true)); row.append(info, meta, actions); return row;
+      const actions = document.createElement("div"); actions.className = "library-actions"; actions.append(iconAction("edit", "Upravit skladbu", () => openSongDialog(song.id)), iconAction("member", "Poznámky členů", () => openNotesDialog(song.id)), iconAction("add", "Přidat do setu", () => { updateSetlistEntries(state.draft, [...setEntries, {kind: "song", id: song.id}]); changed(); }, true)); row.append(info, meta, actions); return row;
     }));
-    elements.appSetSongs.replaceChildren(...setSongs.map((song, index) => {
-      const row = document.createElement("li"); row.className = "set-item"; row.draggable = true; row.dataset.index = String(index);
-      row.addEventListener("dragstart", event => event.dataTransfer.setData("text/plain", String(index)));
-      row.addEventListener("dragover", event => event.preventDefault());
-      row.addEventListener("drop", event => { event.preventDefault(); moveSong(Number(event.dataTransfer.getData("text/plain")), index); });
-      const number = document.createElement("span"); number.textContent = String(index + 1).padStart(2, "0");
-      const detail = songMemberDetail(song, state.draft.viewerMemberId); const info = document.createElement("div"); const title = document.createElement("strong"); title.textContent = state.draft.viewerMemberId === "clean" ? song.title : detail.customTitle || song.title; const note = document.createElement("span"); note.className = "song-note"; note.textContent = detailSummary(song, state.draft.viewerMemberId) || song.album || ROLE_LABELS[song.role]; info.append(title, note);
-      const meta = document.createElement("small"); const role = song.role !== "standard" ? ROLE_LABELS[song.role] : ""; meta.textContent = [role, formatTime(song.seconds), song.bpm ? song.bpm + " BPM" : ""].filter(Boolean).join(" · ");
-      const actions = document.createElement("div"); actions.className = "row-actions set-song-actions"; const edit = iconAction("edit", "Upravit skladbu", () => openSongDialog(song.id)); const notes = iconAction("member", "Poznámky členů", () => openNotesDialog(song.id)); const locked = state.draft.lockedSongIds.includes(song.id); const lock = rowButton(locked ? "●" : "○", locked ? "Odemknout pozici" : "Zamknout pozici pro chytré řazení", () => { const ids = state.draft.lockedSongIds; state.draft.lockedSongIds = locked ? ids.filter(id => id !== song.id) : [...ids, song.id]; changed(); }); lock.className = "position-lock" + (locked ? " active" : ""); const up = rowButton("↑", "Posunout nahoru", () => moveSong(index, index - 1)); const down = rowButton("↓", "Posunout dolů", () => moveSong(index, index + 1)); const remove = rowButton("×", "Odebrat ze setu", () => { state.draft.songIds.splice(index, 1); state.draft.lockedSongIds = state.draft.lockedSongIds.filter(id => id !== song.id); changed(); }); up.disabled = index === 0; down.disabled = index === setSongs.length - 1; actions.append(edit, notes, lock, up, down, remove);
-      row.append(number, info, meta, actions); return row;
+    elements.appSetSongs.replaceChildren(...setEntries.map((entry, index) => {
+      const row = document.createElement("li");
+      row.className = "set-item";
+      row.draggable = true;
+      row.addEventListener("dragstart", event => event.dataTransfer.setData("application/x-setlister-entry", String(index)));
+      row.addEventListener("dragover", event => {
+        if (event.dataTransfer.types.includes("application/x-setlister-entry")) event.preventDefault();
+      });
+      row.addEventListener("drop", event => {
+        const from = event.dataTransfer.getData("application/x-setlister-entry");
+        if (!from) return;
+        event.preventDefault();
+        moveSetEntry(Number(from), index);
+      });
+
+      const actions = document.createElement("div");
+      actions.className = "row-actions set-song-actions";
+      const info = document.createElement("div");
+      const title = document.createElement("strong");
+      info.append(title);
+      const number = document.createElement("span");
+      number.className = "set-entry-number";
+      const meta = document.createElement("small");
+      if (entry.kind === "interlude") {
+        row.classList.add("set-interlude");
+        title.textContent = entry.title;
+        meta.textContent = entry.seconds ? formatTime(entry.seconds) : "Pauza / intermezzo";
+        actions.append(iconAction("edit", "Upravit pauzu", () => openInterludeDialog(entry)));
+      } else {
+        const song = songsById.get(entry.id);
+        const cue = tuning[songIndex];
+        if (cue) row.append(mailNode("div", "tuning-cue set-tuning", "Ladění · " + cue));
+        number.textContent = String(++songIndex).padStart(2, "0");
+        const detail = viewer ? songMemberDetail(song, viewer.id) : {};
+        title.textContent = detail.customTitle || song.title;
+        info.append(mailNode("span", "song-note",
+          detailSummary(song, viewer?.id) || song.album || ROLE_LABELS[song.role]));
+        const role = song.role !== "standard" ? ROLE_LABELS[song.role] : "";
+        meta.textContent = [role, formatTime(song.seconds), song.bpm ? song.bpm + " BPM" : ""].filter(Boolean).join(" · ");
+        const locked = state.draft.lockedSongIds.includes(song.id);
+        const lock = rowButton(locked ? "●" : "○", locked ? "Odemknout pozici" : "Zamknout pozici pro chytré řazení", () => {
+          const ids = state.draft.lockedSongIds;
+          state.draft.lockedSongIds = locked ? ids.filter(id => id !== song.id) : [...ids, song.id];
+          changed();
+        });
+        lock.className = "position-lock" + (locked ? " active" : "");
+        actions.append(
+          iconAction("edit", "Upravit skladbu", () => openSongDialog(song.id)),
+          iconAction("member", "Poznámky členů", () => openNotesDialog(song.id)),
+          lock
+        );
+      }
+
+      const up = rowButton("↑", "Posunout nahoru", () => moveSetEntry(index, index - 1));
+      const down = rowButton("↓", "Posunout dolů", () => moveSetEntry(index, index + 1));
+      up.disabled = index === 0;
+      down.disabled = index === setEntries.length - 1;
+      actions.append(up, down, rowButton("×", "Odebrat ze setu", () => {
+        setEntries.splice(index, 1);
+        updateSetlistEntries(state.draft, setEntries);
+        if (entry.kind === "song") state.draft.lockedSongIds = state.draft.lockedSongIds.filter(id => id !== entry.id);
+        changed();
+      }));
+      row.append(number, info, meta, actions);
+      return row;
     }));
-    elements.appSetEmpty.hidden = setSongs.length > 0;
-    const total = setSongs.reduce((sum, song) => sum + Number(song.seconds || 0), 0); const target = Math.max(1, Number(state.draft.targetMinutes) || 45) * 60;
+    elements.appSetEmpty.hidden = setEntries.length > 0;
+    elements.addInterlude.disabled = state.draft.interludes.length >= 50;
+    const total = setSongs.reduce((sum, song) => sum + Number(song.seconds || 0), 0)
+      + state.draft.interludes.reduce((sum, entry) => sum + entry.seconds, 0);
+    const target = Math.max(1, Number(state.draft.targetMinutes) || 45) * 60;
     elements.appTotalTime.textContent = formatTime(total); elements.appTargetLabel.textContent = "z " + formatTime(target); elements.appTargetMinutes.value = String(state.draft.targetMinutes || 45); elements.appProgress.style.width = Math.min(100, total / target * 100) + "%"; elements.appProgress.classList.toggle("over", total > target);
     renderRepertoire(); renderSettings(); renderSavedSetlists(); renderEvents(); renderLiveSetup();
     if (elements.rehearsalPlanner.closest(".app-view").classList.contains("active")) renderRehearsalPlanner();
@@ -265,7 +331,46 @@
     const icons = { edit: '<path d="M4 16.5V20h3.5L18.8 8.7l-3.5-3.5L4 16.5Zm17-10.6c.4-.4.4-1 0-1.4L19.5 3c-.4-.4-1-.4-1.4 0l-1.6 1.6L20 8.1 21 7Z"/>', member: '<path d="M8.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20v-2c0-3 2.8-5 6.5-5s6.5 2 6.5 5v2H2Zm13-7c3.1.1 7 1.6 7 5v2h-5v-2c0-1.9-.7-3.7-2-5Z"/>', add: '<path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z"/>', load: '<path d="M12 3a9 9 0 1 0 8.5 6h-2.2A7 7 0 1 1 12 5c1.9 0 3.6.8 4.8 2H14v2h6V3h-2v2.1A9 9 0 0 0 12 3Z"/>' };
     const button = document.createElement("button"); button.type = "button"; button.className = "icon-action " + (primary ? "primary" : ""); button.title = label; button.setAttribute("aria-label", label); button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[kind]}</svg><span>${label}</span>`; button.addEventListener("click", action); return button;
   }
-  function moveSong(from, to) { const ids = workspace?.state.draft.songIds || []; if (from === to || from < 0 || to < 0 || from >= ids.length || to >= ids.length) return; const [id] = ids.splice(from, 1); ids.splice(to, 0, id); changed(); }
+  function moveSetEntry(from, to) {
+    const draft = workspace.state.draft;
+    const entries = setlistEntries(draft);
+    if (!Number.isInteger(from) || from === to || from < 0 || to < 0 || from >= entries.length || to >= entries.length) return;
+    const [entry] = entries.splice(from, 1);
+    entries.splice(to, 0, entry);
+    updateSetlistEntries(draft, entries);
+    changed();
+  }
+  function openInterludeDialog(entry) {
+    const form = elements.interludeForm;
+    form.elements.interludeId.value = entry?.id || "";
+    form.elements.title.value = entry?.title || "Pauza";
+    form.elements.duration.value = entry?.seconds ? formatTime(entry.seconds) : "";
+    showStatus(elements.interludeStatus, "");
+    elements.interludeDialog.showModal();
+    form.elements.title.select();
+  }
+  function saveInterlude(form) {
+    const data = formPayload(form);
+    const title = data.title.trim();
+    const duration = data.duration.trim();
+    const seconds = parseDuration(duration);
+    if (!title || (duration && (!/^(?:\d+|\d{1,2}:[0-5]\d)$/.test(duration) || seconds > 3600))) {
+      showStatus(elements.interludeStatus, "Zadej název a případně délku do 60 minut.");
+      return;
+    }
+    const draft = workspace.state.draft;
+    const existing = draft.interludes.find(item => item.id === data.interludeId);
+    if (existing) {
+      Object.assign(existing, { title, seconds });
+    } else if (draft.interludes.length < 50) {
+      draft.interludes.push({ id: uid("interlude"), title, seconds, position: draft.songIds.length });
+    } else {
+      showStatus(elements.interludeStatus, "Do setlistu se vejde nejvýše 50 pauz.");
+      return;
+    }
+    elements.interludeDialog.close();
+    changed();
+  }
   function renderRepertoire() {
     elements.appRepertoire.replaceChildren(...workspace.state.songs.map(song => {
       const row = document.createElement("article"); row.className = "repertoire-row";
@@ -277,7 +382,13 @@
   }
   function deleteSong(id) {
     const song = workspace.state.songs.find(item => item.id === id); if (!song || !window.confirm("Opravdu odstranit skladbu „" + song.title + "“?")) return;
-    workspace.state.songs = workspace.state.songs.filter(item => item.id !== id); workspace.state.draft.songIds = workspace.state.draft.songIds.filter(songId => songId !== id); workspace.state.draft.lockedSongIds = workspace.state.draft.lockedSongIds.filter(songId => songId !== id); workspace.state.savedSetlists.forEach(set => { set.songIds = set.songIds.filter(songId => songId !== id); }); workspace.state.events.forEach(event => { event.playedSongIds = event.playedSongIds.filter(songId => songId !== id); }); changed();
+    const state = workspace.state;
+    state.songs = state.songs.filter(item => item.id !== id);
+    [state.draft, ...state.savedSetlists].forEach(set => updateSetlistEntries(set,
+      setlistEntries(set).filter(entry => entry.kind !== "song" || entry.id !== id)));
+    state.draft.lockedSongIds = state.draft.lockedSongIds.filter(songId => songId !== id);
+    state.events.forEach(event => { event.playedSongIds = event.playedSongIds.filter(songId => songId !== id); });
+    changed();
   }
   function renderSettings() {
     elements.inviteCode.textContent = workspace.band.inviteCode; elements.settingsBandName.textContent = workspace.band.name;
@@ -332,8 +443,7 @@
     mailSetupInitialized = true;
     mailSetupWasReady = initialSyncDone;
     const mailboxSummary = accounts.length === 1 ? "1 schránka" : accounts.length === 2 ? "2 schránky" : "Bez připojené schránky";
-    const indexSummary = status.concertIndex?.enabled ? "přehled zapnutý" : "přehled vypnutý";
-    elements.mailSetupSummary.textContent = [mailboxSummary, syncing ? "načítání zpráv" : indexSummary].join(" · ");
+    elements.mailSetupSummary.textContent = syncing ? mailboxSummary + " · načítání zpráv" : mailboxSummary;
     if (!status.gmailConfigured) elements.mailAgentStatus.textContent = "Provozovatel ještě musí doplnit Google OAuth údaje."; else if (!status.openaiConfigured) elements.mailAgentStatus.textContent = "Provozovatel ještě musí doplnit OpenAI API klíč."; else elements.mailAgentStatus.textContent = accounts.length ? `Připojeno ${accounts.length} ze 2 účtů` : "Zatím není připojený žádný Gmail.";
     elements.connectGmail.hidden = !status.canManage || accounts.length >= 2;
     elements.connectGmail.disabled = !status.gmailConfigured;
@@ -347,23 +457,18 @@
     renderConcertIndex(status);
     clearTimeout(mailAgentPollTimer);
     const index = status.concertIndex;
-    if (syncing || (index?.enabled && index.pending > index.failed)) {
+    if (syncing || (index && index.pending > index.failed)) {
       mailAgentPollTimer = setTimeout(() => loadMailAgentStatus(true), syncing ? 2500 : 20000);
     }
   }
   function renderConcertIndex(status) {
     const index = status.concertIndex;
-    const button = elements.toggleConcertIndex;
     if (!index) {
-      elements.concertIndexStatus.textContent = "Evidence zatím není dostupná.";
-      button.hidden = true;
+      elements.concertIndexStatus.textContent = "Stav přehledu zatím není dostupný.";
       return;
     }
-    button.hidden = !status.canManage;
-    button.disabled = !index.enabled && (!status.openaiConfigured || !status.accounts.length);
-    button.textContent = index.enabled ? "Pozastavit přehled" : "Zapnout přehled";
-    if (!index.enabled) {
-      elements.concertIndexStatus.textContent = "Přehled je vypnutý.";
+    if (!status.accounts.length) {
+      elements.concertIndexStatus.textContent = "Přehled začne po připojení a načtení Gmailu.";
       return;
     }
     const parts = [];
@@ -373,22 +478,6 @@
     if (!parts.length) parts.push(index.asOf ? "Přehled je připravený" : "Čeká na synchronizaci Gmailu");
     if (index.asOf) parts.push(`Stav e-mailů k ${mailDate(index.asOf)}`);
     elements.concertIndexStatus.textContent = parts.join(" · ");
-  }
-  async function toggleConcertIndex() {
-    const index = mailAgentStatus?.concertIndex;
-    if (!index) return;
-    elements.toggleConcertIndex.disabled = true;
-    try {
-      await api("/mail-agent/concert-index", {
-        method: "POST",
-        body: JSON.stringify({ bandId: activeBandId, enabled: !index.enabled })
-      });
-      await loadMailAgentStatus(true);
-    } catch (error) {
-      showToast(error.message);
-    } finally {
-      if (mailAgentStatus) renderConcertIndex(mailAgentStatus);
-    }
   }
   async function loadMailAgentStatus(quiet = false) {
     const band = activeBandId;
@@ -434,7 +523,7 @@
   }
   function loadSavedSetlist(id) {
     const set = savedSetlistById(id); if (!set) { showToast("Přiřazený setlist už neexistuje."); return; }
-    workspace.state.draft = { ...workspace.state.draft, name: set.name, targetMinutes: set.targetMinutes, songIds: [...set.songIds], lockedSongIds: [] }; changed(); showAppView("setlist"); showToast("„" + set.name + "“ je otevřený v editoru.");
+    workspace.state.draft = { ...workspace.state.draft, name: set.name, targetMinutes: set.targetMinutes, songIds: [...set.songIds], interludes: set.interludes.map(item => ({ ...item })), lockedSongIds: [] }; changed(); showAppView("setlist"); showToast("„" + set.name + "“ je otevřený v editoru.");
   }
   function eventSetlist(event) { return savedSetlistById(event?.setlistId); }
   function scopedRehearsalSongs(scope) {
@@ -523,7 +612,8 @@
         plan.omittedPriority ? "Prioritní skladby mimo čas: " + plan.omittedPriority : ""].filter(Boolean)
       : [songs.length ? "Do vybraného času se žádná skladba nevejde." : "Ve vybraném setlistu nejsou skladby."];
     elements.rehearsalPlanSummary.textContent = details.join(" · ");
-    elements.rehearsalPlanItems.replaceChildren(...plan.items.map(({ song, state, duration }) => {
+    const tuning = SetlisterPlanning.tuningPlan(plan.items.map(item => item.song), liveMember(), memberInstrument);
+    elements.rehearsalPlanItems.replaceChildren(...plan.items.map(({ song, state, duration }, index) => {
       const row = mailNode("li", "planning-row");
       const info = mailNode("div");
       const reasons = [
@@ -531,6 +621,7 @@
         state.practice.length ? "Dopilovat · " + state.practice.map(member => member.name).join(", ") : "",
         state.unknown.length ? "Ověřit připravenost" : "",
       ].filter(Boolean);
+      if (tuning[index]) info.append(mailNode("div", "tuning-cue", "Ladění · " + tuning[index]));
       info.append(mailNode("strong", "", song.title), mailNode("small", "", reasons.join(" / ") || "Průchod skladbou"));
       row.append(info, mailNode("span", "planning-time", formatTime(duration)));
       return row;
@@ -1037,7 +1128,7 @@
   function songTuning(song, memberId) { const detail = songMemberDetail(song, memberId); const field = normalizePrintFields(detail.printFields).find(item => ["ladeni", "tuning"].includes(normalizedText(item.label))); return normalizedText(field?.value || ""); }
   function transitionMetrics(first, second) {
     const result = { instruments: 0, capos: 0, tunings: 0, presets: 0, cost: 0 }; if (!first || !second) return result;
-    workspace.state.members.forEach(member => { const a = songMemberDetail(first, member.id); const b = songMemberDetail(second, member.id); const ai = memberInstrument(member, a.instrumentId || member.defaultInstrumentId || "none"); const bi = memberInstrument(member, b.instrumentId || member.defaultInstrumentId || "none"); if (ai.id !== bi.id) { result.instruments += 1; result.cost += 5; } if (ai.id === bi.id && ["guitar", "electric-guitar"].includes(ai.kind) && Number(a.capo || 0) !== Number(b.capo || 0)) { result.capos += 1; result.cost += 2.4; } const at = songTuning(first, member.id); const bt = songTuning(second, member.id); if (ai.id === bi.id && ai.kind !== "none" && at !== bt && (at || bt)) { result.tunings += 1; result.cost += 4; } if (ai.id === bi.id && ai.kind === "electric-guitar" && String(a.preset || "") !== String(b.preset || "")) { result.presets += 1; result.cost += .35; } }); return result;
+    workspace.state.members.forEach(member => { const a = songMemberDetail(first, member.id); const b = songMemberDetail(second, member.id); const ai = memberInstrument(member, a.instrumentId || member.defaultInstrumentId || "none"); const bi = memberInstrument(member, b.instrumentId || member.defaultInstrumentId || "none"); if (ai.id !== bi.id) { result.instruments += 1; result.cost += 5; } if (ai.id === bi.id && usesCapo(ai) && Number(a.capo || 0) !== Number(b.capo || 0)) { result.capos += 1; result.cost += 2.4; } const at = songTuning(first, member.id); const bt = songTuning(second, member.id); if (ai.id === bi.id && ai.kind !== "none" && at !== bt && (at || bt)) { result.tunings += 1; result.cost += 4; } if (ai.id === bi.id && ai.kind === "electric-guitar" && String(a.preset || "") !== String(b.preset || "")) { result.presets += 1; result.cost += .35; } }); return result;
   }
   function targetEnergy(index, count) {
     if (count <= 1) return 4; const position = index / (count - 1); const points = [[0, 4.4], [.24, 3.1], [.52, 4.2], [.72, 3.5], [1, 5]]; for (let i = 1; i < points.length; i += 1) if (position <= points[i][0]) { const [x1, y1] = points[i - 1]; const [x2, y2] = points[i]; return y1 + (y2 - y1) * ((position - x1) / (x2 - x1)); } return 5;
@@ -1050,7 +1141,7 @@
   }
   function orderMetrics(ids) {
     const result = { instruments: 0, capos: 0, tunings: 0, presets: 0, energyFit: 0 }; const songs = ids.map(id => workspace.state.songs.find(song => song.id === id)).filter(Boolean); const previousInstrument = new Map(); const instrumentState = new Map();
-    songs.forEach((song, index) => { result.energyFit += Math.abs(Number(song.energy) - targetEnergy(index, songs.length)); workspace.state.members.forEach(member => { const detail = songMemberDetail(song, member.id); const instrument = memberInstrument(member, detail.instrumentId || member.defaultInstrumentId || "none"); const previousId = previousInstrument.get(member.id); if (previousId !== undefined && previousId !== instrument.id) result.instruments += 1; previousInstrument.set(member.id, instrument.id); const key = member.id + "|" + instrument.id; const previous = instrumentState.get(key); const current = { capo: Number(detail.capo || 0), tuning: songTuning(song, member.id), preset: String(detail.preset || "") }; if (previous && ["guitar", "electric-guitar"].includes(instrument.kind) && previous.capo !== current.capo) result.capos += 1; if (previous && instrument.kind !== "none" && previous.tuning !== current.tuning && (previous.tuning || current.tuning)) result.tunings += 1; if (previous && instrument.kind === "electric-guitar" && previous.preset !== current.preset) result.presets += 1; instrumentState.set(key, current); }); }); return result;
+    songs.forEach((song, index) => { result.energyFit += Math.abs(Number(song.energy) - targetEnergy(index, songs.length)); workspace.state.members.forEach(member => { const detail = songMemberDetail(song, member.id); const instrument = memberInstrument(member, detail.instrumentId || member.defaultInstrumentId || "none"); const previousId = previousInstrument.get(member.id); if (previousId !== undefined && previousId !== instrument.id) result.instruments += 1; previousInstrument.set(member.id, instrument.id); const key = member.id + "|" + instrument.id; const previous = instrumentState.get(key); const current = { capo: Number(detail.capo || 0), tuning: songTuning(song, member.id), preset: String(detail.preset || "") }; if (previous && usesCapo(instrument) && previous.capo !== current.capo) result.capos += 1; if (previous && instrument.kind !== "none" && previous.tuning !== current.tuning && (previous.tuning || current.tuning)) result.tunings += 1; if (previous && instrument.kind === "electric-guitar" && previous.preset !== current.preset) result.presets += 1; instrumentState.set(key, current); }); }); return result;
   }
   function orderScore(ids) {
     const songs = ids.map(id => workspace.state.songs.find(song => song.id === id)).filter(Boolean); const roleCounts = { opener: songs.filter(song => song.role === "opener").length, closer: songs.filter(song => song.role === "closer").length, encore: songs.filter(song => song.role === "encore").length }; const metrics = orderMetrics(ids); let score = metrics.instruments * 5 + metrics.capos * 2.4 + metrics.tunings * 4 + metrics.presets * .35; songs.forEach((song, index) => { score += Math.abs(Number(song.energy) - targetEnergy(index, songs.length)) * 1.55 + rolePositionPenalty(song, index, songs.length, roleCounts); if (index >= 2 && song.energy >= 5 && songs[index - 1].energy >= 5 && songs[index - 2].energy >= 5) score += 5; }); return score;
@@ -1078,11 +1169,16 @@
   async function stopLiveSet() { try { const payload = await api("/live-session", { method: "POST", body: JSON.stringify({ bandId: activeBandId, action: "stop_set" }) }); applyLiveSession(payload); showToast("Společný set je ukončený."); } catch (error) { showToast(error.message); } }
   async function requestLiveWakeLock() { if (!navigator.wakeLock || document.visibilityState !== "visible") return; try { liveWakeLock = await navigator.wakeLock.request("screen"); } catch (_) {} }
   function renderLiveSong() {
-    const song = workspace?.state.songs.find(item => item.id === liveSongIds[liveSongIndex]); if (!song) { elements.liveStage.hidden = true; elements.liveEmpty.hidden = false; return; }
+    const songsById = new Map(workspace.state.songs.map(song => [song.id, song]));
+    const songs = liveSongIds.map(id => songsById.get(id));
+    const song = songs[liveSongIndex]; if (!song) { elements.liveStage.hidden = true; elements.liveEmpty.hidden = false; return; }
     const member = liveMember(); const detail = member ? songMemberDetail(song, member.id) : {}; const instrument = member ? memberInstrument(member, detail.instrumentId || member.defaultInstrumentId || "none") : null;
+    const cue = SetlisterPlanning.tuningPlan(songs, member, memberInstrument)[liveSongIndex];
+    elements.liveTuning.hidden = !cue;
+    elements.liveTuning.textContent = cue ? "Ladění · " + cue : "";
     elements.livePosition.textContent = (liveSongIndex + 1) + " / " + liveSongIds.length; elements.livePositionProgress.style.width = ((liveSongIndex + 1) / liveSongIds.length * 100) + "%"; elements.liveSongRole.textContent = song.role !== "standard" ? ROLE_LABELS[song.role] : song.album || "Skladba"; elements.liveSongTitle.textContent = detail.customTitle || song.title;
     const meta = [formatTime(song.seconds), song.bpm ? song.bpm + " BPM" : "BPM nezadané", "Energie " + song.energy]; elements.liveSongMeta.replaceChildren(...meta.map(text => { const span = document.createElement("span"); span.textContent = text; return span; }));
-    const instructions = []; if (instrument && instrument.kind !== "none") instructions.push({ label: "Nástroj", value: instrument.name }); if (instrument && ["guitar", "electric-guitar"].includes(instrument.kind) && Number(detail.capo)) instructions.push({ label: "Kapo", value: "K" + detail.capo }); if (instrument?.kind === "electric-guitar" && detail.preset) instructions.push({ label: "Preset", value: detail.preset }); normalizePrintFields(song.printFields).filter(field => field.value).forEach(field => instructions.push({ label: field.label || "Pokyn pro všechny", value: field.value })); normalizePrintFields(detail.printFields).filter(field => field.value).forEach(field => instructions.push({ label: field.label || "Můj pokyn", value: field.value })); if (detail.note) instructions.push({ label: "Poznámka", value: detail.note });
+    const instructions = []; if (instrument && instrument.kind !== "none") instructions.push({ label: "Nástroj", value: instrument.name }); if (instrument && usesCapo(instrument) && Number(detail.capo)) instructions.push({ label: "Kapo", value: "K" + detail.capo }); if (instrument?.kind === "electric-guitar" && detail.preset) instructions.push({ label: "Preset", value: detail.preset }); normalizePrintFields(song.printFields).filter(field => field.value).forEach(field => instructions.push({ label: field.label || "Pokyn pro všechny", value: field.value })); normalizePrintFields(detail.printFields).filter(field => field.value).forEach(field => instructions.push({ label: field.label || "Můj pokyn", value: field.value })); if (detail.note) instructions.push({ label: "Poznámka", value: detail.note });
     elements.liveInstructions.replaceChildren(...instructions.map(item => { const row = document.createElement("div"); const label = document.createElement("span"); label.textContent = item.label; const value = document.createElement("strong"); value.textContent = item.value; row.append(label, value); return row; })); if (!instructions.length) { const empty = document.createElement("p"); empty.textContent = "K této skladbě nemáš žádné osobní pokyny."; elements.liveInstructions.append(empty); }
     elements.livePrevious.disabled = !isLiveLeader() || liveSongIndex === 0; elements.liveNext.disabled = !isLiveLeader() || liveSongIndex === liveSongIds.length - 1; if (song.bpm) elements.liveBpm.value = String(song.bpm);
   }
@@ -1162,14 +1258,25 @@
   function populateNotesForm() {
     const song = workspace.state.songs.find(item => item.id === elements.notesForm.elements.songId.value); const member = memberById(elements.notesMemberSelect.value); if (!song || !member) return;
     const detail = songMemberDetail(song, member.id); const defaultInstrument = memberInstrument(member, member.defaultInstrumentId || "none"); elements.notesCustomTitle.value = detail.customTitle || ""; elements.notesInstrument.replaceChildren(option("", "Výchozí — " + defaultInstrument.name), option("none", "Bez nástroje"), ...member.instruments.filter(item => item.id !== "none").map(item => option(item.id, item.name))); elements.notesInstrument.value = detail.instrumentId || "";
-    elements.notesCapo.replaceChildren(...Array.from({ length: 13 }, (_, index) => option(String(index), "K" + index))); elements.notesCapo.value = String(Number(detail.capo) || 0); elements.notesPreset.value = detail.preset || ""; notesPrintFieldDraft = normalizePrintFields(detail.printFields, detail.printTags).map(field => ({ ...field })); elements.notesNewFieldLabel.value = ""; renderPrintFieldEditor("notes"); elements.notesText.value = detail.note || ""; updateNotesConditionalFields(); enhanceSelect(elements.notesInstrument); enhanceSelect(elements.notesCapo);
+    elements.notesCapo.replaceChildren(...Array.from({ length: 13 }, (_, index) => option(String(index), "K" + index))); elements.notesCapo.value = String(Number(detail.capo) || 0); elements.notesManualTuning.checked = detail.manualTuning === true; elements.notesPreset.value = detail.preset || ""; notesPrintFieldDraft = normalizePrintFields(detail.printFields, detail.printTags).map(field => ({ ...field })); elements.notesNewFieldLabel.value = ""; renderPrintFieldEditor("notes"); elements.notesText.value = detail.note || ""; updateNotesConditionalFields(); enhanceSelect(elements.notesInstrument); enhanceSelect(elements.notesCapo);
   }
   function updateNotesConditionalFields() {
-    const member = memberById(elements.notesMemberSelect.value); const instrument = memberInstrument(member, elements.notesInstrument.value || member?.defaultInstrumentId); const guitar = ["guitar", "electric-guitar"].includes(instrument.kind); elements.notesCapoLabel.hidden = !guitar; elements.notesPresetLabel.hidden = instrument.kind !== "electric-guitar"; if (!guitar) elements.notesCapo.value = "0"; if (instrument.kind !== "electric-guitar") elements.notesPreset.value = "";
+    const member = memberById(elements.notesMemberSelect.value);
+    const instrument = memberInstrument(member, elements.notesInstrument.value || member?.defaultInstrumentId);
+    const capoSupported = usesCapo(instrument);
+    elements.notesCapoLabel.hidden = !capoSupported;
+    elements.notesManualTuningLabel.hidden = !capoSupported;
+    elements.notesPresetLabel.hidden = instrument.kind !== "electric-guitar";
+    if (!capoSupported) {
+      elements.notesCapo.value = "0";
+      elements.notesManualTuning.checked = false;
+      enhanceSelect(elements.notesCapo);
+    }
+    if (instrument.kind !== "electric-guitar") elements.notesPreset.value = "";
   }
   function saveNotesForm(form) {
     const song = workspace.state.songs.find(item => item.id === form.elements.songId.value); const member = memberById(elements.notesMemberSelect.value); if (!song || !member) return;
-    const instrument = memberInstrument(member, elements.notesInstrument.value || member.defaultInstrumentId); song.memberDetails = song.memberDetails || {}; song.memberDetails[member.id] = { customTitle: elements.notesCustomTitle.value.trim(), instrumentId: elements.notesInstrument.value, capo: ["guitar", "electric-guitar"].includes(instrument.kind) ? Number(elements.notesCapo.value || 0) : 0, preset: instrument.kind === "electric-guitar" ? elements.notesPreset.value.trim() : "", printFields: normalizePrintFields(notesPrintFieldDraft), note: elements.notesText.value.trim() };
+    const instrument = memberInstrument(member, elements.notesInstrument.value || member.defaultInstrumentId); song.memberDetails = song.memberDetails || {}; song.memberDetails[member.id] = { customTitle: elements.notesCustomTitle.value.trim(), instrumentId: elements.notesInstrument.value, capo: usesCapo(instrument) ? Number(elements.notesCapo.value || 0) : 0, manualTuning: usesCapo(instrument) && elements.notesManualTuning.checked, preset: instrument.kind === "electric-guitar" ? elements.notesPreset.value.trim() : "", printFields: normalizePrintFields(notesPrintFieldDraft), note: elements.notesText.value.trim() };
     elements.notesDialog.close(); changed(); showToast("Osobní pokyny pro " + member.name + " jsou uložené.");
   }
   function openMemberDialog(memberId = "") {
@@ -1184,7 +1291,17 @@
   function renderMemberInstrumentChoices() {
     const instruments = [...INSTRUMENTS, ...memberDraftCustomInstruments]; elements.instrumentChoices.replaceChildren(...instruments.map(instrument => {
       const wrapper = document.createElement("div"); wrapper.className = "instrument-choice-wrap"; const label = document.createElement("label"); label.className = "instrument-option"; const input = document.createElement("input"); input.type = "checkbox"; input.value = instrument.id; input.checked = memberDraftSelectedIds.has(instrument.id); input.addEventListener("change", () => { if (input.checked) memberDraftSelectedIds.add(instrument.id); else memberDraftSelectedIds.delete(instrument.id); updateDefaultInstrumentOptions(); }); const marker = document.createElement("i"); const name = document.createElement("span"); name.textContent = instrument.name; label.append(input, marker, name); wrapper.append(label);
-      if (instrument.kind === "custom") { const remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-custom-instrument"; remove.textContent = "×"; remove.title = "Odstranit " + instrument.name; remove.setAttribute("aria-label", "Odstranit vlastní nástroj " + instrument.name); remove.addEventListener("click", () => { memberDraftSelectedIds.delete(instrument.id); memberDraftCustomInstruments = memberDraftCustomInstruments.filter(item => item.id !== instrument.id); renderMemberInstrumentChoices(); }); wrapper.append(remove); }
+      if (instrument.kind === "custom") {
+        wrapper.classList.add("custom-instrument-choice");
+        const capo = rowButton("Kapo", "Používá kapodastr: " + instrument.name, () => {
+          instrument.usesCapo = !instrument.usesCapo;
+          capo.setAttribute("aria-pressed", String(instrument.usesCapo));
+        });
+        capo.className = "instrument-capo-toggle";
+        capo.setAttribute("aria-label", capo.title);
+        capo.setAttribute("aria-pressed", String(usesCapo(instrument)));
+        wrapper.append(capo);
+        const remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-custom-instrument"; remove.textContent = "×"; remove.title = "Odstranit " + instrument.name; remove.setAttribute("aria-label", "Odstranit vlastní nástroj " + instrument.name); remove.addEventListener("click", () => { memberDraftSelectedIds.delete(instrument.id); memberDraftCustomInstruments = memberDraftCustomInstruments.filter(item => item.id !== instrument.id); renderMemberInstrumentChoices(); }); wrapper.append(remove); }
       return wrapper;
     })); updateDefaultInstrumentOptions();
   }
@@ -1196,7 +1313,7 @@
   function saveMemberForm(form) {
     const payload = formPayload(form); const all = [...INSTRUMENTS, ...memberDraftCustomInstruments]; const checked = all.filter(item => memberDraftSelectedIds.has(item.id));
     const existing = payload.memberId ? memberById(payload.memberId) : null; const linkedUserId = payload.linkedUserId || ""; const duplicate = workspace.state.members.find(item => item.id !== existing?.id && item.linkedUserId === linkedUserId && linkedUserId); if (duplicate) { showToast("Tento e-mail už používá člen " + duplicate.name + "."); return; } if (linkedUserId && !accountById(linkedUserId)) { showToast("Vybraný účet už do kapely nepatří."); return; } const member = existing || { id: uid("member"), linkedUserId: "" }; member.name = payload.name.trim(); member.linkedUserId = linkedUserId; member.instruments = checked.map(item => ({ ...item })); member.defaultInstrumentId = member.instruments.some(item => item.id === payload.defaultInstrumentId) ? payload.defaultInstrumentId : "none"; member.vocals = form.elements.vocals.checked;
-    const validInstrumentIds = new Set(["none", ...member.instruments.map(item => item.id)]); workspace.state.songs.forEach(song => { const detail = song.memberDetails?.[member.id]; if (detail && !validInstrumentIds.has(detail.instrumentId)) { detail.instrumentId = "none"; detail.capo = 0; detail.preset = ""; } });
+    const validInstrumentIds = new Set(["", "none", ...member.instruments.map(item => item.id)]); workspace.state.songs.forEach(song => { const detail = song.memberDetails?.[member.id]; if (detail && !validInstrumentIds.has(detail.instrumentId || "")) { detail.instrumentId = "none"; detail.capo = 0; detail.manualTuning = false; detail.preset = ""; } });
     if (!existing) workspace.state.members.push(member); elements.memberDialog.close(); changed();
   }
   function saveSongForm(form) {
@@ -1209,19 +1326,39 @@
     const form = elements.exportForm; const memberPages = form.elements.memberPages.checked ? workspace.state.members.length * Math.max(1, Number(form.elements.memberCopies.value) || 1) : 0; const cleanPages = form.elements.cleanPages.checked ? Math.max(0, Number(form.elements.cleanCopies.value) || 0) : 0; elements.exportSummary.textContent = "Připraveno přibližně " + (memberPages + cleanPages) + " výtisků. V tiskovém dialogu lze zvolit tiskárnu nebo Uložit jako PDF.";
   }
   function buildPrintPage(member, onePage, clean = false) {
-    const songs = workspace.state.draft.songIds.map(id => workspace.state.songs.find(song => song.id === id)).filter(Boolean); const page = document.createElement("section"); page.className = "print-page" + (onePage ? " one-page" : " flow-page");
+    const draft = workspace.state.draft;
+    const entries = setlistEntries(draft);
+    const songsById = new Map(workspace.state.songs.map(song => [song.id, song]));
+    const tuning = SetlisterPlanning.tuningPlan(draft.songIds.map(id => songsById.get(id)), member, memberInstrument);
+    const page = document.createElement("section");
+    page.className = "print-page" + (onePage ? " one-page" : " flow-page");
     const header = document.createElement("header"); const logo = bandLogo(); if (logo) { const img = document.createElement("img"); img.src = logo; img.alt = ""; header.append(img); } const headerText = document.createElement("div"); const name = document.createElement("strong"); name.textContent = workspace.state.draft.name; const owner = document.createElement("span"); owner.textContent = clean ? "Čistý setlist" : member.name; headerText.append(name, owner); header.append(headerText); page.append(header);
     const list = document.createElement("ol"); list.className = "print-set"; let previousInstrument = member ? member.defaultInstrumentId || "none" : "none"; let lineWeight = 0;
-    songs.forEach(song => {
+    let songIndex = 0;
+    entries.forEach(entry => {
+      if (entry.kind === "interlude") {
+        const text = entry.seconds ? entry.title + " · " + formatTime(entry.seconds) : entry.title;
+        const item = mailNode("li", "print-interlude");
+        item.append(mailNode("strong", "", text));
+        list.append(item);
+        lineWeight += .75;
+        return;
+      }
+      const song = songsById.get(entry.id);
+      const cue = tuning[songIndex++];
       const detail = member ? songMemberDetail(song, member.id) : {}; const instrument = member ? memberInstrument(member, detail.instrumentId || member.defaultInstrumentId || "none") : null; const instrumentChanged = member && instrument.id !== previousInstrument; const item = document.createElement("li");
       const left = document.createElement("span"); left.className = "print-left"; const printTags = [];
-      if (member && ["guitar", "electric-guitar"].includes(instrument.kind) && Number(detail.capo)) printTags.push("K" + detail.capo); if (member) printTags.push(...printFieldTexts(detail.printFields), ...printFieldTexts(song.printFields)); if (member && song.bpm) printTags.push(song.bpm + " BPM"); printTags.forEach(text => { const tag = document.createElement("i"); tag.textContent = text; left.append(tag); });
+      if (member && usesCapo(instrument) && Number(detail.capo)) printTags.push("K" + detail.capo); if (member) printTags.push(...printFieldTexts(detail.printFields), ...printFieldTexts(song.printFields)); if (member && song.bpm) printTags.push(song.bpm + " BPM"); printTags.forEach(text => { const tag = document.createElement("i"); tag.textContent = text; left.append(tag); });
       const title = document.createElement("strong"); title.textContent = clean ? song.title : detail.customTitle || song.title;
       const right = document.createElement("span"); right.className = "print-right"; const instructions = [];
       if (instrumentChanged) instructions.push("→ " + instrument.name); if (instrument?.kind === "electric-guitar" && detail.preset) instructions.push(detail.preset); if (detail.note) instructions.push(detail.note); right.textContent = clean ? "" : instructions.join(" · ");
-      const wrappedTagWeight = printTags.reduce((sum, text) => sum + Math.max(0, Math.ceil(text.length / 28) - 1) * .16, 0); item.append(left, title, right); list.append(item); lineWeight += 1 + (right.textContent.length > 45 ? .45 : 0) + Math.max(0, printTags.length - 1) * .12 + wrappedTagWeight; previousInstrument = instrument?.id || previousInstrument;
+      const wrappedTagWeight = printTags.reduce((sum, text) => sum + Math.max(0, Math.ceil(text.length / 28) - 1) * .16, 0); if (cue) {
+        item.append(mailNode("span", "print-tuning", "Ladění · " + cue));
+        lineWeight += .65;
+      }
+      item.append(left, title, right); list.append(item); lineWeight += 1 + (right.textContent.length > 45 ? .45 : 0) + Math.max(0, printTags.length - 1) * .12 + wrappedTagWeight; previousInstrument = instrument?.id || previousInstrument;
     });
-    const maxFont = clean ? 44 : 34; const minFont = clean ? 15 : 13; const estimated = Math.floor((clean ? 580 : 540) / Math.max(1, lineWeight)); page.style.setProperty("--print-size", (onePage ? Math.max(minFont, Math.min(maxFont, estimated)) : (clean ? 28 : 23)) + "px"); if (songs.length <= 12) list.classList.add("centered"); page.append(list); return page;
+    const maxFont = clean ? 44 : 34; const minFont = clean ? 15 : 13; const estimated = Math.floor((clean ? 580 : 540) / Math.max(1, lineWeight)); page.style.setProperty("--print-size", (onePage ? Math.max(minFont, Math.min(maxFont, estimated)) : (clean ? 28 : 23)) + "px"); if (entries.length <= 12) list.classList.add("centered"); page.append(list); return page;
   }
   function generatePrint(form) {
     elements.printRoot.replaceChildren(); const onePage = form.elements.onePage.checked;
@@ -1404,13 +1541,22 @@
   elements.liveSongCard.addEventListener("pointercancel", () => { liveSwipeStart = null; }); elements.liveSongCard.addEventListener("keydown", event => { if (event.key === "ArrowLeft") moveLiveSong(-1); if (event.key === "ArrowRight") moveLiveSong(1); });
   elements.enableLiveAudio.addEventListener("click", async () => { try { await enableLiveAudio(); showToast("Zvuk metronomu je na tomto zařízení povolený."); } catch (error) { showToast(error.message); } }); elements.startSharedMetronome.addEventListener("click", () => setSharedMetronome("start")); elements.stopSharedMetronome.addEventListener("click", () => setSharedMetronome("stop")); elements.liveCalibration.addEventListener("change", event => { const value = Math.max(-250, Math.min(250, Number(event.target.value) || 0)); event.target.value = String(value); localStorage.setItem("setlister-live-calibration", String(value)); liveLastScheduledBeat = -1; });
   elements.connectGmail.addEventListener("click", connectGmail);
-  elements.toggleConcertIndex.addEventListener("click", toggleConcertIndex);
   elements.mailChatForm.addEventListener("submit", event => { event.preventDefault(); askMailAgent(elements.mailQuestion.value.trim()); });
   elements.mailQuestion.addEventListener("keydown", event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); elements.mailChatForm.requestSubmit(); } });
   elements.mailQuestion.addEventListener("input", event => { event.target.style.height = "auto"; event.target.style.height = Math.min(event.target.scrollHeight, 150) + "px"; });
   elements.mailQuickPrompts.querySelectorAll("button").forEach(button => button.addEventListener("click", () => askMailAgent(button.textContent.trim())));
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !elements.liveStage.hidden) requestLiveWakeLock(); });
-  elements.saveSetlist.addEventListener("click", () => { const draft = workspace.state.draft; const existing = workspace.state.savedSetlists.find(set => set.name.toLocaleLowerCase("cs") === draft.name.toLocaleLowerCase("cs")); if (existing) { existing.songIds = [...draft.songIds]; existing.targetMinutes = draft.targetMinutes; } else workspace.state.savedSetlists.push({ id: uid("set"), name: draft.name || "Setlist", targetMinutes: draft.targetMinutes, songIds: [...draft.songIds] }); changed(); showToast("Setlist je uložený."); });
+  elements.addInterlude.addEventListener("click", () => openInterludeDialog());
+  elements.interludeForm.addEventListener("submit", event => { event.preventDefault(); saveInterlude(event.currentTarget); });
+  elements.saveSetlist.addEventListener("click", () => {
+    const { name, targetMinutes, songIds, interludes } = workspace.state.draft;
+    const existing = workspace.state.savedSetlists.find(set => set.name.toLocaleLowerCase("cs") === name.toLocaleLowerCase("cs"));
+    const snapshot = { targetMinutes, songIds: [...songIds], interludes: interludes.map(item => ({ ...item })) };
+    if (existing) Object.assign(existing, snapshot);
+    else workspace.state.savedSetlists.push({ id: uid("set"), name: name || "Setlist", ...snapshot });
+    changed();
+    showToast("Setlist je uložený.");
+  });
   elements.openExport.addEventListener("click", () => { updateExportSummary(); elements.exportDialog.showModal(); });
   elements.exportForm.addEventListener("input", updateExportSummary); elements.exportForm.addEventListener("submit", event => { event.preventDefault(); generatePrint(event.currentTarget); });
   elements.addMember.addEventListener("click", () => openMemberDialog());

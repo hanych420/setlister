@@ -72,3 +72,17 @@ class BandPlanningTests(unittest.TestCase):
         self.assertFalse(server.valid_public_state(self.state))
         task.pop("eventId")
         self.assertTrue(server.valid_public_state(self.state))
+
+    def test_interludes_in_draft_and_saved_setlists(self):
+        interlude = {"id": "break", "title": "Pauza", "seconds": 120, "position": 1}
+        self.state["draft"]["interludes"] = [interlude]
+        self.state["savedSetlists"] = [{"songIds": ["song"], "interludes": [dict(interlude)]}]
+        self.state["songs"][0]["memberDetails"] = {"a": {"manualTuning": True}}
+        self.assertTrue(server.valid_public_state(self.state))
+        for field, value in (("position", 2), ("seconds", -1), ("seconds", True), ("title", " ")):
+            with self.subTest(field=field, value=value):
+                invalid = copy.deepcopy(self.state)
+                invalid["savedSetlists"][0]["interludes"][0][field] = value
+                self.assertFalse(server.valid_public_state(invalid))
+        self.state["draft"]["interludes"].append(dict(interlude))
+        self.assertFalse(server.valid_public_state(self.state))

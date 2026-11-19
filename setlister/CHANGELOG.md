@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.5
+
+- Mailový agent tvoří přehled koncertů automaticky s limitem 50 volání OpenAI na kapelu za den a 200 na instalaci.
+- Do setlistu lze vložit, přesunout a uložit pojmenovanou pauzu nebo intermezzo. Volitelná délka se přičte k času a položka se zobrazí ve výtisku. Zkouška pracuje pouze se skladbami.
+- Osobní pohled, zkouška i osobní výtisk připomenou ladění při změně kapodastru oproti poslednímu hraní na stejný nástroj. Připomenutí lze přidat i ručně v poznámkách člena.
+- U vlastních nástrojů lze povolit kapodastr.
+
 ## 0.12.4
 
 - Chat v Mailovém agentovi je nahoře, připojené schránky a přehled koncertů jsou ve sbalitelném panelu s vysvětlením využití OpenAI.

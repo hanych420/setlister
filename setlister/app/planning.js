@@ -75,5 +75,53 @@ const SetlisterPlanning = (() => {
     return { items, total, omittedPriority };
   }
 
-  return { readinessLabels, dateKey, parseDate, dateFromKey, calendarDays, readiness, buildPlan };
+  function setlistEntries(set) {
+    const songIds = Array.isArray(set.songIds) ? set.songIds : [];
+    const slots = Array.from({ length: songIds.length + 1 }, () => []);
+    for (const interlude of Array.isArray(set.interludes) ? set.interludes : []) {
+      if (!Number.isInteger(interlude?.position)) continue;
+      const position = Math.max(0, Math.min(songIds.length, interlude.position));
+      slots[position].push({ ...interlude, kind: "interlude" });
+    }
+    return slots.flatMap((interludes, position) => position < songIds.length
+      ? [...interludes, { kind: "song", id: songIds[position] }]
+      : interludes);
+  }
+
+  function updateSetlistEntries(set, entries) {
+    const songIds = [];
+    const interludes = [];
+    for (const entry of entries) {
+      if (entry.kind === "song") {
+        songIds.push(entry.id);
+      } else {
+        const { id, title, seconds } = entry;
+        interludes.push({ id, title, seconds, position: songIds.length });
+      }
+    }
+    Object.assign(set, { songIds, interludes });
+  }
+
+  function usesCapo(instrument) {
+    return instrument?.kind === "guitar" || instrument?.kind === "electric-guitar"
+      || (instrument?.kind === "custom" && instrument.usesCapo === true);
+  }
+
+  function tuningPlan(songs, member, resolveInstrument) {
+    if (!member) return [];
+    const capoByInstrument = new Map();
+    return songs.map(song => {
+      const detail = song?.memberDetails?.[member.id] || {};
+      const instrument = resolveInstrument(member, detail.instrumentId || member.defaultInstrumentId || "none");
+      if (!usesCapo(instrument)) return "";
+      const capo = Number(detail.capo) || 0;
+      const previous = capoByInstrument.get(instrument.id);
+      capoByInstrument.set(instrument.id, capo);
+      if (previous !== undefined && previous !== capo) return instrument.name + " · K" + previous + " → K" + capo;
+      return detail.manualTuning ? instrument.name : "";
+    });
+  }
+
+  return { readinessLabels, dateKey, parseDate, dateFromKey, calendarDays, readiness, buildPlan,
+    setlistEntries, updateSetlistEntries, usesCapo, tuningPlan };
 })();

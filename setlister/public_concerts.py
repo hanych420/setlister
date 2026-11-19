@@ -14,10 +14,6 @@ STATUS_LABELS = {
     "inquiry": "poptávka", "cancelled": "zrušeno",
 }
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS public_concert_settings (
-    band_id TEXT PRIMARY KEY REFERENCES public_bands(id) ON DELETE CASCADE,
-    enabled INTEGER NOT NULL
-);
 CREATE TABLE IF NOT EXISTS public_concert_threads (
     connection_id TEXT NOT NULL REFERENCES public_gmail_connections(id) ON DELETE CASCADE,
     thread_id TEXT NOT NULL,
@@ -326,9 +322,6 @@ def reserve(database, band, limit, now):
 
 
 def status(database, band):
-    config = database.execute(
-        "SELECT enabled FROM public_concert_settings WHERE band_id=?", (band,)
-    ).fetchone()
     inboxes = database.execute(
         "SELECT sync_state, last_sync_at FROM public_gmail_connections WHERE band_id=?", (band,)
     ).fetchall()
@@ -340,7 +333,7 @@ def status(database, band):
     """, (band,)).fetchone()
     snapshots = [row["last_sync_at"] for row in inboxes if row["last_sync_at"]]
     return {
-        "enabled": bool(config and config["enabled"]),
+        "enabled": True,
         "pending": counts["pending"], "failed": counts["failed"],
         "incompleteInboxes": sum(row["sync_state"] != "ready" for row in inboxes),
         "asOf": min(snapshots) if snapshots else None,
