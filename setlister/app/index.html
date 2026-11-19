@@ -9,7 +9,7 @@
   <link rel="icon" href="/brand/logo-mark.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=0.12.6">
+  <link rel="stylesheet" href="/styles.css?v=0.13.0">
 </head>
 <body>
   <header class="app-header">
@@ -201,6 +201,14 @@
             <article class="settings-card brand-card"><span>VZHLED KAPELY</span><div class="logo-editor"><div class="logo-preview" id="logoPreview">LOGO</div><div><h2 id="settingsBandName">Kapela</h2><p>Nahraj libovolný obrázek a vyber z něj čtvercový výřez. Zobrazí se v aplikaci i na pódiovém výtisku.</p><div class="button-row"><label class="secondary-button file-button">Nahrát logo<input id="bandLogoInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml"></label><button class="quiet-button" id="removeBandLogo" type="button">Odebrat</button></div></div></div></article>
             <article class="settings-card"><span>POZVÁNKOVÝ KÓD</span><h2 id="inviteCode">--------</h2><p>Slouží k připojení uživatelského účtu. Pódiové členy bez účtu založíš zvlášť níže.</p><div class="button-row"><button class="primary-button" id="copyCode" type="button">Kopírovat kód</button><button class="secondary-button" id="rotateCode" type="button">Vytvořit nový</button></div></article>
             <article class="settings-card members-card"><span>ČLENOVÉ PRO SETLIST</span><div class="member-intro"><div><h2>Kapela na pódiu</h2><p>Člen nemusí mít účet. Založ mu jméno a nástroje; vlastní přihlášení mu můžeš připojit později.</p></div><button class="primary-button" id="addMember" type="button">+ Přidat člena</button></div><div id="memberList" class="member-list"></div></article>
+            <article class="settings-card invoice-settings">
+              <h2>Fakturace koncertů</h2>
+              <p id="invoiceSupplierSummary"></p>
+              <button id="editInvoiceSupplier" class="secondary-button" type="button">Fakturační údaje dodavatele</button>
+              <details id="invoiceArchive"><summary>Vystavené faktury</summary>
+                <div id="invoiceArchiveList" class="invoice-archive-list" aria-live="polite"></div>
+              </details>
+            </article>
             <article class="settings-card billing-card"><span>PŘEDPLATNÉ</span><h2>Jedna platba za kapelu</h2><p>Budoucí nákup z webu, App Storu nebo Google Play se propíše ke kapele. Na jiném zařízení už se znovu platit nebude.</p><button class="secondary-button" type="button" disabled>Správa plateb bude doplněna</button></article>
           </div>
         </section>
@@ -221,7 +229,22 @@
   <dialog id="eventDialog" class="wide-dialog event-dialog"><div class="dialog-heading"><div><p class="form-kicker">Den koncertu</p><h2 id="eventDialogTitle">Přidat koncert</h2></div><button data-close-dialog="eventDialog" aria-label="Zavřít" type="button">×</button></div><form id="eventForm" class="dialog-form"><input type="hidden" name="eventId"><div class="form-grid event-form-grid"><label>Název koncertu<input name="name" maxlength="120" placeholder="Např. Roxy — Praha" required></label><div class="date-field">
           <label for="eventDateInput">Datum koncertu</label>
           <input id="eventDateInput" name="date" type="text" data-date-picker placeholder="21. 1. 2027" autocomplete="off" maxlength="14" required>
-        </div><label>Město<input name="city" maxlength="100" required></label><label>Klub / místo<input name="venue" maxlength="120" required></label><label class="wide">Adresa<input name="address" maxlength="200" placeholder="Ulice, město"></label><label>Arrival<input name="arrival" inputmode="numeric" placeholder="15:30"></label><label>Load-in<input name="loadIn" inputmode="numeric" placeholder="16:00"></label><label>Zvukovka<input name="soundcheck" inputmode="numeric" placeholder="17:00"></label><label>Začátek koncertu<input name="showStart" inputmode="numeric" placeholder="20:00"></label><label>Konec koncertu<input name="showEnd" inputmode="numeric" placeholder="21:00"></label><label>Přiřazený setlist<select id="eventSetlist" name="setlistId"></select></label><label>Honorář<input name="feeAmount" inputmode="decimal" maxlength="14" placeholder="Např. 12 000"></label><label>Měna<select name="feeCurrency"><option value="CZK">CZK · Kč</option><option value="EUR">EUR · €</option><option value="GBP">GBP · £</option><option value="USD">USD · $</option><option value="PLN">PLN · zł</option><option value="CHF">CHF</option></select></label><label>Kontaktní osoba<input name="contactName" maxlength="100"></label><label>Telefon<input name="contactPhone" type="tel" maxlength="40"></label><label>Stav<select id="eventStatus" name="status"><option value="planned">Naplánovaný</option><option value="completed">Odehráno</option></select></label><label class="wide">Praktická poznámka<textarea name="note" maxlength="800" rows="3" placeholder="Parkování, vstup do klubu nebo jiná domluva."></textarea></label><label class="wide">Výbava — jedna položka na řádek<textarea name="checklist" maxlength="1200" rows="4" placeholder="Merch\nNáhradní struny\nBanner"></textarea></label></div><section id="eventHistoryFields" class="history-fields" hidden><div class="card-heading"><div><span>SKUTEČNÝ PRŮBĚH</span><h3>Jak koncert dopadl</h3></div></div><div class="form-grid"><label>Skutečný začátek<input name="actualStart" inputmode="numeric" placeholder="20:08"></label><label>Skutečný konec<input name="actualEnd" inputmode="numeric" placeholder="21:02"></label><label>Jak set fungoval<select name="rating"><option value="0">Bez hodnocení</option><option value="1">1 / 5</option><option value="2">2 / 5</option><option value="3">3 / 5</option><option value="4">4 / 5</option><option value="5">5 / 5</option></select></label><label class="wide">Poznámka po koncertě<textarea name="performanceNote" maxlength="800" rows="3" placeholder="Co fungovalo, co příště změnit."></textarea></label></div><div class="played-editor"><div class="played-editor-head"><div><strong>Skutečně odehrané skladby</strong><small>Výchozí je přiřazený setlist. Skladby lze odebrat, přidat a přeskládat.</small></div><div><select id="eventPlayedSongSelect"></select><button class="secondary-button compact" id="addEventPlayedSong" type="button">Přidat</button></div></div><ol id="eventPlayedSongs" class="played-song-list"></ol></div></section><div class="dialog-actions"><button class="secondary-button" data-close-dialog="eventDialog" type="button">Zrušit</button><button class="primary-button" type="submit">Uložit koncert</button></div></form></dialog>
+        </div><label>Město<input name="city" maxlength="100" required></label><label>Klub / místo<input name="venue" maxlength="120" required></label><label class="wide">Adresa<input name="address" maxlength="200" placeholder="Ulice, město"></label><label>Arrival<input name="arrival" inputmode="numeric" placeholder="15:30"></label><label>Load-in<input name="loadIn" inputmode="numeric" placeholder="16:00"></label><label>Zvukovka<input name="soundcheck" inputmode="numeric" placeholder="17:00"></label><label>Začátek koncertu<input name="showStart" inputmode="numeric" placeholder="20:00"></label><label>Konec koncertu<input name="showEnd" inputmode="numeric" placeholder="21:00"></label><label>Přiřazený setlist<select id="eventSetlist" name="setlistId"></select></label><label>Honorář<input name="feeAmount" inputmode="decimal" maxlength="14" placeholder="Např. 12 000"></label><label>Měna<select name="feeCurrency"><option value="CZK">CZK · Kč</option><option value="EUR">EUR · €</option><option value="GBP">GBP · £</option><option value="USD">USD · $</option><option value="PLN">PLN · zł</option><option value="CHF">CHF</option></select></label><label>Kontaktní osoba<input name="contactName" maxlength="100"></label><label>Telefon<input name="contactPhone" type="tel" maxlength="40"></label><label>Stav<select id="eventStatus" name="status"><option value="planned">Naplánovaný</option><option value="completed">Odehráno</option></select></label><label class="wide">Praktická poznámka<textarea name="note" maxlength="800" rows="3" placeholder="Parkování, vstup do klubu nebo jiná domluva."></textarea></label><label class="wide">Výbava — jedna položka na řádek<textarea name="checklist" maxlength="1200" rows="4" placeholder="Merch\nNáhradní struny\nBanner"></textarea></label></div>
+    <details id="eventInvoiceCustomer" class="invoice-customer">
+      <summary>Fakturační údaje pořadatele</summary>
+      <div class="invoice-party form-grid" data-invoice-party>
+        <div class="invoice-ico">
+          <label for="customerIco">IČO</label>
+          <div><input id="customerIco" name="customerIco" inputmode="numeric" maxlength="8"><button class="secondary-button compact" type="button" data-ares-lookup>Načíst z ARESu</button></div>
+        </div>
+        <label>DIČ<input name="customerDic" maxlength="32"></label>
+        <label>Země<select name="customerCountry"><option value="CZ">Česko</option><option value="other">Jiná země</option></select></label>
+        <label class="wide">Jméno / název odběratele<input name="customerName" maxlength="160"></label>
+        <label class="wide">Fakturační adresa<textarea name="customerAddress" maxlength="260" rows="2"></textarea></label>
+        <p class="form-status wide" data-ares-status role="status"></p>
+      </div>
+    </details>
+    <section id="eventHistoryFields" class="history-fields" hidden><div class="card-heading"><div><span>SKUTEČNÝ PRŮBĚH</span><h3>Jak koncert dopadl</h3></div></div><div class="form-grid"><label>Skutečný začátek<input name="actualStart" inputmode="numeric" placeholder="20:08"></label><label>Skutečný konec<input name="actualEnd" inputmode="numeric" placeholder="21:02"></label><label>Jak set fungoval<select name="rating"><option value="0">Bez hodnocení</option><option value="1">1 / 5</option><option value="2">2 / 5</option><option value="3">3 / 5</option><option value="4">4 / 5</option><option value="5">5 / 5</option></select></label><label class="wide">Poznámka po koncertě<textarea name="performanceNote" maxlength="800" rows="3" placeholder="Co fungovalo, co příště změnit."></textarea></label></div><div class="played-editor"><div class="played-editor-head"><div><strong>Skutečně odehrané skladby</strong><small>Výchozí je přiřazený setlist. Skladby lze odebrat, přidat a přeskládat.</small></div><div><select id="eventPlayedSongSelect"></select><button class="secondary-button compact" id="addEventPlayedSong" type="button">Přidat</button></div></div><ol id="eventPlayedSongs" class="played-song-list"></ol></div></section><div class="dialog-actions"><button class="secondary-button" data-close-dialog="eventDialog" type="button">Zrušit</button><button class="primary-button" type="submit">Uložit koncert</button></div></form></dialog>
   <dialog id="calendarEntryDialog">
     <div class="dialog-heading"><h2 id="calendarEntryHeading">Vlastní zápis</h2><button data-close-dialog="calendarEntryDialog" aria-label="Zavřít" type="button">×</button></div>
     <form id="calendarEntryForm" class="dialog-form">
@@ -234,6 +257,49 @@
       <p class="section-help">Zápis uvidí ostatní členové kapely a objeví se v připojených kalendářích.</p>
       <div class="dialog-actions"><button class="quiet-button" id="deleteCalendarEntry" type="button" hidden>Odstranit zápis</button><button class="primary-button" type="submit">Uložit zápis</button></div>
     </form>
+  </dialog>
+
+  <dialog id="invoiceSupplierDialog" class="wide-dialog" aria-labelledby="invoiceSupplierHeading">
+    <div class="dialog-heading"><h2 id="invoiceSupplierHeading">Fakturační údaje dodavatele</h2><button data-close-dialog="invoiceSupplierDialog" aria-label="Zavřít" type="button">×</button></div>
+    <form id="invoiceSupplierForm" class="dialog-form">
+      <div class="invoice-party form-grid" data-invoice-party>
+        <div class="invoice-ico">
+          <label for="supplierIco">IČO</label>
+          <div><input id="supplierIco" name="supplierIco" inputmode="numeric" maxlength="8" required><button class="secondary-button compact" type="button" data-ares-lookup>Načíst z ARESu</button></div>
+        </div>
+        <label>DIČ<input name="supplierDic" maxlength="32"></label>
+        <label>Bankovní účet / IBAN<input name="bankAccount" maxlength="100" required></label>
+        <label class="wide">Jméno / název dodavatele<input name="supplierName" maxlength="160" required></label>
+        <label class="wide">Fakturační adresa<textarea name="supplierAddress" maxlength="260" rows="2" required></textarea></label>
+        <label class="wide">Údaj o zápisu do rejstříku (volitelný)<input name="registration" maxlength="180" placeholder="Např. oddíl a vložka obchodního rejstříku"></label>
+        <label class="check-row wide"><input id="invoiceVatPayer" name="vatPayer" type="checkbox"> Dodavatel je plátce DPH</label>
+        <p class="form-status wide" data-ares-status role="status"></p>
+      </div>
+      <div class="dialog-actions"><button class="secondary-button" data-close-dialog="invoiceSupplierDialog" type="button">Zrušit</button><button type="submit" class="primary-button">Uložit údaje</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="invoiceDialog" class="wide-dialog" aria-labelledby="invoiceHeading">
+    <div class="dialog-heading"><h2 id="invoiceHeading">Faktura za koncert</h2><button data-close-dialog="invoiceDialog" aria-label="Zavřít" type="button">×</button></div>
+    <div class="invoice-overview" id="invoiceOverview"></div>
+    <p class="form-status" id="invoiceStatus" role="status"></p>
+    <div class="button-row" id="invoiceMissingActions" hidden>
+      <button class="secondary-button compact" id="invoiceFixEvent" type="button">Upravit údaje koncertu</button>
+      <button class="secondary-button compact" id="invoiceFixSupplier" type="button">Doplnit dodavatele</button>
+    </div>
+    <form id="invoiceForm" class="dialog-form" hidden>
+      <div class="form-grid">
+        <label class="wide">Popis služby<input name="description" maxlength="200" required></label>
+        <div class="date-field"><label for="invoiceIssueDate">Datum vystavení</label><input id="invoiceIssueDate" name="issueDate" type="text" data-date-picker autocomplete="off" maxlength="14" required></div>
+        <div class="date-field"><label for="invoiceDueDate">Splatnost</label><input id="invoiceDueDate" name="dueDate" type="text" data-date-picker data-date-fallback="invoiceIssueDate" autocomplete="off" maxlength="14" required></div>
+        <label>Číslo faktury (volitelné)<input name="number" maxlength="32" placeholder="Přidělí se automaticky"></label>
+        <label>Variabilní symbol (volitelný)<input name="variableSymbol" inputmode="numeric" maxlength="10" placeholder="Odvodí se z čísla faktury"></label>
+        <div class="date-field" id="invoiceTaxDateField" hidden><label for="invoiceTaxDate">Datum plnění (DUZP)</label><input id="invoiceTaxDate" name="taxDate" type="text" data-date-picker autocomplete="off" maxlength="14"></div>
+        <label id="invoiceTaxRateField" hidden>Sazba DPH<select name="vatRate"><option value="">Vyber sazbu</option><option value="21">21 %</option><option value="12">12 %</option></select></label>
+      </div>
+      <div class="dialog-actions"><button class="secondary-button" data-close-dialog="invoiceDialog" type="button">Zrušit</button><button type="submit" class="primary-button">Vystavit fakturu</button></div>
+    </form>
+    <div id="invoiceDownloadActions" class="dialog-actions" hidden><a id="invoiceDownload" class="primary-button" download>Stáhnout PDF</a></div>
   </dialog>
 
   <template id="datePickerButton">
@@ -273,7 +339,7 @@
 
   <div id="printRoot" aria-hidden="true"></div>
   <div class="toast" id="appToast" role="status" aria-live="polite"></div>
-  <script src="/planning.js?v=0.12.6"></script>
-  <script src="/app.js?v=0.12.6"></script>
+  <script src="/planning.js?v=0.13.0"></script>
+  <script src="/app.js?v=0.13.0"></script>
 </body>
 </html>

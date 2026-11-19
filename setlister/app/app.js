@@ -20,6 +20,7 @@
   let workspace = null;
   let revision = 0;
   let saveTimer = null;
+  let workspaceSave = null;
   let toastTimer = null;
   let memberDraftCustomInstruments = [];
   let memberDraftSelectedIds = new Set();
@@ -187,6 +188,7 @@
     try {
       const previousBand = workspace?.band.id;
       workspace = await api("/workspace?bandId=" + encodeURIComponent(activeBandId)); revision = workspace.revision; workspace.state = normalizeState(workspace.state);
+      elements.saveState.textContent = "Uloženo";
       if (workspace.band.id !== previousBand) {
         rehearsalPlanShown = false;
         elements.rehearsalScope.value = "";
@@ -197,6 +199,8 @@
         bandCalendarDate = new Date();
         calendarFeedBand = "";
         elements.calendarSubscribe.open = false;
+        elements.invoiceArchive.open = false;
+        elements.invoiceArchiveList.replaceChildren();
         renderCalendarFeed("");
       }
       elements.currentBandName.textContent = workspace.band.name; elements.settingsBandName.textContent = workspace.band.name; elements.inviteCode.textContent = workspace.band.inviteCode;
@@ -398,6 +402,8 @@
       const actions = document.createElement("div"); actions.className = "row-actions"; actions.append(rowButton("✎", "Upravit člena", () => openMemberDialog(member.id)), rowButton("×", "Odstranit člena", () => deleteMember(member.id))); row.append(info, status, actions); return row;
     }));
     elements.rotateCode.hidden = workspace.membership.role !== "owner";
+    const supplier = workspace.state.bandProfile.invoiceSupplier;
+    elements.invoiceSupplierSummary.textContent = supplier?.name || "Vyplň dodavatele pro faktury za koncerty.";
   }
   function deleteMember(id) {
     const member = memberById(id); if (!member || !window.confirm("Opravdu odstranit člena „" + member.name + "“ ze setlistů?")) return;
@@ -1115,6 +1121,9 @@
       done.className = "secondary-button compact";
       card.append(done);
     }
+    const invoice = rowButton("Faktura", "Faktura za " + (event.name || event.venue), () => openInvoiceDialog(event));
+    invoice.className = "secondary-button compact";
+    card.append(invoice);
     return card;
   }
   function escapeText(value) { const span = document.createElement("span"); span.textContent = String(value || ""); return span.innerHTML; }
@@ -1141,7 +1150,10 @@
   }
   function toggleEventHistoryFields() { const completed = elements.eventStatus.value === "completed"; elements.eventHistoryFields.hidden = !completed; if (completed && !eventPlayedSongDraft.length) eventPlayedSongDraft = [...(savedSetlistById(elements.eventSetlist.value)?.songIds || [])]; renderEventPlayedSongs(); }
   function openEventDialog(eventId = "", forceCompleted = false, selectedDate = "") {
-    const event = workspace.state.events.find(item => item.id === eventId); const form = elements.eventForm; form.reset(); elements.eventDateInput.setCustomValidity(""); form.elements.eventId.value = event?.id || ""; form.elements.name.value = event?.name || ""; const eventDate = event?.date || selectedDate; form.elements.date.value = eventDate ? formatEventDate(eventDate) : ""; form.elements.feeAmount.value = event?.feeAmount ?? ""; form.elements.feeCurrency.value = event?.feeCurrency || "CZK"; enhanceSelect(form.elements.feeCurrency); ["city", "venue", "address", "arrival", "loadIn", "soundcheck", "showStart", "showEnd", "contactName", "contactPhone", "note", "actualStart", "actualEnd", "performanceNote"].forEach(key => { form.elements[key].value = event?.[key] || ""; }); form.elements.status.value = forceCompleted ? "completed" : event?.status || "planned"; form.elements.rating.value = String(event?.rating || 0); form.elements.checklist.value = (event?.checklist || []).map(item => item.label).join("\n"); refreshEventSetlistOptions(event?.setlistId || ""); eventPlayedSongDraft = [...(event?.playedSongIds || [])]; const matchingLiveSet = event?.setlistId && liveSession.liveSet?.setlistRef === "saved:" + event.setlistId ? liveSession.liveSet : null; if (forceCompleted && !eventPlayedSongDraft.length && matchingLiveSet?.playedSongIds?.length) eventPlayedSongDraft = [...matchingLiveSet.playedSongIds]; if ((forceCompleted || event?.status === "completed") && !eventPlayedSongDraft.length) eventPlayedSongDraft = [...(eventSetlist(event)?.songIds || [])]; elements.eventDialogTitle.textContent = event ? "Upravit koncert" : "Přidat koncert"; toggleEventHistoryFields(); enhanceSelect(elements.eventStatus); enhanceSelect(form.elements.rating); elements.eventDialog.showModal();
+    const event = workspace.state.events.find(item => item.id === eventId); const form = elements.eventForm; form.reset();
+    fillInvoiceParty(form, "customer", event?.invoiceCustomer);
+    elements.eventInvoiceCustomer.open = Boolean(event?.invoiceCustomer?.name);
+     elements.eventDateInput.setCustomValidity(""); form.elements.eventId.value = event?.id || ""; form.elements.name.value = event?.name || ""; const eventDate = event?.date || selectedDate; form.elements.date.value = eventDate ? formatEventDate(eventDate) : ""; form.elements.feeAmount.value = event?.feeAmount ?? ""; form.elements.feeCurrency.value = event?.feeCurrency || "CZK"; enhanceSelect(form.elements.feeCurrency); ["city", "venue", "address", "arrival", "loadIn", "soundcheck", "showStart", "showEnd", "contactName", "contactPhone", "note", "actualStart", "actualEnd", "performanceNote"].forEach(key => { form.elements[key].value = event?.[key] || ""; }); form.elements.status.value = forceCompleted ? "completed" : event?.status || "planned"; form.elements.rating.value = String(event?.rating || 0); form.elements.checklist.value = (event?.checklist || []).map(item => item.label).join("\n"); refreshEventSetlistOptions(event?.setlistId || ""); eventPlayedSongDraft = [...(event?.playedSongIds || [])]; const matchingLiveSet = event?.setlistId && liveSession.liveSet?.setlistRef === "saved:" + event.setlistId ? liveSession.liveSet : null; if (forceCompleted && !eventPlayedSongDraft.length && matchingLiveSet?.playedSongIds?.length) eventPlayedSongDraft = [...matchingLiveSet.playedSongIds]; if ((forceCompleted || event?.status === "completed") && !eventPlayedSongDraft.length) eventPlayedSongDraft = [...(eventSetlist(event)?.songIds || [])]; elements.eventDialogTitle.textContent = event ? "Upravit koncert" : "Přidat koncert"; toggleEventHistoryFields(); enhanceSelect(elements.eventStatus); enhanceSelect(form.elements.rating); elements.eventDialog.showModal();
   }
   function saveEventForm(form) {
     const data = formPayload(form); const date = parseEventDate(data.date); if (!date) { elements.eventDateInput.setCustomValidity("Zadej platné datum nebo ho vyber v kalendáři."); elements.eventDateInput.reportValidity(); return; } const times = ["arrival", "loadIn", "soundcheck", "showStart", "showEnd", "actualStart", "actualEnd"]; for (const key of times) if (data[key] && !parseClock(data[key])) { showToast("Zkontroluj čas. Použij formát 16:30."); return; }
@@ -1152,8 +1164,239 @@
       form.elements.feeAmount.focus();
       return;
     }
-    const existing = workspace.state.events.find(item => item.id === data.eventId); const oldChecks = new Map((existing?.checklist || []).map(item => [normalizedText(item.label), item])); const checklist = [...new Set(String(data.checklist || "").split(/\r?\n/).map(item => item.trim()).filter(Boolean))].slice(0, 30).map(label => ({ id: oldChecks.get(normalizedText(label))?.id || uid("check"), label: label.slice(0, 120), done: Boolean(oldChecks.get(normalizedText(label))?.done) })); const completed = data.status === "completed"; const plannedSongIds = completed ? (existing?.plannedSongIds?.length ? [...existing.plannedSongIds] : [...(savedSetlistById(data.setlistId)?.songIds || [])]) : (existing?.plannedSongIds || []); const payload = { id: existing?.id || uid("event"), name: data.name.trim(), date, city: data.city.trim(), venue: data.venue.trim(), address: data.address.trim(), feeAmount, feeCurrency: data.feeCurrency || "CZK", arrival: parseClock(data.arrival), loadIn: parseClock(data.loadIn), soundcheck: parseClock(data.soundcheck), showStart: parseClock(data.showStart), showEnd: parseClock(data.showEnd), setlistId: data.setlistId || "", contactName: data.contactName.trim(), contactPhone: data.contactPhone.trim(), note: data.note.trim(), checklist, status: completed ? "completed" : "planned", actualStart: parseClock(data.actualStart), actualEnd: parseClock(data.actualEnd), rating: Math.max(0, Math.min(5, Number(data.rating) || 0)), performanceNote: data.performanceNote.trim(), playedSongIds: completed ? [...eventPlayedSongDraft] : (existing?.playedSongIds || []), plannedSongIds };
+    const customer = readInvoiceParty(form, "customer");
+    if (!validateInvoiceIco(form.elements.customerIco)) {
+      elements.eventInvoiceCustomer.open = true;
+      form.elements.customerIco.reportValidity();
+      return;
+    }
+    const existing = workspace.state.events.find(item => item.id === data.eventId); const oldChecks = new Map((existing?.checklist || []).map(item => [normalizedText(item.label), item])); const checklist = [...new Set(String(data.checklist || "").split(/\r?\n/).map(item => item.trim()).filter(Boolean))].slice(0, 30).map(label => ({ id: oldChecks.get(normalizedText(label))?.id || uid("check"), label: label.slice(0, 120), done: Boolean(oldChecks.get(normalizedText(label))?.done) })); const completed = data.status === "completed"; const plannedSongIds = completed ? (existing?.plannedSongIds?.length ? [...existing.plannedSongIds] : [...(savedSetlistById(data.setlistId)?.songIds || [])]) : (existing?.plannedSongIds || []); const payload = { id: existing?.id || uid("event"), name: data.name.trim(), date, city: data.city.trim(), venue: data.venue.trim(), address: data.address.trim(), feeAmount, feeCurrency: data.feeCurrency || "CZK", arrival: parseClock(data.arrival), loadIn: parseClock(data.loadIn), soundcheck: parseClock(data.soundcheck), showStart: parseClock(data.showStart), showEnd: parseClock(data.showEnd), setlistId: data.setlistId || "", contactName: data.contactName.trim(), contactPhone: data.contactPhone.trim(), note: data.note.trim(), checklist, status: completed ? "completed" : "planned", actualStart: parseClock(data.actualStart), actualEnd: parseClock(data.actualEnd), rating: Math.max(0, Math.min(5, Number(data.rating) || 0)), performanceNote: data.performanceNote.trim(), playedSongIds: completed ? [...eventPlayedSongDraft] : (existing?.playedSongIds || []), plannedSongIds, invoiceCustomer: customer };
     if (existing) Object.assign(existing, payload); else workspace.state.events.push(payload); elements.eventDialog.close(); changed(); showToast(existing ? "Koncert je upravený." : "Koncert je naplánovaný.");
+  }
+  const invoicePartyKeys = ["ico", "dic", "name", "address"];
+  const invoicePartyInput = (form, role, key) => form.elements[role + key[0].toUpperCase() + key.slice(1)];
+  function fillInvoiceParty(form, role, source = {}) {
+    for (const key of invoicePartyKeys) {
+      const input = invoicePartyInput(form, role, key);
+      input.value = source[key] || "";
+      input.setCustomValidity("");
+    }
+    if (role === "customer") {
+      form.elements.customerCountry.value = source.country || "CZ";
+      enhanceSelect(form.elements.customerCountry);
+    }
+    const group = form.querySelector("[data-invoice-party]");
+    delete group.dataset.lookup;
+    group.querySelector("[data-ares-lookup]").disabled = false;
+    showStatus(group.querySelector("[data-ares-status]"), "");
+  }
+  function readInvoiceParty(form, role) {
+    const party = Object.fromEntries(invoicePartyKeys.map(key => [key, invoicePartyInput(form, role, key).value.trim()]));
+    if (role === "customer") party.country = form.elements.customerCountry.value;
+    return party;
+  }
+  function validateInvoiceIco(input) {
+    const ico = input.value.replace(/\s+/g, "");
+    const sum = Array.from(ico.slice(0, 7)).reduce((total, digit, index) => total + Number(digit) * (8 - index), 0);
+    const valid = !ico || (/^\d{8}$/.test(ico) && ico !== "00000000" && (11 - sum % 11) % 10 === Number(ico[7]));
+    input.setCustomValidity(valid ? "" : "Zadej platné osmimístné české IČO.");
+    if (valid) input.value = ico;
+    return valid;
+  }
+  async function lookupInvoiceParty(button) {
+    const group = button.closest("[data-invoice-party]");
+    const form = group.closest("form");
+    const role = form === elements.eventForm ? "customer" : "supplier";
+    const field = invoicePartyInput(form, role, "ico");
+    if (!validateInvoiceIco(field) || !field.value) {
+      if (!field.value) field.setCustomValidity("Nejdřív zadej IČO.");
+      field.reportValidity();
+      return;
+    }
+    const before = readInvoiceParty(form, role);
+    const lookup = uid("ares");
+    group.dataset.lookup = lookup;
+    const band = activeBandId;
+    const status = group.querySelector("[data-ares-status]");
+    button.disabled = true;
+    showStatus(status, "Načítám z ARESu…");
+    try {
+      const query = new URLSearchParams({ bandId: band, ico: before.ico });
+      const { party } = await api("/ares?" + query);
+      if (band !== activeBandId || group.dataset.lookup !== lookup || !form.closest("dialog").open) return;
+      if (JSON.stringify(readInvoiceParty(form, role)) !== JSON.stringify(before)) {
+        showStatus(status, "Údaje se během načítání změnily. Pro načtení z ARESu klikni znovu.");
+        return;
+      }
+      fillInvoiceParty(form, role, party);
+      showStatus(status, "Údaje načtené z ARESu. Před uložením je zkontroluj.", true);
+    } catch (error) {
+      if (group.dataset.lookup === lookup && band === activeBandId) showStatus(status, error.message);
+    } finally {
+      if (group.dataset.lookup === lookup) button.disabled = false;
+    }
+  }
+  function openInvoiceSupplier() {
+    const form = elements.invoiceSupplierForm;
+    const supplier = workspace.state.bandProfile.invoiceSupplier || {};
+    form.reset();
+    fillInvoiceParty(form, "supplier", supplier);
+    form.elements.bankAccount.value = supplier.bankAccount || "";
+    form.elements.registration.value = supplier.registration || "";
+    form.elements.vatPayer.checked = supplier.vatPayer === true;
+    elements.invoiceSupplierDialog.showModal();
+  }
+  function saveInvoiceSupplier(form) {
+    if (!validateInvoiceIco(form.elements.supplierIco)) {
+      form.elements.supplierIco.reportValidity();
+      return;
+    }
+    const supplier = {
+      ...readInvoiceParty(form, "supplier"),
+      bankAccount: form.elements.bankAccount.value.trim(),
+      registration: form.elements.registration.value.trim(),
+      vatPayer: form.elements.vatPayer.checked,
+    };
+    if (!supplier.name || !supplier.address || !supplier.bankAccount || !supplier.ico || (supplier.vatPayer && !supplier.dic)) {
+      showStatus(form.querySelector("[data-ares-status]"), "Vyplň jméno, adresu, IČO a účet. Plátce DPH zadává také DIČ.");
+      return;
+    }
+    workspace.state.bandProfile.invoiceSupplier = supplier;
+    elements.invoiceSupplierDialog.close();
+    changed();
+    showToast("Fakturační údaje dodavatele jsou uložené.");
+  }
+  const invoiceMoney = (amount, currency) => new Intl.NumberFormat("cs-CZ", { style: "currency", currency }).format(amount);
+  const invoiceQuery = (bandId, eventId) => new URLSearchParams(eventId ? { bandId, eventId } : { bandId });
+  function invoiceSummary(supplier, customer, amount) {
+    const items = [["Dodavatel", supplier || "Chybí"], ["Odběratel", customer || "Chybí"], ["Celkem k úhradě", amount]];
+    elements.invoiceOverview.replaceChildren(...items.map(([label, value]) => {
+      const item = mailNode("div", "invoice-fact");
+      item.append(mailNode("span", "", label), mailNode("strong", "", value));
+      return item;
+    }));
+  }
+  function showIssuedInvoice(invoice, bandId) {
+    elements.invoiceHeading.textContent = "Faktura " + invoice.number;
+    invoiceSummary(invoice.supplier.name, invoice.customer.name, invoiceMoney(invoice.totalMinor / 100, invoice.currency));
+    elements.invoiceForm.hidden = true;
+    elements.invoiceMissingActions.hidden = true;
+    elements.invoiceDownload.href = API + "/invoice.pdf?" + invoiceQuery(bandId, invoice.eventId);
+    elements.invoiceDownloadActions.hidden = false;
+    showStatus(elements.invoiceStatus, "Vystaveno " + formatEventDate(invoice.issueDate) + " · Splatnost " + formatEventDate(invoice.dueDate), true);
+  }
+  async function openInvoiceDialog(event) {
+    const band = activeBandId;
+    const dialog = elements.invoiceDialog;
+    const job = uid("invoice");
+    dialog.dataset.job = job;
+    const current = () => dialog.open && dialog.dataset.job === job && band === activeBandId;
+    elements.invoiceHeading.textContent = "Faktura za koncert";
+    elements.invoiceOverview.replaceChildren();
+    elements.invoiceForm.hidden = true;
+    elements.invoiceDownloadActions.hidden = true;
+    elements.invoiceMissingActions.hidden = true;
+    showStatus(elements.invoiceStatus, "Načítám…");
+    dialog.showModal();
+    try {
+      const { invoice } = await api("/invoices?" + invoiceQuery(band, event.id));
+      if (!current()) return;
+      if (invoice) { showIssuedInvoice(invoice, band); return; }
+      const supplier = workspace.state.bandProfile.invoiceSupplier || {};
+      const customer = event.invoiceCustomer || {};
+      const missingSupplier = !supplier.name || !supplier.address || !supplier.ico || !supplier.bankAccount
+        || (supplier.vatPayer && !supplier.dic);
+      const missingEvent = !customer.name || !customer.address || !(event.feeAmount > 0);
+      const currency = event.feeCurrency || "CZK";
+      invoiceSummary(supplier.name, customer.name, event.feeAmount > 0 ? invoiceMoney(event.feeAmount, currency) : "Chybí honorář");
+      const blockedVat = supplier.vatPayer && (currency !== "CZK" || customer.country === "other");
+      elements.invoiceMissingActions.hidden = !(missingSupplier || missingEvent || blockedVat);
+      elements.invoiceFixEvent.hidden = !(missingEvent || blockedVat);
+      elements.invoiceFixSupplier.hidden = !missingSupplier;
+      elements.invoiceFixEvent.onclick = () => {
+        dialog.close();
+        openEventDialog(event.id);
+        elements.eventInvoiceCustomer.open = true;
+      };
+      if (missingSupplier || missingEvent || blockedVat) {
+        showStatus(elements.invoiceStatus, blockedVat ? "Faktury s DPH jsou dostupné pro tuzemské plnění v Kč."
+          : "Pro vystavení doplň dodavatele, odběratele a honorář koncertu.");
+        return;
+      }
+
+      const form = elements.invoiceForm;
+      form.reset();
+      form.dataset.eventId = event.id;
+      const today = new Date();
+      const due = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14);
+      const dateText = day => formatEventDate(SetlisterPlanning.dateKey(day));
+      form.elements.issueDate.value = dateText(today);
+      form.elements.dueDate.value = dateText(due);
+      form.elements.taxDate.value = formatEventDate(event.date);
+      form.elements.description.value = ("Hudební vystoupení – " + (event.name || event.venue)).slice(0, 200);
+      elements.invoiceTaxDateField.hidden = !supplier.vatPayer;
+      elements.invoiceTaxRateField.hidden = !supplier.vatPayer;
+      form.elements.taxDate.required = Boolean(supplier.vatPayer);
+      enhanceSelect(form.elements.vatRate);
+      form.hidden = false;
+      showStatus(elements.invoiceStatus, supplier.vatPayer ? "Zapsaný honorář je celková částka včetně DPH." : "", true);
+    } catch (error) {
+      if (current()) showStatus(elements.invoiceStatus, error.message);
+    }
+  }
+  async function issueInvoice(form) {
+    const band = activeBandId;
+    const eventId = form.dataset.eventId;
+    const job = elements.invoiceDialog.dataset.job;
+    const current = () => elements.invoiceDialog.open && elements.invoiceDialog.dataset.job === job && band === activeBandId;
+    const button = form.querySelector("button[type=submit]");
+    const data = formPayload(form);
+    button.disabled = true;
+    try {
+      if (!await flushWorkspace()) {
+        if (current()) showStatus(elements.invoiceStatus, "Změny se nepodařilo uložit. Zkontroluj údaje koncertu a dodavatele.");
+        return;
+      }
+      if (!current()) return;
+      const payload = {
+        bandId: band, eventId, revision, description: data.description, number: data.number,
+        variableSymbol: data.variableSymbol, issueDate: parseEventDate(data.issueDate),
+        dueDate: parseEventDate(data.dueDate), taxDate: parseEventDate(data.taxDate), vatRate: Number(data.vatRate),
+      };
+      const { invoice } = await api("/invoices", { method: "POST", body: JSON.stringify(payload) });
+      if (current()) showIssuedInvoice(invoice, band);
+      if (band === activeBandId && elements.invoiceArchive.open) loadInvoiceArchive();
+    } catch (error) {
+      if (current()) {
+        if (error.message.includes("Konflikt změn")) await loadWorkspace();
+        if (current()) showStatus(elements.invoiceStatus, error.message);
+      }
+    } finally {
+      button.disabled = false;
+    }
+  }
+  async function loadInvoiceArchive() {
+    const band = activeBandId;
+    const list = elements.invoiceArchiveList;
+    list.replaceChildren(mailNode("p", "", "Načítám…"));
+    try {
+      const { invoices } = await api("/invoices?" + invoiceQuery(band));
+      if (band !== activeBandId) return;
+      const rows = invoices.map(invoice => {
+        const row = mailNode("div", "invoice-archive-row");
+        const details = mailNode("div");
+        details.append(mailNode("strong", "", invoice.number + " · " + invoice.customer.name),
+          mailNode("small", "", formatEventDate(invoice.issueDate) + " · " + invoiceMoney(invoice.totalMinor / 100, invoice.currency)));
+        const link = mailNode("a", "secondary-button compact", "Stáhnout PDF");
+        link.href = API + "/invoice.pdf?" + invoiceQuery(band, invoice.eventId);
+        link.download = "";
+        row.append(details, link);
+        return row;
+      });
+      list.replaceChildren(...(rows.length ? rows : [mailNode("p", "", "Zatím tu nejsou vystavené faktury.")]));
+    } catch (error) {
+      if (band === activeBandId) list.replaceChildren(mailNode("p", "", error.message));
+    }
   }
   function songTuning(song, memberId) { const detail = songMemberDetail(song, memberId); const field = normalizePrintFields(detail.printFields).find(item => ["ladeni", "tuning"].includes(normalizedText(item.label))); return normalizedText(field?.value || ""); }
   function transitionMetrics(first, second) {
@@ -1241,23 +1484,44 @@
       const button = document.createElement("button"); button.type = "button"; button.classList.toggle("active", band.id === activeBandId); const name = document.createElement("strong"); name.textContent = band.name; const role = document.createElement("small"); role.textContent = band.role === "owner" ? "Vlastník" : "Člen"; button.append(name, role); button.addEventListener("click", () => { activeBandId = band.id; localStorage.setItem(ACTIVE_BAND_KEY, band.id); elements.bandDialog.close(); loadWorkspace(); }); return button;
     }));
   }
-  function changed() { renderWorkspace(); elements.saveState.textContent = "Ukládám…"; clearTimeout(saveTimer); saveTimer = setTimeout(saveWorkspace, 450); }
-  async function saveWorkspace() {
-    if (!workspace || workspace.band.id !== activeBandId) return false;
-    const band = activeBandId;
-    try {
-      const result = await api("/band-state", { method: "PUT", body: JSON.stringify({ bandId: band, revision, state: workspace.state }) });
-      if (band !== activeBandId) return false;
-      revision = result.revision;
-      elements.saveState.textContent = "Uloženo";
-      return true;
-    } catch (error) {
-      if (band !== activeBandId) return false;
-      elements.saveState.textContent = "Neuloženo";
-      if (error.message.includes("Konflikt")) await loadWorkspace();
-      showToast(error.message);
-      return false;
+  function scheduleWorkspaceSave(delay) {
+    elements.saveState.textContent = "Ukládám…";
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveWorkspace, delay);
+  }
+  function changed() { renderWorkspace(); scheduleWorkspaceSave(450); }
+  function saveWorkspace() {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    const target = workspace;
+    const band = target?.band.id;
+    const pending = workspaceSave;
+    const saving = (async () => {
+      if (pending) await pending;
+      if (!target || workspace !== target || band !== activeBandId) return false;
+      try {
+        const result = await api("/band-state", { method: "PUT", body: JSON.stringify({ bandId: band, revision, state: target.state }) });
+        if (workspace !== target || band !== activeBandId) return false;
+        revision = result.revision;
+        if (saveTimer === null && workspaceSave === saving) elements.saveState.textContent = "Uloženo";
+        return true;
+      } catch (error) {
+        if (workspace !== target || band !== activeBandId) return false;
+        elements.saveState.textContent = "Neuloženo";
+        if (error.message.includes("Konflikt")) await loadWorkspace();
+        showToast(error.message);
+        return false;
+      }
+    })();
+    workspaceSave = saving;
+    saving.then(() => { if (workspaceSave === saving) workspaceSave = null; });
+    return saving;
+  }
+  async function flushWorkspace() {
+    while (saveTimer !== null || workspaceSave) {
+      if (!await (saveTimer !== null ? saveWorkspace() : workspaceSave)) return false;
     }
+    return elements.saveState.textContent !== "Neuloženo";
   }
   function printFieldDraft(kind) { return kind === "song" ? songPrintFieldDraft : notesPrintFieldDraft; }
   function renderPrintFieldEditor(kind, focusLast = false) {
@@ -1588,7 +1852,7 @@
   elements.bulkImportFile.addEventListener("change", async event => { const file = event.target.files[0]; if (!file) return; try { await loadImportFile(file); } catch (error) { showStatus(elements.bulkImportStatus, error.message || "Soubor se nepodařilo načíst."); } event.target.value = ""; });
   elements.appTargetMinutes.addEventListener("input", event => { if (!workspace || event.target.value === "") return; workspace.state.draft.targetMinutes = Math.max(1, Math.min(240, Number(event.target.value))); changed(); });
   elements.appTargetMinutes.addEventListener("blur", event => { if (!event.target.value) { event.target.value = String(workspace.state.draft.targetMinutes || 45); } });
-  elements.setName.addEventListener("input", event => { workspace.state.draft.name = event.target.value; clearTimeout(saveTimer); saveTimer = setTimeout(saveWorkspace, 600); });
+  elements.setName.addEventListener("input", event => { workspace.state.draft.name = event.target.value; scheduleWorkspaceSave(600); });
   elements.editSetName.addEventListener("click", () => { elements.setName.focus(); elements.setName.select(); });
   elements.setViewer.addEventListener("change", event => { workspace.state.draft.viewerMemberId = event.target.value; changed(); });
   elements.songSearch.addEventListener("input", renderWorkspace);
@@ -1596,6 +1860,18 @@
   elements.smartOrderSet.addEventListener("click", openSmartOrderDialog); elements.applySmartOrder.addEventListener("click", () => { if (!smartOrderDraft.length) return; workspace.state.draft.songIds = [...smartOrderDraft]; elements.smartOrderDialog.close(); changed(); showToast("Návrh pořadí je použitý."); });
   elements.addEvent.addEventListener("click", () => openEventDialog()); elements.eventForm.addEventListener("submit", event => { event.preventDefault(); saveEventForm(event.currentTarget); }); elements.eventStatus.addEventListener("change", toggleEventHistoryFields); elements.eventSetlist.addEventListener("change", () => { if (elements.eventStatus.value === "completed") eventPlayedSongDraft = [...(savedSetlistById(elements.eventSetlist.value)?.songIds || [])]; renderEventPlayedSongs(); }); elements.addEventPlayedSong.addEventListener("click", () => { const id = elements.eventPlayedSongSelect.value; if (!id || eventPlayedSongDraft.includes(id)) return; eventPlayedSongDraft.push(id); renderEventPlayedSongs(); });
   setupDatePickers();
+  for (const button of document.querySelectorAll("[data-ares-lookup]")) {
+    button.addEventListener("click", () => lookupInvoiceParty(button));
+  }
+  for (const field of [elements.customerIco, elements.supplierIco]) {
+    field.addEventListener("input", () => field.setCustomValidity(""));
+  }
+  elements.editInvoiceSupplier.addEventListener("click", openInvoiceSupplier);
+  elements.invoiceFixSupplier.addEventListener("click", () => { elements.invoiceDialog.close(); openInvoiceSupplier(); });
+  elements.invoiceSupplierForm.addEventListener("submit", event => { event.preventDefault(); saveInvoiceSupplier(event.currentTarget); });
+  elements.invoiceForm.addEventListener("submit", event => { event.preventDefault(); issueInvoice(event.currentTarget); });
+  elements.invoiceArchive.addEventListener("toggle", () => { if (elements.invoiceArchive.open) loadInvoiceArchive(); });
+
   elements.rehearsalForm.addEventListener("submit", event => {
     event.preventDefault(); rehearsalPlanShown = true; renderRehearsalPreview();
   });

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.0
+
+- Fakturační údaje dodavatele jsou v nastavení kapely a údaje pořadatele u koncertu. České subjekty lze doplnit podle IČO z ARES.
+- Z uloženého honoráře lze vystavit fakturu a stáhnout PDF. Vystavené doklady mají vlastní číslo a zůstávají v archivu.
+- Podporované jsou faktury neplátců DPH a běžné tuzemské doklady s DPH v Kč.
+
 ## 0.12.6
 
 - Datum koncertu, termín úkolu a obě data vlastního zápisu lze zadat ručně nebo vybrat ve stejném vlastním kalendáři. Pole rozsahu vlastního zápisu se už nepřekrývají.

@@ -1,5 +1,5 @@
 name: Setlister
-version: "0.12.6"
+version: "0.13.0"
 slug: setlister
 description: Kapelní repertoár, setlisty, tisk a read-only asistent nad kapelními Gmaily.
 url: https://github.com/hanych420/setlister

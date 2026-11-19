@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.12.6 · aktualizováno 19. 11. 2026
+> Stav specifikace: 0.13.0 · aktualizováno 19. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -31,7 +31,7 @@ Po přihlášení zobraz spodní navigaci:
 
 - **Setlist** — právě skládaný set, repertoár k přidání, uložené sety, tisk/PDF.
 - **Repertoár** — skladby, jejich obecná metadata a osobní pokyny členů.
-- **Koncerty** — agenda a měsíční kalendář, harmonogram, honorář, checklist, přiřazený setlist a historie hraní.
+- **Koncerty** — agenda a měsíční kalendář, harmonogram, honorář, fakturace, checklist, přiřazený setlist a historie hraní.
 - **Zkouška** — připravenost členů, návrh zkoušky a společně vedený průchod setlistem s osobními pokyny a metronomem.
 - **Mailový agent** — připojení Gmailů, stav synchronizace a doložený chat nad jejich obsahem.
 - **Úkoly** — kapelní seznam s volnou kategorií, termínem, odpovědným účtem a stavem hotovo.
@@ -57,7 +57,10 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
 ```json
 {
   "version": 2,
-  "bandProfile": { "logoDataUrl": "data:image/webp;base64,..." },
+  "bandProfile": {
+    "logoDataUrl": "data:image/webp;base64,...",
+    "invoiceSupplier": { "ico": "", "dic": "", "name": "", "address": "", "bankAccount": "", "registration": "", "vatPayer": false }
+  },
   "members": [
     {
       "id": "member-...",
@@ -121,6 +124,7 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
       "address": "Dlouhá 33, Praha",
       "feeAmount": 12000,
       "feeCurrency": "CZK",
+      "invoiceCustomer": { "ico": "", "dic": "", "name": "", "address": "", "country": "CZ" },
       "arrival": "16:00",
       "loadIn": "16:30",
       "soundcheck": "17:30",
@@ -332,9 +336,19 @@ Server uchovává doložená fakta včetně zdrojové zprávy, citace a času. P
 
 Soukromý `/propadleek` PropsBot zůstává samostatný prototyp a jeho endpointy ani data se ve veřejné aplikaci nepoužívají.
 
+## Fakturace koncertů
+
+V **Kapela a účet → Fakturace koncertů** vyplň dodavatele. Vyžaduj název, IČO, sídlo a bankovní účet nebo IBAN. DIČ je povinné pro plátce DPH. Pořadatel se vyplňuje v detailu koncertu jako odběratel. Vyžaduj název a fakturační adresu až při vystavení, IČO a DIČ odběratele jsou volitelné. U zahraničního odběratele nastav `country: "other"` a uveď zemi v adrese. Oba formuláře umí doplnit název, sídlo a případné DIČ z ARES podle osmimístného českého IČO. Uživatel může údaje upravit ručně.
+
+Na kartě uloženého koncertu otevři tlačítkem **Faktura** údaje pro vystavení. Částka a měna jsou kladný honorář a měna z uloženého koncertu. Ukaž dodavatele, odběratele a částku. Předvyplň popis služby, datum vystavení dneškem a splatnost za 14 dní. Číslo je volitelné a server přidělí číslo ve formátu `YYYYNNNN`, pokud není zadáno vlastní jedinečné číslo. Variabilní symbol vznikne z číslic čísla faktury, nejvýše 10 číslic, lze jej přepsat.
+
+Neplátce DPH používá částku honoráře přímo. U tuzemského dokladu s DPH v CZK je honorář celková částka včetně DPH. Uživatel vybere 12 % nebo 21 % a doplní DUZP. Server vypočítá základ a daň v haléřích. Přeshraniční režimy DPH nejsou podporované.
+
+**Vystavit fakturu** uloží jeden neměnný doklad pro daný koncert. Po uložení umožni stáhnout A4 PDF. Změny honoráře a fakturačních údajů po vystavení nemění doklad. Opakované vystavení téhož koncertu je idempotentní. Uložené faktury jsou v archivu v nastavení, i když byl koncert později odstraněn. Archiv a PDF vyžadují členství v příslušné kapele. V aplikaci se faktury neodesílají.
+
 ## Výběr data
 
-Datum koncertu, termín úkolu a obě pole vlastního kalendářového zápisu mají vlastní kalendář s českými názvy dnů a měsíců, šipkami pro změnu měsíce a volbou Dnes. Každé datum lze také napsat do textového pole ve formátu `D. M. RRRR`. Web po kliknutí na ikonu otevírá stejný kalendář jako samostatný dialog a zachová hodnoty v rozepsaném formuláři. Na mobilu skládej pole Od a Do včetně pod sebe, pokud nemají dost místa vedle sebe. U nezadaného konce otevři kalendář na začátku rozsahu. Prázdné Do včetně při uložení znamená stejný den. API dál používá datum `YYYY-MM-DD`.
+Datum koncertu, termín úkolu, data faktury a obě pole vlastního kalendářového zápisu mají vlastní kalendář s českými názvy dnů a měsíců, šipkami pro změnu měsíce a volbou Dnes. Každé datum lze také napsat do textového pole ve formátu `D. M. RRRR`. Web po kliknutí na ikonu otevírá stejný kalendář jako samostatný dialog a zachová hodnoty v rozepsaném formuláři. Na mobilu skládej pole Od a Do včetně pod sebe, pokud nemají dost místa vedle sebe. U nezadaného konce otevři kalendář na začátku rozsahu. Prázdné Do včetně při uložení znamená stejný den. API dál používá datum `YYYY-MM-DD`.
 
 ## Aktuální cloud a API
 
@@ -353,6 +367,10 @@ Webové API dnes používá zabezpečenou HttpOnly cookie `setlister_session`, `
 | `POST` | `/bands` | `{name}`; založí kapelu, trial a výchozí state v2 |
 | `POST` | `/bands/join` | `{code}`; připojí účet ke kapele |
 | `POST` | `/bands/rotate-code` | `{bandId}`; pouze vlastník, obnoví pozvánkový kód |
+| `GET` | `/ares?bandId=…&ico=…` | Vrátí `{party:{ico,name,address,dic,country}}` z českého ARES. |
+| `GET` | `/invoices?bandId=…&eventId=…` | Vrátí `{invoice}` pro koncert, nebo `null`. Bez `eventId` vrací `{invoices}` s přehledem archivu. |
+| `POST` | `/invoices` | `{bandId,eventId,revision,description,issueDate,dueDate,number?,variableSymbol?,vatRate?,taxDate?}`. Vrací `{invoice}`, částky `totalMinor`, `netMinor`, `vatMinor` jsou v setinách měny. Konflikt revize má stav 409. |
+| `GET` | `/invoice.pdf?bandId=…&eventId=…` | Stáhne PDF uloženého dokladu. |
 | `GET` | `/workspace?bandId=...` | vrátí kapelu, roli, účty členů, subscription, `state`, `revision` |
 | `PUT` | `/band-state` | `{bandId,revision,state}`; atomicky uloží JSON a zvýší revizi |
 | `GET` | `/calendar-feed?bandId=…` | Vrátí `{url}` s HTTPS odkazem daného účtu, nebo prázdnou hodnotou. |

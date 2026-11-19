@@ -38,9 +38,10 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
 if __package__:
-    from . import band_calendar, public_concerts
+    from . import band_calendar, invoicing, public_concerts
 else:
     import band_calendar
+    import invoicing
     import public_concerts
 
 
@@ -421,6 +422,7 @@ def initialize_database() -> None:
                 last_sync_error='Synchronizace byla přerušená restartem Setlisteru. Spusť ji znovu.'
             WHERE sync_state='syncing'""")
         public_concerts.initialize(database)
+        database.executescript(invoicing.SCHEMA)
 
 
 def encryption_box() -> Fernet:
@@ -2460,6 +2462,8 @@ def valid_public_state(value: object) -> bool:
     profile = value.get("bandProfile") or {}
     if not isinstance(profile, dict):
         return False
+    if "invoiceSupplier" in profile and not invoicing.valid_party(profile["invoiceSupplier"], supplier=True):
+        return False
     logo = str(profile.get("logoDataUrl") or "")
     if len(logo) > 700_000:
         return False
@@ -2473,6 +2477,8 @@ def valid_public_state(value: object) -> bool:
                 or len(str(event.get("contactPhone") or "")) > 40
                 or len(str(event.get("note") or "")) > 800
                 or len(str(event.get("performanceNote") or "")) > 800):
+            return False
+        if "invoiceCustomer" in event and not invoicing.valid_party(event["invoiceCustomer"]):
             return False
         checklist = event.get("checklist") or []
         played = event.get("playedSongIds") or []
@@ -2564,7 +2570,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.12.6"
+    server_version = "Setlister/0.13.0"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -2803,6 +2809,11 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def handle_public_app_get(self, path: str, query: dict[str, list[str]]) -> None:
+        if path in ("/api/app/ares", "/api/app/invoices", "/api/app/invoice.pdf"):
+            user = self.require_public_user()
+            if user:
+                self.get_concert_invoice_data(path, query, user["id"])
+            return
         if path == "/api/app/session":
             user = self.require_public_user()
             if user:
@@ -2932,6 +2943,81 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
             return
         self.send_json(HTTPStatus.NOT_FOUND, {"error": "Nenalezeno"})
 
+    def get_concert_invoice_data(self, path: str, query: dict[str, list[str]], user_id: str) -> None:
+        band_id = (query.get("bandId") or [""])[0]
+        event_id = (query.get("eventId") or [""])[0]
+        with connect_db() as database:
+            if not public_membership(database, user_id, band_id):
+                self.send_json(HTTPStatus.FORBIDDEN, {"error": "K této kapele nemáš přístup."})
+                return
+            if path == "/api/app/invoices":
+                result = ({"invoice": invoicing.invoice_snapshot(database, band_id, event_id)} if event_id
+                          else {"invoices": list(invoicing.invoice_rows(database, band_id))})
+                self.send_json(HTTPStatus.OK, result)
+                return
+            invoice = invoicing.invoice_snapshot(database, band_id, event_id) if path.endswith(".pdf") else None
+
+        if path.endswith(".pdf"):
+            if not invoice:
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "Vystavená faktura nebyla nalezena."})
+                return
+            try:
+                pdf = invoicing.invoice_pdf(invoice)
+            except Exception as error:
+                print(f"Sestavení PDF faktury selhalo ({type(error).__name__}).", flush=True)
+                self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "PDF faktury se nepodařilo sestavit."})
+                return
+            filename = "faktura-" + invoice["number"].replace("/", "-") + ".pdf"
+            self.send_bytes(HTTPStatus.OK, pdf, "application/pdf", filename)
+            return
+
+        ico = re.sub(r"\s+", "", (query.get("ico") or [""])[0])
+        if not invoicing.valid_ico(ico):
+            self.send_json(HTTPStatus.BAD_REQUEST, {"error": "Zadej platné osmimístné české IČO."})
+            return
+        try:
+            subject = json_request(invoicing.ARES_SUBJECT_URL + ico, timeout=8)
+            party = invoicing.party_from_ares(subject, ico)
+            self.send_json(HTTPStatus.OK, {"party": party})
+        except json.JSONDecodeError:
+            self.send_json(HTTPStatus.BAD_GATEWAY, {"error": "ARES nevrátil čitelné údaje."})
+        except ValueError as error:
+            self.send_json(HTTPStatus.BAD_GATEWAY, {"error": str(error)})
+        except (RuntimeError, AttributeError) as error:
+            missing = isinstance(error.__cause__, HTTPError) and error.__cause__.code == 404
+            status = HTTPStatus.NOT_FOUND if missing else HTTPStatus.BAD_GATEWAY
+            message = "ARES toto IČO nenašel." if missing else "ARES je teď nedostupný. Údaje můžeš zadat ručně."
+            self.send_json(status, {"error": message})
+
+    def issue_concert_invoice(self, user_id: str) -> None:
+        try:
+            payload = self.read_json_body(8192)
+            band_id, event_id = str(payload.get("bandId") or ""), str(payload.get("eventId") or "")
+            with connect_db() as database:
+                database.execute("BEGIN IMMEDIATE")
+                if not public_membership(database, user_id, band_id):
+                    self.send_json(HTTPStatus.FORBIDDEN, {"error": "K této kapele nemáš přístup."})
+                    return
+                existing = invoicing.invoice_snapshot(database, band_id, event_id)
+                if existing:
+                    self.send_json(HTTPStatus.OK, {"invoice": existing})
+                    return
+                row = database.execute("SELECT revision, state_json FROM public_band_state WHERE band_id=?",
+                                       (band_id,)).fetchone()
+                if not row or type(payload.get("revision")) is not int or row["revision"] != payload["revision"]:
+                    self.send_json(HTTPStatus.CONFLICT, {"error": "Konflikt změn. Otevři fakturu znovu z aktuálních údajů."})
+                    return
+                state = json.loads(row["state_json"])
+                event = next((item for item in state.get("events", []) if item["id"] == event_id), None)
+                if not event:
+                    self.send_json(HTTPStatus.NOT_FOUND, {"error": "Koncert nebyl nalezen."})
+                    return
+                invoice = invoicing.create_invoice(database, band_id, state, event, payload)
+                database.commit()
+            self.send_json(HTTPStatus.CREATED, {"invoice": invoice})
+        except ValueError as error:
+            self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+
     @staticmethod
     def public_app_base_url(options: dict[str, Any]) -> str:
         host = str(options["app_host"]).strip()
@@ -3055,7 +3141,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def public_oauth_result_page(title: str, message: str, success: bool) -> str:
         state = "success" if success else "error"
         return f'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>
-        <link rel="stylesheet" href="/styles.css?v=0.12.6"></head>
+        <link rel="stylesheet" href="/styles.css?v=0.13.0"></head>
         <body class="oauth-result {state}"><main><h1>{html.escape(title)}</h1><p>{html.escape(message)}</p><a href="/">Zpět do Setlisteru</a></main></body></html>'''
 
     def handle_oauth_callback(self, query: dict[str, list[str]]) -> None:
@@ -3298,6 +3384,9 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
 
         user = self.require_public_user()
         if not user:
+            return
+        if path == "/api/app/invoices":
+            self.issue_concert_invoice(user["id"])
             return
         if path == "/api/app/calendar-feed":
             try:
