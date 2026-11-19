@@ -27,6 +27,11 @@
   let songPrintFieldDraft = [];
   let notesPrintFieldDraft = [];
   let eventPlayedSongDraft = [];
+  let eventCalendarCursor = null;
+  let bandCalendarDate = new Date();
+  let calendarFeedBand = "";
+  let rehearsalPlanShown = false;
+  let rehearsalSet = null;
   let smartOrderDraft = [];
   let liveSongIds = [];
   let liveSongIndex = 0;
@@ -107,10 +112,7 @@
   function printFieldTexts(fields) { return normalizePrintFields(fields).map(field => field.value ? (field.label ? field.label + ": " + field.value : field.value) : "").filter(Boolean); }
   function normalizedText(value) { return String(value || "").trim().toLocaleLowerCase("cs").normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
   function parseClock(value) { const text = String(value || "").trim(); return /^(?:[01]?\d|2[0-3]):[0-5]\d$/.test(text) ? text.padStart(5, "0") : ""; }
-  function parseEventDate(value) {
-    const text = String(value || "").trim(); let match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); if (match) return `${match[1]}-${String(Number(match[2])).padStart(2, "0")}-${String(Number(match[3])).padStart(2, "0")}`;
-    match = text.match(/^(\d{1,2})\s*\.\s*(\d{1,2})\s*\.\s*(\d{4})$/); if (!match) return ""; const date = new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1])); return date.getFullYear() === Number(match[3]) && date.getMonth() === Number(match[2]) - 1 && date.getDate() === Number(match[1]) ? `${match[3]}-${String(Number(match[2])).padStart(2, "0")}-${String(Number(match[1])).padStart(2, "0")}` : "";
-  }
+  const parseEventDate = SetlisterPlanning.parseDate;
   function formatEventDate(value, long = false) { if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return "Datum neuvedeno"; const [year, month, day] = value.split("-").map(Number); return new Intl.DateTimeFormat("cs-CZ", long ? { weekday: "long", day: "numeric", month: "long", year: "numeric" } : { day: "numeric", month: "numeric", year: "numeric" }).format(new Date(year, month - 1, day)); }
   function showStatus(node, message, success = false) { node.textContent = message || ""; node.classList.toggle("success", success); }
   function showToast(message) {
@@ -133,6 +135,8 @@
     state.songs = Array.isArray(state.songs) ? state.songs : [];
     state.savedSetlists = Array.isArray(state.savedSetlists) ? state.savedSetlists : [];
     state.events = Array.isArray(state.events) ? state.events : [];
+    state.tasks = Array.isArray(state.tasks) ? state.tasks : [];
+    state.calendarEntries = Array.isArray(state.calendarEntries) ? state.calendarEntries : [];
     state.draft = state.draft || { name: "Nový koncert", targetMinutes: 45, songIds: [] };
     state.draft.name = state.draft.name || "Nový koncert";
     state.draft.songIds = Array.isArray(state.draft.songIds) ? state.draft.songIds : [];
@@ -166,7 +170,20 @@
   async function loadWorkspace() {
     if (!activeBandId) return;
     try {
+      const previousBand = workspace?.band.id;
       workspace = await api("/workspace?bandId=" + encodeURIComponent(activeBandId)); revision = workspace.revision; workspace.state = normalizeState(workspace.state);
+      if (workspace.band.id !== previousBand) {
+        rehearsalPlanShown = false;
+        elements.rehearsalScope.value = "";
+        elements.rehearsalMember.value = "";
+        elements.taskCategoryFilter.value = "";
+        elements.taskStateFilter.value = "open";
+        resetTaskForm();
+        bandCalendarDate = new Date();
+        calendarFeedBand = "";
+        elements.calendarSubscribe.open = false;
+        renderCalendarFeed("");
+      }
       elements.currentBandName.textContent = workspace.band.name; elements.settingsBandName.textContent = workspace.band.name; elements.inviteCode.textContent = workspace.band.inviteCode;
       elements.planStatus.textContent = workspace.subscription.status === "active" ? "Aktivní plán" : "Zkušební provoz"; elements.planName.textContent = workspace.subscription.planName || "Setlister Early";
       renderWorkspace(); renderBandDialog();
@@ -224,7 +241,11 @@
     elements.appSetEmpty.hidden = setSongs.length > 0;
     const total = setSongs.reduce((sum, song) => sum + Number(song.seconds || 0), 0); const target = Math.max(1, Number(state.draft.targetMinutes) || 45) * 60;
     elements.appTotalTime.textContent = formatTime(total); elements.appTargetLabel.textContent = "z " + formatTime(target); elements.appTargetMinutes.value = String(state.draft.targetMinutes || 45); elements.appProgress.style.width = Math.min(100, total / target * 100) + "%"; elements.appProgress.classList.toggle("over", total > target);
-    renderRepertoire(); renderSettings(); renderSavedSetlists(); renderEvents(); renderLiveSetup(); enhanceSelects(document);
+    renderRepertoire(); renderSettings(); renderSavedSetlists(); renderEvents(); renderLiveSetup();
+    if (elements.rehearsalPlanner.closest(".app-view").classList.contains("active")) renderRehearsalPlanner();
+    if (elements.taskForm.closest(".app-view").classList.contains("active")) renderTasks();
+    if (!elements.bandCalendar.hidden) renderBandCalendar();
+    enhanceSelects(document);
   }
   function option(value, label) { const node = document.createElement("option"); node.value = value; node.textContent = label; return node; }
   function rowButton(label, title, action) { const button = document.createElement("button"); button.type = "button"; button.textContent = label; button.title = title; button.addEventListener("click", action); return button; }
@@ -257,7 +278,7 @@
   }
   function deleteMember(id) {
     const member = memberById(id); if (!member || !window.confirm("Opravdu odstranit člena „" + member.name + "“ ze setlistů?")) return;
-    workspace.state.members = workspace.state.members.filter(item => item.id !== id); workspace.state.songs.forEach(song => delete song.memberDetails[id]); if (workspace.state.draft.viewerMemberId === id) workspace.state.draft.viewerMemberId = "clean"; changed();
+    workspace.state.members = workspace.state.members.filter(item => item.id !== id); workspace.state.songs.forEach(song => { delete song.memberDetails[id]; if (song.readiness) delete song.readiness[id]; }); if (workspace.state.draft.viewerMemberId === id) workspace.state.draft.viewerMemberId = "clean"; changed();
   }
   function renderSavedSetlists() {
     const sets = workspace.state.savedSetlists;
@@ -268,7 +289,18 @@
     }));
   }
   function savedSetlistById(id) { return workspace?.state.savedSetlists.find(set => set.id === id) || null; }
-  function showAppView(name) { document.querySelectorAll("[data-view]").forEach(item => item.classList.toggle("active", item.dataset.view === name)); document.querySelectorAll("[data-app-view]").forEach(view => view.classList.toggle("active", view.dataset.appView === name)); if (name === "agent") loadMailAgentStatus(); }
+  function showAppView(name) {
+    document.querySelectorAll("[data-view]").forEach(item => item.classList.toggle("active", item.dataset.view === name));
+    document.querySelectorAll("[data-app-view]").forEach(view => view.classList.toggle("active", view.dataset.appView === name));
+    if (name === "agent") loadMailAgentStatus();
+    if (!workspace) return;
+    if (name === "live") {
+      renderRehearsalPlanner();
+      enhanceSelects(elements.rehearsalPlanner);
+    }
+    if (name === "tasks") renderTasks();
+    if (name === "events" && !elements.bandCalendar.hidden) renderBandCalendar();
+  }
 
   function mailDate(value) {
     if (!value) return "Ještě nesynchronizováno";
@@ -368,24 +400,512 @@
     workspace.state.draft = { ...workspace.state.draft, name: set.name, targetMinutes: set.targetMinutes, songIds: [...set.songIds], lockedSongIds: [] }; changed(); showAppView("setlist"); showToast("„" + set.name + "“ je otevřený v editoru.");
   }
   function eventSetlist(event) { return savedSetlistById(event?.setlistId); }
+  function scopedRehearsalSongs(scope) {
+    const { songs, draft } = workspace.state;
+    if (scope === "all") return songs;
+    const ids = scope === "draft" ? draft.songIds : savedSetlistById(scope.slice(6))?.songIds || [];
+    const lookup = new Map(songs.map(song => [song.id, song]));
+    return [...new Set(ids)].map(id => lookup.get(id)).filter(Boolean);
+  }
+  function openRehearsalForSet(set) {
+    showAppView("live");
+    elements.rehearsalScope.value = "saved:" + set.id;
+    elements.rehearsalScope.dispatchEvent(new Event("change"));
+    elements.rehearsalTitle.focus({ preventScroll: true });
+    elements.rehearsalPlanner.scrollIntoView({ block: "start" });
+  }
+  function renderRehearsalPlanner() {
+    const state = workspace.state;
+    const scope = elements.rehearsalScope.value || (state.draft.songIds.length ? "draft" : "all");
+    const options = [option("draft", "Aktuální set — " + state.draft.name), option("all", "Celý repertoár"),
+      ...state.savedSetlists.map(set => option("saved:" + set.id, set.name))];
+    elements.rehearsalScope.replaceChildren(...options);
+    elements.rehearsalScope.value = options.some(item => item.value === scope) ? scope : "draft";
+    const songs = scopedRehearsalSongs(elements.rehearsalScope.value);
+    const own = signedInMemberId();
+    const editable = workspace.membership.role === "owner" ? state.members : state.members.filter(member => member.id === own);
+    const memberId = editable.some(member => member.id === elements.rehearsalMember.value)
+      ? elements.rehearsalMember.value : own || editable[0]?.id || "";
+    elements.rehearsalMember.replaceChildren(...editable.map(member => option(member.id, member.name)));
+    elements.rehearsalMember.value = memberId;
+    elements.rehearsalMemberField.hidden = !editable.length;
+    elements.rehearsalMemberHelp.hidden = Boolean(editable.length);
+    elements.rehearsalMemberHelp.textContent = state.members.length
+      ? "Pro vlastní hodnocení propoj účet se členem v sekci Kapela a účet."
+      : "Nejdřív přidej pódiové členy v sekci Kapela a účet.";
+    const readyCount = state.members.length ? songs.filter(song =>
+      state.members.every(member => song.readiness?.[member.id] === "ready")).length : 0;
+    elements.rehearsalReadySummary.textContent = `${readyCount} / ${songs.length} skladeb připraveno`;
+    const rows = songs.map(song => {
+      const row = mailNode("div", "planning-row");
+      const info = mailNode("div");
+      info.append(mailNode("strong", "", song.title));
+      const groups = SetlisterPlanning.readiness(song, state.members);
+      for (const [key, label] of Object.entries({ ...SetlisterPlanning.readinessLabels, unknown: "Bez hodnocení" })) {
+        if (!groups[key].length) continue;
+        info.append(mailNode("small", "readiness-" + key, label + " · " + groups[key].map(member => member.name).join(", ")));
+      }
+      row.append(info);
+      if (memberId) {
+        const select = document.createElement("select");
+        select.id = "readiness-" + song.id;
+        select.setAttribute("aria-label", "Připravenost – " + song.title);
+        select.append(option("", "Bez hodnocení"), ...Object.entries(SetlisterPlanning.readinessLabels)
+          .map(([value, label]) => option(value, label)));
+        select.value = song.readiness?.[memberId] || "";
+        select.addEventListener("change", () => {
+          song.readiness = { ...(song.readiness || {}) };
+          if (select.value) song.readiness[memberId] = select.value;
+          else delete song.readiness[memberId];
+          changed();
+          const replacement = document.getElementById(select.id);
+          replacement?.parentElement.querySelector("[role=combobox]")?.focus();
+        });
+        row.append(select);
+      }
+      return row;
+    });
+    elements.rehearsalReadinessRows.replaceChildren(...(rows.length ? rows :
+      [mailNode("p", "section-help", "Ve vybraném setlistu nejsou žádné skladby.")]));
+    if (rehearsalPlanShown) renderRehearsalPreview(songs);
+    else elements.rehearsalPlanPreview.hidden = true;
+  }
+  function renderRehearsalPreview(songs = scopedRehearsalSongs(elements.rehearsalScope.value)) {
+    const minutes = Number(elements.rehearsalMinutes.value);
+    if (!Number.isInteger(minutes) || minutes < 5 || minutes > 360) {
+      rehearsalSet = null;
+      elements.saveRehearsalPlan.disabled = true;
+      elements.rehearsalPlanSummary.textContent = "Zadej délku od 5 do 360 minut.";
+      elements.rehearsalPlanItems.replaceChildren();
+      elements.rehearsalPlanPreview.hidden = false;
+      return;
+    }
+    const plan = SetlisterPlanning.buildPlan(songs, workspace.state.members, minutes);
+    rehearsalSet = { minutes, ids: plan.items.map(item => item.song.id) };
+    elements.rehearsalPlanPreview.hidden = false;
+    elements.saveRehearsalPlan.disabled = !plan.items.length;
+    const details = plan.items.length
+      ? [plan.items.length + (plan.items.length === 1 ? " skladba" : plan.items.length < 5 ? " skladby" : " skladeb"),
+        formatTime(plan.total) + " z " + minutes + ":00",
+        plan.omittedPriority ? "Prioritní skladby mimo čas: " + plan.omittedPriority : ""].filter(Boolean)
+      : [songs.length ? "Do vybraného času se žádná skladba nevejde." : "Ve vybraném setlistu nejsou skladby."];
+    elements.rehearsalPlanSummary.textContent = details.join(" · ");
+    elements.rehearsalPlanItems.replaceChildren(...plan.items.map(({ song, state, duration }) => {
+      const row = mailNode("li", "planning-row");
+      const info = mailNode("div");
+      const reasons = [
+        state.unlearned.length ? "Nenacvičeno · " + state.unlearned.map(member => member.name).join(", ") : "",
+        state.practice.length ? "Dopilovat · " + state.practice.map(member => member.name).join(", ") : "",
+        state.unknown.length ? "Ověřit připravenost" : "",
+      ].filter(Boolean);
+      info.append(mailNode("strong", "", song.title), mailNode("small", "", reasons.join(" / ") || "Průchod skladbou"));
+      row.append(info, mailNode("span", "planning-time", formatTime(duration)));
+      return row;
+    }));
+  }
+  async function saveRehearsalPlan() {
+    if (!rehearsalSet?.ids.length) return;
+    const scope = elements.rehearsalScope.value;
+    const source = scope === "all" ? "repertoár" : scope === "draft" ? workspace.state.draft.name
+      : savedSetlistById(scope.slice(6))?.name || "setlist";
+    const set = { id: uid("set"), name: ("Zkouška — " + source).slice(0, 100),
+      targetMinutes: rehearsalSet.minutes, songIds: [...rehearsalSet.ids] };
+    const band = activeBandId;
+    workspace.state.savedSetlists.push(set);
+    changed();
+    elements.saveRehearsalPlan.disabled = true;
+    clearTimeout(saveTimer);
+    const saved = await saveWorkspace();
+    if (activeBandId !== band) return;
+    elements.saveRehearsalPlan.disabled = false;
+    if (!saved) return;
+    elements.liveSetSelect.value = "saved:" + set.id;
+    elements.liveSetSelect.dispatchEvent(new Event("change"));
+    showToast("Zkušební setlist byl uložen a je vybraný pro společné hraní.");
+  }
+  function resetTaskForm() {
+    elements.taskForm.reset();
+    elements.taskAssignee.value = "";
+    elements.saveTask.textContent = "Přidat úkol";
+    elements.cancelTaskEdit.hidden = true;
+  }
+  function renderTasks() {
+    const tasks = workspace.state.tasks;
+    const categoryFilter = elements.taskCategoryFilter;
+    const categories = new Map();
+    for (const task of tasks) {
+      const key = normalizedText(task.category);
+      if (key && !categories.has(key)) categories.set(key, task.category);
+    }
+    const picked = categoryFilter.value;
+    categoryFilter.replaceChildren(option("", "Všechny kategorie"), ...[...categories]
+      .sort((a, b) => a[1].localeCompare(b[1], "cs")).map(([key, name]) => option(key, name)));
+    categoryFilter.value = categories.has(picked) ? picked : "";
+    const assignee = elements.taskAssignee.value;
+    elements.taskAssignee.replaceChildren(option("", "Bez přiřazení"), ...workspace.members.map(member =>
+      option(member.id, member.name + (member.id === session.user.id ? " (já)" : ""))));
+    elements.taskAssignee.value = workspace.members.some(member => member.id === assignee) ? assignee : "";
+    enhanceSelect(categoryFilter);
+    enhanceSelect(elements.taskAssignee);
+    const status = elements.taskStateFilter.value || "open";
+    const today = SetlisterPlanning.dateKey(new Date());
+    const visible = tasks.filter(task => (!categoryFilter.value || categoryFilter.value === normalizedText(task.category))
+      && (status === "all" || task.done === (status === "completed")))
+      .sort((a, b) => Number(a.done) - Number(b.done)
+        || (a.deadline || "9999-12-31").localeCompare(b.deadline || "9999-12-31"));
+    elements.taskSummary.textContent = `${tasks.filter(task => !task.done).length} otevřených · ${tasks.filter(task => task.done).length} hotových`;
+    elements.taskList.replaceChildren(...(visible.length ? visible.map(task => {
+      const row = mailNode("li", "task-row");
+      row.classList.toggle("done", task.done);
+      const label = mailNode("label", "task-check");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = task.done;
+      checkbox.id = "task-check-" + task.id;
+      checkbox.setAttribute("aria-label", "Hotovo – " + task.title);
+      checkbox.addEventListener("change", () => {
+        task.done = checkbox.checked;
+        changed();
+        (document.getElementById(checkbox.id) || elements.taskStateFilter.parentElement.querySelector("[role=combobox]"))?.focus();
+      });
+      label.append(checkbox, mailNode("strong", "", task.title));
+      const info = mailNode("div", "task-info");
+      info.append(label);
+      const meta = [task.category, accountById(task.assigneeUserId)?.name || "",
+        task.deadline ? formatEventDate(task.deadline) : ""].filter(Boolean);
+      if (meta.length) info.append(mailNode("small", !task.done && task.deadline && task.deadline < today ? "overdue" : "", meta.join(" · ")));
+      const actions = mailNode("div", "row-actions");
+      actions.append(
+        iconAction("edit", "Upravit úkol", () => {
+          const form = elements.taskForm;
+          form.elements.taskId.value = task.id;
+          form.elements.title.value = task.title;
+          form.elements.category.value = task.category;
+          form.elements.deadline.value = task.deadline ? formatEventDate(task.deadline) : "";
+          elements.taskAssignee.value = task.assigneeUserId;
+          enhanceSelect(elements.taskAssignee);
+          elements.saveTask.textContent = "Uložit úkol";
+          elements.cancelTaskEdit.hidden = false;
+          elements.taskTitle.focus();
+        }),
+        rowButton("×", "Odstranit úkol", () => {
+          if (!window.confirm("Odstranit úkol „" + task.title + "“?")) return;
+          workspace.state.tasks = tasks.filter(item => item.id !== task.id);
+          if (elements.taskForm.elements.taskId.value === task.id) resetTaskForm();
+          changed();
+        })
+      );
+      row.append(info, actions);
+      return row;
+    }) : [mailNode("li", "section-help", "V tomto výběru nejsou žádné úkoly.")]));
+  }
+  function saveTaskForm(form) {
+    const data = formPayload(form);
+    const title = data.title.trim();
+    if (!title) { showToast("Napiš, co je potřeba udělat."); return; }
+    const deadline = parseEventDate(data.deadline);
+    if (data.deadline.trim() && !deadline) { showToast("Zadej platný termín ve formátu 21. 1. 2027."); return; }
+    const list = workspace.state.tasks;
+    const existing = list.find(task => task.id === data.taskId);
+    if (!existing && list.length >= 1000) { showToast("Kapela už má 1 000 úkolů."); return; }
+    const task = existing || { id: uid("task"), done: false };
+    Object.assign(task, { title, category: data.category.trim(), deadline, assigneeUserId: data.assigneeUserId });
+    if (!existing) {
+      list.push(task);
+      if (elements.taskStateFilter.value === "completed") elements.taskStateFilter.value = "open";
+      if (elements.taskCategoryFilter.value && elements.taskCategoryFilter.value !== normalizedText(task.category))
+        elements.taskCategoryFilter.value = "";
+    }
+    resetTaskForm();
+    changed();
+    elements.taskTitle.focus();
+  }
+  function closeEventCalendar(restoreFocus = false) {
+    elements.eventCalendar.hidden = true;
+    elements.eventCalendarToggle.setAttribute("aria-expanded", "false");
+    if (restoreFocus) elements.eventCalendarToggle.focus();
+  }
+  function chooseEventDate(day) {
+    elements.eventDateInput.value = formatEventDate(SetlisterPlanning.dateKey(day));
+    elements.eventDateInput.setCustomValidity("");
+    closeEventCalendar(true);
+  }
+  function renderEventCalendar(focusDay = false) {
+    const month = eventCalendarCursor.getMonth();
+    const year = eventCalendarCursor.getFullYear();
+    const selected = parseEventDate(elements.eventDateInput.value);
+    const today = SetlisterPlanning.dateKey(new Date());
+    const focusKey = SetlisterPlanning.dateKey(eventCalendarCursor);
+    const fullFormatter = new Intl.DateTimeFormat("cs-CZ", {
+      weekday: "long", day: "numeric", month: "long", year: "numeric",
+    });
+    elements.eventCalendarMonth.textContent = new Intl.DateTimeFormat("cs-CZ", {
+      month: "long", year: "numeric",
+    }).format(eventCalendarCursor);
+    elements.eventCalendarPrevious.disabled = year === 1900 && month === 0;
+    elements.eventCalendarNext.disabled = year === 9999 && month === 11;
+    let target;
+    const buttons = SetlisterPlanning.calendarDays(eventCalendarCursor).map(day => {
+      const key = SetlisterPlanning.dateKey(day);
+      const button = rowButton(String(day.getDate()), fullFormatter.format(day), () => chooseEventDate(day));
+      button.setAttribute("aria-label", fullFormatter.format(day));
+      button.setAttribute("aria-pressed", String(key === selected));
+      if (key === today) button.setAttribute("aria-current", "date");
+      button.classList.toggle("outside", day.getMonth() !== month);
+      button.disabled = day.getFullYear() < 1900 || day.getFullYear() > 9999;
+      button.tabIndex = key === focusKey ? 0 : -1;
+      if (key === focusKey) target = button;
+      button.addEventListener("keydown", event => {
+        const offset = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[event.key];
+        if (!offset) return;
+        event.preventDefault();
+        const next = new Date(day.getFullYear(), day.getMonth(), day.getDate() + offset);
+        if (next.getFullYear() < 1900 || next.getFullYear() > 9999) return;
+        eventCalendarCursor = next;
+        renderEventCalendar(true);
+      });
+      return button;
+    });
+    elements.eventCalendarDays.replaceChildren(...buttons);
+    if (focusDay) target?.focus();
+  }
+  function toggleEventCalendar() {
+    if (!elements.eventCalendar.hidden) return closeEventCalendar(true);
+    const selected = parseEventDate(elements.eventDateInput.value);
+    eventCalendarCursor = selected ? SetlisterPlanning.dateFromKey(selected) : new Date();
+    closeCustomSelects();
+    elements.eventCalendar.hidden = false;
+    elements.eventCalendarToggle.setAttribute("aria-expanded", "true");
+    renderEventCalendar(true);
+  }
+  function moveEventCalendarMonth(offset) {
+    const next = new Date(eventCalendarCursor.getFullYear(), eventCalendarCursor.getMonth() + offset, 1);
+    if (next.getFullYear() < 1900 || next.getFullYear() > 9999) return;
+    eventCalendarCursor = next;
+    renderEventCalendar();
+  }
+  const calendarPalette = ["#73c3ff", "#ff92ae", "#c1a6ff", "#ffba76", "#4fdcb7", "#f69cff", "#ffe382", "#abc4ff"];
+  function calendarColor(userId) {
+    const index = workspace.members.findIndex(member => member.id === userId);
+    return index < 0 ? "#969a9e" : calendarPalette[index] || `hsl(${Math.round(index * 137.5) % 360} 72% 69%)`;
+  }
+  function showConcertCalendar(show) {
+    elements.concertAgenda.hidden = show;
+    elements.bandCalendar.hidden = !show;
+    elements.concertAgendaTab.setAttribute("aria-pressed", String(!show));
+    elements.concertCalendarTab.setAttribute("aria-pressed", String(show));
+    if (show) renderBandCalendar();
+  }
+  function calendarEntriesForDay(day) {
+    const { events, calendarEntries } = workspace.state;
+    return [
+      ...events.filter(event => event.date === day).map(event => ({
+        id: event.id, title: event.name, color: "var(--lime)", event, label: "Koncert",
+      })),
+      ...calendarEntries.filter(entry => entry.startDate <= day && entry.endDate >= day).map(entry => ({
+        id: entry.id, title: entry.title, color: calendarColor(entry.userId), entry,
+        label: accountById(entry.userId)?.name || "Bývalý člen",
+      })),
+    ];
+  }
+  function renderBandCalendar() {
+    if (!workspace) return;
+    const dateLabel = new Intl.DateTimeFormat("cs-CZ", { month: "long", year: "numeric" });
+    elements.bandCalendarMonth.textContent = dateLabel.format(bandCalendarDate);
+    const selected = SetlisterPlanning.dateKey(bandCalendarDate);
+    const today = SetlisterPlanning.dateKey(new Date());
+    elements.bandCalendarDays.replaceChildren(...SetlisterPlanning.calendarDays(bandCalendarDate).map(day => {
+      const key = SetlisterPlanning.dateKey(day);
+      const entries = calendarEntriesForDay(key);
+      const button = rowButton("", formatEventDate(key, true), () => {
+        bandCalendarDate = day;
+        renderBandCalendar();
+        document.getElementById("calendar-day-" + key)?.focus();
+      });
+      button.id = "calendar-day-" + key;
+      button.className = "band-calendar-day";
+      button.classList.toggle("outside", day.getMonth() !== bandCalendarDate.getMonth());
+      button.setAttribute("aria-label", formatEventDate(key, true) + (entries.length ? `, zápisů: ${entries.length}` : ""));
+      button.setAttribute("aria-pressed", String(key === selected));
+      if (key === today) button.setAttribute("aria-current", "date");
+      button.append(mailNode("span", "", String(day.getDate())));
+      for (const item of entries.slice(0, 3)) {
+        const chip = mailNode("span", "calendar-chip", item.title);
+        chip.style.setProperty("--calendar-color", item.color);
+        button.append(chip);
+      }
+      if (entries.length > 3) button.append(mailNode("small", "", "+" + (entries.length - 3)));
+      return button;
+    }));
+    const people = workspace.members.map(member => ({ label: member.name, color: calendarColor(member.id) }));
+    elements.bandCalendarLegend.replaceChildren(...[{ label: "Koncert", color: "var(--lime)" }, ...people]
+      .map(({ label, color }) => {
+        const item = mailNode("span", "calendar-legend-item", label);
+        item.style.setProperty("--calendar-color", color);
+        item.prepend(mailNode("i"));
+        return item;
+      }));
+    elements.calendarDayHeading.textContent = formatEventDate(selected, true);
+    const entries = calendarEntriesForDay(selected);
+    elements.calendarDayEntries.replaceChildren(...(entries.length ? entries.map(item => {
+      const row = mailNode("article", "calendar-day-entry");
+      row.style.setProperty("--calendar-color", item.color);
+      const info = item.event
+        ? [item.label, item.event.showStart, item.event.city, item.event.venue]
+        : [item.label, item.entry.startDate !== item.entry.endDate
+          ? formatEventDate(item.entry.startDate) + " – " + formatEventDate(item.entry.endDate) : "Celý den"];
+      row.append(mailNode("strong", "", item.title), mailNode("small", "", info.filter(Boolean).join(" · ")));
+      if (item.event || item.entry.userId === session.user.id) {
+        const edit = rowButton(item.event ? "Otevřít koncert" : "Upravit zápis", "Upravit " + item.title,
+          () => item.event ? openEventDialog(item.event.id) : openCalendarEntry(item.entry));
+        edit.className = "quiet-button compact";
+        row.append(edit);
+      }
+      return row;
+    }) : [mailNode("p", "section-help", "Na tento den nejsou žádné zápisy.")]));
+  }
+  function openCalendarEntry(entry) {
+    const form = elements.calendarEntryForm;
+    form.reset();
+    form.elements.entryId.value = entry?.id || "";
+    form.elements.title.value = entry?.title || "";
+    form.elements.startDate.value = formatEventDate(entry?.startDate || SetlisterPlanning.dateKey(bandCalendarDate));
+    form.elements.endDate.value = entry?.endDate ? formatEventDate(entry.endDate) : "";
+    elements.calendarEntryHeading.textContent = entry ? "Upravit vlastní zápis" : "Přidat vlastní zápis";
+    elements.deleteCalendarEntry.hidden = !entry;
+    elements.calendarEntryDialog.showModal();
+  }
+  function saveCalendarEntry(form) {
+    const data = formPayload(form);
+    const title = data.title.trim();
+    const startDate = parseEventDate(data.startDate);
+    const endDate = data.endDate.trim() ? parseEventDate(data.endDate) : startDate;
+    if (!title || !startDate || !endDate || endDate < startDate || endDate === "9999-12-31") {
+      showToast("Zadej název a platný rozsah data.");
+      return;
+    }
+    const entries = workspace.state.calendarEntries;
+    const existing = entries.find(entry => entry.id === data.entryId);
+    if (existing && existing.userId !== session.user.id) return;
+    if (!existing && entries.length >= 1000) { showToast("Kapela už má 1 000 zápisů."); return; }
+    const entry = { id: existing?.id || uid("calendar"), userId: session.user.id, title, startDate, endDate };
+    if (existing) Object.assign(existing, entry);
+    else entries.push(entry);
+    bandCalendarDate = SetlisterPlanning.dateFromKey(startDate);
+    elements.calendarEntryDialog.close();
+    changed();
+  }
+  function renderCalendarFeed(url) {
+    elements.calendarFeedLinks.hidden = !url;
+    elements.createCalendarFeed.hidden = Boolean(url);
+    elements.calendarFeedUrl.value = url;
+    if (url) elements.appleCalendarFeed.href = url.replace(/^https?:/, "webcal:");
+    else elements.appleCalendarFeed.removeAttribute("href");
+  }
+  async function loadCalendarFeed() {
+    const band = activeBandId;
+    if (!band || calendarFeedBand === band) return;
+    try {
+      const result = await api("/calendar-feed?bandId=" + encodeURIComponent(band));
+      if (activeBandId !== band) return;
+      renderCalendarFeed(result.url || "");
+      calendarFeedBand = band;
+    } catch (error) { showStatus(elements.calendarFeedStatus, error.message); }
+  }
+  async function changeCalendarFeed(enabled) {
+    const band = activeBandId;
+    const button = enabled ? elements.createCalendarFeed : elements.revokeCalendarFeed;
+    button.disabled = true;
+    try {
+      const result = await api("/calendar-feed", { method: "POST", body: JSON.stringify({ bandId: band, enabled }) });
+      if (activeBandId !== band) return;
+      renderCalendarFeed(result.url || "");
+      calendarFeedBand = band;
+      showStatus(elements.calendarFeedStatus, enabled ? "Odkaz je připravený." : "Odkaz k odběru je zrušený.", true);
+    } catch (error) { showStatus(elements.calendarFeedStatus, error.message); }
+    finally { button.disabled = false; }
+  }
   function eventTimeline(event) {
     return [["Arrival", event.arrival], ["Load-in", event.loadIn], ["Zvukovka", event.soundcheck], ["Koncert", event.showStart], ["Konec", event.showEnd]].filter(item => item[1]);
   }
   function elapsedClock(start, end) { if (!parseClock(start) || !parseClock(end)) return "—"; const minutes = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3)); let duration = minutes(end) - minutes(start); if (duration < 0) duration += 24 * 60; return formatTime(duration * 60); }
-  function renderEventChecklist(event, compact = false) {
-    const list = document.createElement("div"); list.className = "event-checklist" + (compact ? " compact" : "");
-    (event.checklist || []).forEach(item => { const label = document.createElement("label"); const input = document.createElement("input"); input.type = "checkbox"; input.checked = item.done; input.addEventListener("change", () => { item.done = input.checked; changed(); }); const text = document.createElement("span"); text.textContent = item.label; label.append(input, text); list.append(label); });
-    return list;
+  function renderEventChecklist(event) {
+    const section = mailNode("section", "concert-checklist");
+    section.id = "event-checklist-" + event.id;
+    section.tabIndex = -1;
+    const items = event.checklist;
+    section.append(mailNode("h4", "", "Checklist koncertu"),
+      mailNode("p", "section-help", items.length
+        ? `${items.filter(item => item.done).length} / ${items.length} hotovo`
+        : "Přidej první položku, kterou je potřeba zařídit."));
+    const list = mailNode("div", "event-checklist");
+    for (const item of items) {
+      const label = mailNode("label");
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.id = `check-${event.id}-${item.id}`;
+      input.checked = item.done;
+      input.addEventListener("change", () => {
+        item.done = input.checked;
+        changed();
+        document.getElementById(input.id)?.focus();
+      });
+      label.append(input, mailNode("span", "", item.label));
+      list.append(label);
+    }
+    section.append(list);
+    if (items.length < 30) {
+      const form = mailNode("form", "checklist-add");
+      const input = document.createElement("input");
+      input.id = "check-add-" + event.id;
+      input.required = true;
+      input.maxLength = 120;
+      input.placeholder = "Např. Připravit merch";
+      input.setAttribute("aria-label", "Nová položka checklistu");
+      const button = mailNode("button", "secondary-button compact", "Přidat");
+      button.type = "submit";
+      form.append(input, button);
+      form.addEventListener("submit", submit => {
+        submit.preventDefault();
+        const label = input.value.trim();
+        if (!label) return;
+        if (items.some(item => normalizedText(item.label) === normalizedText(label))) {
+          showToast("Tahle položka už v checklistu je.");
+          return;
+        }
+        items.push({ id: uid("check"), label, done: false });
+        changed();
+        (document.getElementById(input.id) || document.getElementById(section.id))?.focus();
+      });
+      section.append(form);
+    }
+    return section;
   }
   function eventCard(event, history = false) {
     const card = document.createElement("article"); card.className = "event-card" + (history ? " history" : ""); const head = document.createElement("div"); head.className = "event-card-head"; const title = document.createElement("div"); const date = document.createElement("span"); date.textContent = formatEventDate(event.date); const heading = document.createElement("h3"); heading.textContent = event.name || [event.city, event.venue].filter(Boolean).join(" — "); const place = document.createElement("p"); place.textContent = [event.city, event.venue].filter(Boolean).join(" · "); title.append(date, heading, place); const actions = document.createElement("div"); const edit = rowButton("✎", "Upravit koncert", () => openEventDialog(event.id)); const remove = rowButton("×", "Odstranit koncert", () => { if (!window.confirm("Opravdu odstranit koncert „" + (event.name || event.venue) + "“?")) return; workspace.state.events = workspace.state.events.filter(item => item.id !== event.id); changed(); }); actions.append(edit, remove); head.append(title, actions); card.append(head);
-    const details = [event.contactName ? "Kontakt: " + event.contactName + (event.contactPhone ? " · " + event.contactPhone : "") : "", event.note || ""].filter(Boolean); if (details.length) { const detail = document.createElement("div"); detail.className = "event-practical"; detail.replaceChildren(...details.map(text => { const line = document.createElement("p"); line.textContent = text; return line; })); card.append(detail); }
+    const fee = event.feeAmount == null ? "" : new Intl.NumberFormat("cs-CZ", {
+      style: "currency", currency: /^[A-Z]{3}$/.test(event.feeCurrency || "") ? event.feeCurrency : "CZK",
+    }).format(event.feeAmount);
+    const details = [event.contactName ? "Kontakt: " + event.contactName + (event.contactPhone ? " · " + event.contactPhone : "") : "", fee ? "Honorář: " + fee : "", event.note || ""].filter(Boolean); if (details.length) { const detail = document.createElement("div"); detail.className = "event-practical"; detail.replaceChildren(...details.map(text => { const line = document.createElement("p"); line.textContent = text; return line; })); card.append(detail); }
     const set = eventSetlist(event); if (set) { const setButton = document.createElement("button"); setButton.type = "button"; setButton.className = "event-setlist-link"; setButton.innerHTML = `<span>SETLIST</span><strong>${escapeText(set.name)}</strong><small>${set.songIds.length} skladeb →</small>`; setButton.addEventListener("click", () => loadSavedSetlist(set.id)); card.append(setButton); }
     else { const missing = document.createElement("p"); missing.className = "event-missing-set"; missing.textContent = "Bez přiřazeného setlistu"; card.append(missing); }
     if (history) {
       const planned = new Set(event.plannedSongIds?.length ? event.plannedSongIds : set?.songIds || []); const actual = event.playedSongIds || []; const skipped = [...planned].filter(id => !actual.includes(id)).length; const added = actual.filter(id => !planned.has(id)).length; const actualSeconds = actual.reduce((sum, id) => sum + Number(workspace.state.songs.find(song => song.id === id)?.seconds || 0), 0); const stats = document.createElement("div"); stats.className = "event-history-stats"; [["ODEHRÁNO", actual.length + " skladeb"], ["DÉLKA SKLADEB", formatTime(actualSeconds)], ["REÁLNÝ ČAS", elapsedClock(event.actualStart, event.actualEnd)], ["ZMĚNY", (skipped ? "−" + skipped : "0") + (added ? " / +" + added : "")], ["HODNOCENÍ", event.rating ? event.rating + " / 5" : "—"]].forEach(([label, value]) => { const item = document.createElement("div"); item.innerHTML = `<span>${label}</span><strong>${value}</strong>`; stats.append(item); }); card.append(stats); if (event.performanceNote) { const note = document.createElement("p"); note.className = "performance-note"; note.textContent = event.performanceNote; card.append(note); }
     } else {
-      const timeline = document.createElement("div"); timeline.className = "event-mini-timeline"; eventTimeline(event).forEach(([label, value]) => { const item = document.createElement("span"); item.innerHTML = `<small>${label}</small><strong>${value}</strong>`; timeline.append(item); }); if (timeline.children.length) card.append(timeline); if ((event.checklist || []).length) card.append(renderEventChecklist(event, true)); const done = document.createElement("button"); done.type = "button"; done.className = "secondary-button compact"; done.textContent = "Zapsat jako odehrané"; done.addEventListener("click", () => openEventDialog(event.id, true)); card.append(done);
+      const timeline = document.createElement("div"); timeline.className = "event-mini-timeline"; eventTimeline(event).forEach(([label, value]) => { const item = document.createElement("span"); item.append(mailNode("small", "", label), mailNode("strong", "", value)); timeline.append(item); }); if (timeline.children.length) card.append(timeline);
+      card.append(renderEventChecklist(event));
+      if (set) {
+        const button = rowButton("Otevřít plán zkoušky", "Naplánovat zkoušku pro " + set.name,
+          () => openRehearsalForSet(set));
+        button.className = "secondary-button compact";
+        const songs = scopedRehearsalSongs("saved:" + set.id);
+        const members = workspace.state.members;
+        const ready = members.length ? songs.filter(song => members.every(member => song.readiness?.[member.id] === "ready")).length : 0;
+        card.append(mailNode("p", "section-help", `Kapela má připraveno ${ready} z ${songs.length} skladeb.`), button);
+      }
+      const done = rowButton("Zapsat jako odehrané", "Zapsat jako odehrané", () => openEventDialog(event.id, true));
+      done.className = "secondary-button compact";
+      card.append(done);
     }
     return card;
   }
@@ -394,7 +914,16 @@
     if (!workspace) return; const planned = workspace.state.events.filter(event => event.status !== "completed").sort((a, b) => String(a.date).localeCompare(String(b.date))); const history = workspace.state.events.filter(event => event.status === "completed").sort((a, b) => String(b.date).localeCompare(String(a.date)));
     elements.upcomingEvents.replaceChildren(...(planned.length ? planned.map(event => eventCard(event)) : [Object.assign(document.createElement("p"), { className: "section-help", textContent: "Zatím není naplánovaný žádný koncert." })])); elements.eventHistory.replaceChildren(...(history.length ? history.map(event => eventCard(event, true)) : [Object.assign(document.createElement("p"), { className: "section-help", textContent: "Historie se začne plnit po prvním odehraném koncertu." })]));
     const next = planned[0]; if (!next) { elements.nextEventSpotlight.innerHTML = '<div><span>DALŠÍ KONCERT</span><h2>Ještě není naplánovaný</h2><p>Přidej termín, časy a hotový setlist.</p></div>'; return; }
-    const set = eventSetlist(next); const timeline = eventTimeline(next); elements.nextEventSpotlight.replaceChildren(); const intro = document.createElement("div"); intro.innerHTML = `<span>DALŠÍ KONCERT · ${escapeText(formatEventDate(next.date, true))}</span><h2>${escapeText(next.name || next.venue)}</h2><p>${escapeText([next.city, next.venue, next.address].filter(Boolean).join(" · "))}</p>`; const times = document.createElement("div"); times.className = "event-spotlight-times"; timeline.forEach(([label, value]) => { const item = document.createElement("div"); item.innerHTML = `<span>${label}</span><strong>${value}</strong>`; times.append(item); }); const actions = document.createElement("div"); actions.className = "event-spotlight-actions"; if (set) { const open = document.createElement("button"); open.type = "button"; open.className = "primary-button"; open.textContent = "Otevřít setlist · " + set.name; open.addEventListener("click", () => loadSavedSetlist(set.id)); actions.append(open); } const edit = document.createElement("button"); edit.type = "button"; edit.className = "secondary-button"; edit.textContent = "Upravit den koncertu"; edit.addEventListener("click", () => openEventDialog(next.id)); actions.append(edit); elements.nextEventSpotlight.append(intro, times, actions);
+    const set = eventSetlist(next); const timeline = eventTimeline(next); elements.nextEventSpotlight.replaceChildren(); const intro = document.createElement("div"); intro.innerHTML = `<span>DALŠÍ KONCERT · ${escapeText(formatEventDate(next.date, true))}</span><h2>${escapeText(next.name || next.venue)}</h2><p>${escapeText([next.city, next.venue, next.address].filter(Boolean).join(" · "))}</p>`; const times = document.createElement("div"); times.className = "event-spotlight-times"; timeline.forEach(([label, value]) => { const item = document.createElement("div"); item.innerHTML = `<span>${label}</span><strong>${value}</strong>`; times.append(item); }); const actions = document.createElement("div"); actions.className = "event-spotlight-actions"; if (set) { const open = document.createElement("button"); open.type = "button"; open.className = "primary-button"; open.textContent = "Otevřít setlist · " + set.name; open.addEventListener("click", () => loadSavedSetlist(set.id)); actions.append(open); } const edit = document.createElement("button"); edit.type = "button"; edit.className = "secondary-button"; edit.textContent = "Upravit den koncertu"; edit.addEventListener("click", () => openEventDialog(next.id)); actions.append(edit);
+    const check = rowButton("Checklist · " + next.checklist.filter(item => item.done).length + "/" + next.checklist.length,
+      "Přejít na checklist koncertu", () => {
+        const panel = document.getElementById("event-checklist-" + next.id);
+        panel?.focus({ preventScroll: true });
+        panel?.scrollIntoView({ block: "center" });
+      });
+    check.className = "quiet-button compact";
+    actions.append(check);
+    elements.nextEventSpotlight.append(intro, times, actions);
   }
   function refreshEventSetlistOptions(preferred = "") { const value = preferred || elements.eventSetlist.value; elements.eventSetlist.replaceChildren(option("", "Bez přiřazeného setlistu"), ...workspace.state.savedSetlists.map(set => option(set.id, set.name))); elements.eventSetlist.value = workspace.state.savedSetlists.some(set => set.id === value) ? value : ""; enhanceSelect(elements.eventSetlist); }
   function renderEventPlayedSongs() {
@@ -403,11 +932,18 @@
   }
   function toggleEventHistoryFields() { const completed = elements.eventStatus.value === "completed"; elements.eventHistoryFields.hidden = !completed; if (completed && !eventPlayedSongDraft.length) eventPlayedSongDraft = [...(savedSetlistById(elements.eventSetlist.value)?.songIds || [])]; renderEventPlayedSongs(); }
   function openEventDialog(eventId = "", forceCompleted = false) {
-    const event = workspace.state.events.find(item => item.id === eventId); const form = elements.eventForm; form.reset(); form.elements.eventId.value = event?.id || ""; form.elements.name.value = event?.name || ""; form.elements.date.value = event?.date ? formatEventDate(event.date) : ""; ["city", "venue", "address", "arrival", "loadIn", "soundcheck", "showStart", "showEnd", "contactName", "contactPhone", "note", "actualStart", "actualEnd", "performanceNote"].forEach(key => { form.elements[key].value = event?.[key] || ""; }); form.elements.status.value = forceCompleted ? "completed" : event?.status || "planned"; form.elements.rating.value = String(event?.rating || 0); form.elements.checklist.value = (event?.checklist || []).map(item => item.label).join("\n"); refreshEventSetlistOptions(event?.setlistId || ""); eventPlayedSongDraft = [...(event?.playedSongIds || [])]; const matchingLiveSet = event?.setlistId && liveSession.liveSet?.setlistRef === "saved:" + event.setlistId ? liveSession.liveSet : null; if (forceCompleted && !eventPlayedSongDraft.length && matchingLiveSet?.playedSongIds?.length) eventPlayedSongDraft = [...matchingLiveSet.playedSongIds]; if ((forceCompleted || event?.status === "completed") && !eventPlayedSongDraft.length) eventPlayedSongDraft = [...(eventSetlist(event)?.songIds || [])]; elements.eventDialogTitle.textContent = event ? "Upravit koncert" : "Přidat koncert"; toggleEventHistoryFields(); enhanceSelect(elements.eventStatus); enhanceSelect(form.elements.rating); elements.eventDialog.showModal();
+    const event = workspace.state.events.find(item => item.id === eventId); const form = elements.eventForm; form.reset(); closeEventCalendar(); elements.eventDateInput.setCustomValidity(""); form.elements.eventId.value = event?.id || ""; form.elements.name.value = event?.name || ""; form.elements.date.value = event?.date ? formatEventDate(event.date) : ""; form.elements.feeAmount.value = event?.feeAmount ?? ""; form.elements.feeCurrency.value = event?.feeCurrency || "CZK"; enhanceSelect(form.elements.feeCurrency); ["city", "venue", "address", "arrival", "loadIn", "soundcheck", "showStart", "showEnd", "contactName", "contactPhone", "note", "actualStart", "actualEnd", "performanceNote"].forEach(key => { form.elements[key].value = event?.[key] || ""; }); form.elements.status.value = forceCompleted ? "completed" : event?.status || "planned"; form.elements.rating.value = String(event?.rating || 0); form.elements.checklist.value = (event?.checklist || []).map(item => item.label).join("\n"); refreshEventSetlistOptions(event?.setlistId || ""); eventPlayedSongDraft = [...(event?.playedSongIds || [])]; const matchingLiveSet = event?.setlistId && liveSession.liveSet?.setlistRef === "saved:" + event.setlistId ? liveSession.liveSet : null; if (forceCompleted && !eventPlayedSongDraft.length && matchingLiveSet?.playedSongIds?.length) eventPlayedSongDraft = [...matchingLiveSet.playedSongIds]; if ((forceCompleted || event?.status === "completed") && !eventPlayedSongDraft.length) eventPlayedSongDraft = [...(eventSetlist(event)?.songIds || [])]; elements.eventDialogTitle.textContent = event ? "Upravit koncert" : "Přidat koncert"; toggleEventHistoryFields(); enhanceSelect(elements.eventStatus); enhanceSelect(form.elements.rating); elements.eventDialog.showModal();
   }
   function saveEventForm(form) {
-    const data = formPayload(form); const date = parseEventDate(data.date); if (!date) { showToast("Datum zadej například jako 21. 1. 2027."); return; } const times = ["arrival", "loadIn", "soundcheck", "showStart", "showEnd", "actualStart", "actualEnd"]; for (const key of times) if (data[key] && !parseClock(data[key])) { showToast("Zkontroluj čas. Použij formát 16:30."); return; }
-    const existing = workspace.state.events.find(item => item.id === data.eventId); const oldChecks = new Map((existing?.checklist || []).map(item => [normalizedText(item.label), item])); const checklist = [...new Set(String(data.checklist || "").split(/\r?\n/).map(item => item.trim()).filter(Boolean))].slice(0, 30).map(label => ({ id: oldChecks.get(normalizedText(label))?.id || uid("check"), label: label.slice(0, 120), done: Boolean(oldChecks.get(normalizedText(label))?.done) })); const completed = data.status === "completed"; const plannedSongIds = completed ? (existing?.plannedSongIds?.length ? [...existing.plannedSongIds] : [...(savedSetlistById(data.setlistId)?.songIds || [])]) : (existing?.plannedSongIds || []); const payload = { id: existing?.id || uid("event"), name: data.name.trim(), date, city: data.city.trim(), venue: data.venue.trim(), address: data.address.trim(), arrival: parseClock(data.arrival), loadIn: parseClock(data.loadIn), soundcheck: parseClock(data.soundcheck), showStart: parseClock(data.showStart), showEnd: parseClock(data.showEnd), setlistId: data.setlistId || "", contactName: data.contactName.trim(), contactPhone: data.contactPhone.trim(), note: data.note.trim(), checklist, status: completed ? "completed" : "planned", actualStart: parseClock(data.actualStart), actualEnd: parseClock(data.actualEnd), rating: Math.max(0, Math.min(5, Number(data.rating) || 0)), performanceNote: data.performanceNote.trim(), playedSongIds: completed ? [...eventPlayedSongDraft] : (existing?.playedSongIds || []), plannedSongIds };
+    const data = formPayload(form); const date = parseEventDate(data.date); if (!date) { elements.eventDateInput.setCustomValidity("Zadej platné datum nebo ho vyber v kalendáři."); elements.eventDateInput.reportValidity(); return; } const times = ["arrival", "loadIn", "soundcheck", "showStart", "showEnd", "actualStart", "actualEnd"]; for (const key of times) if (data[key] && !parseClock(data[key])) { showToast("Zkontroluj čas. Použij formát 16:30."); return; }
+    const rawFee = data.feeAmount.trim().replace(/\s/g, "").replace(",", ".");
+    const feeAmount = rawFee ? Number(rawFee) : null;
+    if (rawFee && (!/^\d+(?:\.\d{1,2})?$/.test(rawFee) || feeAmount > 1000000000)) {
+      showToast("Zadej platnou částku honoráře, například 12 000 nebo 350,50.");
+      form.elements.feeAmount.focus();
+      return;
+    }
+    const existing = workspace.state.events.find(item => item.id === data.eventId); const oldChecks = new Map((existing?.checklist || []).map(item => [normalizedText(item.label), item])); const checklist = [...new Set(String(data.checklist || "").split(/\r?\n/).map(item => item.trim()).filter(Boolean))].slice(0, 30).map(label => ({ id: oldChecks.get(normalizedText(label))?.id || uid("check"), label: label.slice(0, 120), done: Boolean(oldChecks.get(normalizedText(label))?.done) })); const completed = data.status === "completed"; const plannedSongIds = completed ? (existing?.plannedSongIds?.length ? [...existing.plannedSongIds] : [...(savedSetlistById(data.setlistId)?.songIds || [])]) : (existing?.plannedSongIds || []); const payload = { id: existing?.id || uid("event"), name: data.name.trim(), date, city: data.city.trim(), venue: data.venue.trim(), address: data.address.trim(), feeAmount, feeCurrency: data.feeCurrency || "CZK", arrival: parseClock(data.arrival), loadIn: parseClock(data.loadIn), soundcheck: parseClock(data.soundcheck), showStart: parseClock(data.showStart), showEnd: parseClock(data.showEnd), setlistId: data.setlistId || "", contactName: data.contactName.trim(), contactPhone: data.contactPhone.trim(), note: data.note.trim(), checklist, status: completed ? "completed" : "planned", actualStart: parseClock(data.actualStart), actualEnd: parseClock(data.actualEnd), rating: Math.max(0, Math.min(5, Number(data.rating) || 0)), performanceNote: data.performanceNote.trim(), playedSongIds: completed ? [...eventPlayedSongDraft] : (existing?.playedSongIds || []), plannedSongIds };
     if (existing) Object.assign(existing, payload); else workspace.state.events.push(payload); elements.eventDialog.close(); changed(); showToast(existing ? "Koncert je upravený." : "Koncert je naplánovaný.");
   }
   function songTuning(song, memberId) { const detail = songMemberDetail(song, memberId); const field = normalizePrintFields(detail.printFields).find(item => ["ladeni", "tuning"].includes(normalizedText(item.label))); return normalizedText(field?.value || ""); }
@@ -493,9 +1029,21 @@
   }
   function changed() { renderWorkspace(); elements.saveState.textContent = "Ukládám…"; clearTimeout(saveTimer); saveTimer = setTimeout(saveWorkspace, 450); }
   async function saveWorkspace() {
-    if (!workspace) return;
-    try { const result = await api("/band-state", { method: "PUT", body: JSON.stringify({ bandId: activeBandId, revision, state: workspace.state }) }); revision = result.revision; elements.saveState.textContent = "Uloženo"; }
-    catch (error) { elements.saveState.textContent = "Neuloženo"; if (error.message.includes("Konflikt")) await loadWorkspace(); showToast(error.message); }
+    if (!workspace || workspace.band.id !== activeBandId) return false;
+    const band = activeBandId;
+    try {
+      const result = await api("/band-state", { method: "PUT", body: JSON.stringify({ bandId: band, revision, state: workspace.state }) });
+      if (band !== activeBandId) return false;
+      revision = result.revision;
+      elements.saveState.textContent = "Uloženo";
+      return true;
+    } catch (error) {
+      if (band !== activeBandId) return false;
+      elements.saveState.textContent = "Neuloženo";
+      if (error.message.includes("Konflikt")) await loadWorkspace();
+      showToast(error.message);
+      return false;
+    }
   }
   function printFieldDraft(kind) { return kind === "song" ? songPrintFieldDraft : notesPrintFieldDraft; }
   function renderPrintFieldEditor(kind, focusLast = false) {
@@ -699,6 +1247,68 @@
   elements.albumFilter.addEventListener("change", renderWorkspace); elements.energyFilter.addEventListener("change", renderWorkspace); elements.roleFilter.addEventListener("change", renderWorkspace);
   elements.smartOrderSet.addEventListener("click", openSmartOrderDialog); elements.applySmartOrder.addEventListener("click", () => { if (!smartOrderDraft.length) return; workspace.state.draft.songIds = [...smartOrderDraft]; elements.smartOrderDialog.close(); changed(); showToast("Návrh pořadí je použitý."); });
   elements.addEvent.addEventListener("click", () => openEventDialog()); elements.eventForm.addEventListener("submit", event => { event.preventDefault(); saveEventForm(event.currentTarget); }); elements.eventStatus.addEventListener("change", toggleEventHistoryFields); elements.eventSetlist.addEventListener("change", () => { if (elements.eventStatus.value === "completed") eventPlayedSongDraft = [...(savedSetlistById(elements.eventSetlist.value)?.songIds || [])]; renderEventPlayedSongs(); }); elements.addEventPlayedSong.addEventListener("click", () => { const id = elements.eventPlayedSongSelect.value; if (!id || eventPlayedSongDraft.includes(id)) return; eventPlayedSongDraft.push(id); renderEventPlayedSongs(); });
+  elements.eventCalendarToggle.addEventListener("click", toggleEventCalendar);
+  elements.eventCalendarPrevious.addEventListener("click", () => moveEventCalendarMonth(-1));
+  elements.eventCalendarNext.addEventListener("click", () => moveEventCalendarMonth(1));
+  elements.eventCalendarToday.addEventListener("click", () => chooseEventDate(new Date()));
+  elements.eventDateInput.addEventListener("input", () => {
+    elements.eventDateInput.setCustomValidity("");
+    if (!elements.eventCalendar.hidden) {
+      const selected = parseEventDate(elements.eventDateInput.value);
+      if (selected) eventCalendarCursor = SetlisterPlanning.dateFromKey(selected);
+      renderEventCalendar();
+    }
+  });
+  elements.eventDialog.addEventListener("cancel", event => {
+    if (!elements.eventCalendar.hidden) { event.preventDefault(); closeEventCalendar(true); }
+  });
+  elements.eventDialog.addEventListener("click", event => {
+    if (!elements.eventCalendar.hidden && !elements.eventDateField.contains(event.target)) closeEventCalendar();
+  });
+  elements.rehearsalForm.addEventListener("submit", event => {
+    event.preventDefault(); rehearsalPlanShown = true; renderRehearsalPreview();
+  });
+  elements.rehearsalScope.addEventListener("change", () => {
+    rehearsalPlanShown = false; renderRehearsalPlanner(); enhanceSelects(elements.rehearsalPlanner);
+  });
+  elements.rehearsalMember.addEventListener("change", () => {
+    renderRehearsalPlanner(); enhanceSelects(elements.rehearsalPlanner);
+  });
+  elements.rehearsalMinutes.addEventListener("input", () => { if (rehearsalPlanShown) renderRehearsalPreview(); });
+  elements.saveRehearsalPlan.addEventListener("click", saveRehearsalPlan);
+  elements.taskForm.addEventListener("submit", event => { event.preventDefault(); saveTaskForm(event.currentTarget); });
+  elements.taskCategoryFilter.addEventListener("change", renderTasks);
+  elements.taskStateFilter.addEventListener("change", renderTasks);
+  elements.cancelTaskEdit.addEventListener("click", () => { resetTaskForm(); enhanceSelect(elements.taskAssignee); });
+  elements.concertAgendaTab.addEventListener("click", () => showConcertCalendar(false));
+  elements.concertCalendarTab.addEventListener("click", () => showConcertCalendar(true));
+  function moveBandCalendarMonth(offset) {
+    const next = new Date(bandCalendarDate.getFullYear(), bandCalendarDate.getMonth() + offset, 1);
+    if (next.getFullYear() < 1900 || next.getFullYear() > 9999) return;
+    bandCalendarDate = next;
+    renderBandCalendar();
+  }
+  elements.bandCalendarPrevious.addEventListener("click", () => moveBandCalendarMonth(-1));
+  elements.bandCalendarNext.addEventListener("click", () => moveBandCalendarMonth(1));
+  elements.bandCalendarToday.addEventListener("click", () => { bandCalendarDate = new Date(); renderBandCalendar(); });
+  elements.addCalendarEntry.addEventListener("click", () => openCalendarEntry());
+  elements.calendarEntryForm.addEventListener("submit", event => { event.preventDefault(); saveCalendarEntry(event.currentTarget); });
+  elements.deleteCalendarEntry.addEventListener("click", () => {
+    const id = elements.calendarEntryForm.elements.entryId.value;
+    const entries = workspace.state.calendarEntries;
+    const entry = entries.find(item => item.id === id && item.userId === session.user.id);
+    if (!entry || !window.confirm("Odstranit zápis „" + entry.title + "“?")) return;
+    workspace.state.calendarEntries = entries.filter(item => item.id !== id);
+    elements.calendarEntryDialog.close();
+    changed();
+  });
+  elements.calendarSubscribe.addEventListener("toggle", () => { if (elements.calendarSubscribe.open) loadCalendarFeed(); });
+  elements.createCalendarFeed.addEventListener("click", () => changeCalendarFeed(true));
+  elements.revokeCalendarFeed.addEventListener("click", () => changeCalendarFeed(false));
+  elements.copyCalendarFeed.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(elements.calendarFeedUrl.value); showToast("Odkaz zkopírován."); }
+    catch (_) { elements.calendarFeedUrl.select(); }
+  });
   elements.startLiveSet.addEventListener("click", startLiveSet); elements.stopLiveSet.addEventListener("click", stopLiveSet); elements.livePrevious.addEventListener("click", () => moveLiveSong(-1)); elements.liveNext.addEventListener("click", () => moveLiveSong(1));
   elements.liveSongCard.addEventListener("pointerdown", event => { liveSwipeStart = { id: event.pointerId, x: event.clientX }; elements.liveSongCard.setPointerCapture(event.pointerId); });
   elements.liveSongCard.addEventListener("pointerup", event => { if (!liveSwipeStart || liveSwipeStart.id !== event.pointerId) return; const distance = event.clientX - liveSwipeStart.x; liveSwipeStart = null; if (Math.abs(distance) >= 55) moveLiveSong(distance < 0 ? 1 : -1); });

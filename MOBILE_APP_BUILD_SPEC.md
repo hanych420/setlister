@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.12.2 · aktualizováno 19. 11. 2026
+> Stav specifikace: 0.12.3 · aktualizováno 19. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -31,9 +31,10 @@ Po přihlášení zobraz spodní navigaci:
 
 - **Setlist** — právě skládaný set, repertoár k přidání, uložené sety, tisk/PDF.
 - **Repertoár** — skladby, jejich obecná metadata a osobní pokyny členů.
-- **Koncerty** — termíny, časový plán dne, checklist, přiřazený uložený setlist a historie skutečně odehraných setů.
-- **Zkouška** — společně vedený live průchod aktuálním nebo uloženým setlistem, osobní pokyny a synchronizovaný metronom.
+- **Koncerty** — agenda a měsíční kalendář, harmonogram, honorář, checklist, přiřazený setlist a historie hraní.
+- **Zkouška** — připravenost členů, návrh zkoušky a společně vedený průchod setlistem s osobními pokyny a metronomem.
 - **Mailový agent** — připojení Gmailů, stav synchronizace a doložený chat nad jejich obsahem.
+- **Úkoly** — kapelní seznam s volnou kategorií, termínem, odpovědným účtem a stavem hotovo.
 - **Kapela** — logo, pódioví členové, nástroje, pozvánkový kód, účet a předplatné.
 
 Uživatel může být členem více kapel. Aktivní kapela se přepíná v hlavičce. Data různých kapel se nikdy nesmí smíchat.
@@ -79,6 +80,7 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
       "bpm": 128,
       "energy": 4,
       "role": "standard | opener | encore | closer",
+      "readiness": { "member-...": "ready | practice | unlearned" },
       "printFields": [
         { "id": "field-...", "label": "Kdo začíná", "value": "Hanych a Petr" }
       ],
@@ -114,6 +116,8 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
       "city": "Praha",
       "venue": "Roxy",
       "address": "Dlouhá 33, Praha",
+      "feeAmount": 12000,
+      "feeCurrency": "CZK",
       "arrival": "16:00",
       "loadIn": "16:30",
       "soundcheck": "17:30",
@@ -132,6 +136,12 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
       "rating": 4,
       "performanceNote": "Prohodit prostřední blok."
     }
+  ],
+  "calendarEntries": [
+    { "id": "calendar-...", "userId": "usr_...", "title": "Dovolená", "startDate": "2027-02-01", "endDate": "2027-02-08" }
+  ],
+  "tasks": [
+    { "id": "task-...", "title": "Připravit příspěvek", "category": "Socky", "deadline": "2027-01-18", "assigneeUserId": "usr_...", "done": false }
   ]
 }
 ```
@@ -212,11 +222,25 @@ Koncert je kapelní provozní záznam, ne úložiště smluv. Obsahuje název, d
 - Ke koncertu se vybírá existující uložený setlist pomocí stabilního `setlistId`; jeho karta i zvýrazněný nejbližší koncert musí mít přímou akci, která setlist otevře v editoru.
 - Smazání uloženého setlistu bezpečně zruší jeho přiřazení u budoucích koncertů.
 - Nadcházející koncerty jsou řazené vzestupně podle data; odehrané sestupně.
-- Položky checklistu lze odškrtávat přímo na kartě a stav se synchronizuje s kapelním cloudem.
+- Checklist je viditelný přímo na kartě i bez položek. Položky lze přidávat a odškrtávat na kartě. V editaci koncertu lze položky upravit nebo odebrat. Karta nejbližšího koncertu má proklik a souhrn hotových položek.
+- Datum koncertu používá vlastní přístupný měsíční kalendář začínající pondělím. Umožni výběr klávesami i dotykem, krok mezi měsíci a ruční zadání českého nebo ISO data. Protokol ukládá datum jako místní kalendářní den `YYYY-MM-DD`.
+- Honorář je volitelná částka `feeAmount` (prázdná hodnota `null` je odlišná od nuly) s měnou `feeCurrency` v ISO 4217. Zobrazuje se kapelním členům na kartě.
 - Akce „Zapsat jako odehrané“ přepne událost do historie. Uživatel zadá skutečný začátek/konec, hodnocení 1–5, poznámku a skutečné pořadí skladeb; skladby lze přidat, odebrat i přeskládat.
 - Při prvním dokončení se do `plannedSongIds` uloží neměnný snímek tehdy přiřazeného setlistu. Pozdější úpravy uloženého setlistu proto nezmění historické porovnání.
 - Pokud byl přiřazený set právě veden v live režimu, formulář dokončení předvyplní `playedSongIds` skutečně navštívenými skladbami; jinak použije celý přiřazený setlist.
 - Historie ukazuje počet odehraných skladeb, jejich součet délek, skutečný čas koncertu, počet vynechaných/přidaných skladeb, hodnocení a poznámku.
+
+### Kapelní kalendář
+
+Přepínač Agenda / Kalendář zobrazí měsíční pohled s koncerty a sdílenými celodenními zápisy členů. Koncerty mají limetkovou barvu a členové barevné klíče podle kapelních účtů. Zobrazení dne obsahuje názvy i autora. Vlastní zápis má název, počáteční den a koncový den včetně. Účet může vytvářet, upravovat a mazat zápisy pod svým ID. Každý registrovaný člen kapely může její kalendář číst.
+
+Každý člen si může vytvořit nebo zrušit vlastní tajný odkaz k odběru kapelního kalendáře. Před vytvořením vysvětli, že odkaz může číst každý, kdo jej získá. Pro Apple poskytni otevření přes `webcal:` a pro Google kopírování HTTPS odkazu pro funkci Přidat pomocí adresy URL. Odběr vede z aplikace do externích kalendářů a jeho frekvenci určuje poskytovatel. Feed obsahuje název, termín a místo koncertů, plánovaný čas hraní, je-li zadán, a názvy sdílených zápisů se jménem člena. Honoráře, checklisty, e-maily a úkoly jsou pouze v Setlisteru.
+
+### Kapelní úkoly
+
+Titulek je povinný. Kategorie je volný text do 40 znaků a stávající kategorie se nabízejí jako filtr bez rozlišování velikosti písmen a diakritiky. `deadline` je lokální datum `YYYY-MM-DD` nebo prázdný řetězec. `assigneeUserId` ukazuje na skutečný účet v aktivní kapele, případně je prázdný. Kontrola `done` dovoluje úkol označit jako hotový a zase otevřít. Filtr zobrazuje otevřené, hotové nebo všechny úkoly.
+
+Budoucí iOS a Android klient přidá volitelná upozornění na úkoly přiřazené přihlášenému účtu. Při změně termínu připomínku přeplánuj a zruš ji při dokončení, smazání nebo přeřazení. Pro doručení i bez otevření aplikace použij serverové APNs/FCM registrace s výslovným souhlasem. Web 0.12.3 ukládá potřebná data a upozornění zatím neposílá.
 
 ## Tisk a PDF
 
@@ -233,6 +257,10 @@ Export je určen pro papír ležící na pódiu, proto je čitelnost důležitě
 - Výtisk může obsahovat malé logo kapely a název setlistu, ale hlavička nesmí zabírat podstatnou část stránky.
 
 ## Live zkouška
+
+V sekci Zkouška je nad společným hraním „Chytrý plán zkoušky“. Kapela vidí připravenost jednotlivých pódiových členů ke skladbě. Výchozí je neutrální „Bez hodnocení“. Volby jsou připraveno, dopilovat nebo nenacvičeno. Přihlášený propojený člen hodnotí sebe, vlastník může zvolit libovolný pódiový profil. Karta koncertu s přiřazeným setlistem ukáže počet skladeb připravených všemi členy a otevře plán pro tento setlist.
+
+Plán vybírá z aktuálního setu, uloženého setlistu nebo celého repertoáru. Zadaný čas je 5 až 360 minut. Váha je 4 body za člena s nenacvičenou skladbou a 2 body za člena se stavem dopilovat. Při shodě rozhoduje počet nenacvičených, počet bez hodnocení a původní pořadí. Rozpočet se počítá z délky skladby a rezervy na procvičení, 3 minuty při nenacvičené skladbě, 2 při dopilování a 1 při neznámé připravenosti. Uveď odhadovaný čas a počet prioritních skladeb, které se nevešly. Plán lze uložit jako samostatný zkušební setlist pro živé hraní.
 
 Uživatel může jako vedoucí spustit právě skládaný set nebo libovolný uložený setlist. Server uloží společnou aktivní skladbu pro `bandId` a všechny připojené klienty ji během nejvýše jedné sekundy převezmou. Live obrazovka má velký název aktuální skladby, pozici v setu, délku, BPM, energii a všechny společné i osobní pokyny pódiového profilu propojeného s přihlášeným účtem. Každý tedy sleduje stejnou skladbu, ale vidí svoje vlastní pokyny. Pokud účet nemá propojený profil, použije se první pódiový člen a UI to zřetelně uvede.
 
@@ -312,6 +340,9 @@ Webové API dnes používá zabezpečenou HttpOnly cookie `setlister_session`, `
 | `POST` | `/bands/rotate-code` | `{bandId}`; pouze vlastník, obnoví pozvánkový kód |
 | `GET` | `/workspace?bandId=...` | vrátí kapelu, roli, účty členů, subscription, `state`, `revision` |
 | `PUT` | `/band-state` | `{bandId,revision,state}`; atomicky uloží JSON a zvýší revizi |
+| `GET` | `/calendar-feed?bandId=…` | Vrátí `{url}` s HTTPS odkazem daného účtu, nebo prázdnou hodnotou. |
+| `POST` | `/calendar-feed` | `{bandId,enabled}` vytvoří nebo zruší vlastní odkaz. |
+| `GET/HEAD` | `https://app.setlister.cz/calendar/feed/<token>.ics` | Čtecí iCalendar odběr přes tajný odkaz. |
 | `GET` | `/repertoire-template.xlsx?bandId=...` | stáhne XLSX šablonu repertoáru; vyžaduje členství |
 | `POST` | `/import-xlsx` | `{bandId,contentBase64}`; bezpečně přečte první list a vrátí `rows` |
 | `GET` | `/live-session?bandId=...` | vrátí `serverTimeMs`, revizi, stav metronomu a `liveSet` společného průchodu |

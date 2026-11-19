@@ -10,6 +10,7 @@ import hmac
 import html
 import io
 import json
+import math
 import os
 import re
 import secrets
@@ -37,8 +38,9 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
 if __package__:
-    from . import public_concerts
+    from . import band_calendar, public_concerts
 else:
+    import band_calendar
     import public_concerts
 
 
@@ -338,6 +340,12 @@ def initialize_database() -> None:
                 FOREIGN KEY (user_id) REFERENCES public_users(id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS public_band_members_user_idx ON public_band_members(user_id);
+            CREATE TABLE IF NOT EXISTS public_calendar_feeds (
+                band_id TEXT NOT NULL, user_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
+                encrypted_token TEXT NOT NULL, PRIMARY KEY (band_id, user_id),
+                FOREIGN KEY (band_id, user_id) REFERENCES public_band_members(band_id, user_id)
+                    ON DELETE CASCADE
+            );
             CREATE TABLE IF NOT EXISTS public_band_state (
                 band_id TEXT PRIMARY KEY, revision INTEGER NOT NULL DEFAULT 0,
                 state_json TEXT NOT NULL, updated_at TEXT NOT NULL,
@@ -2374,6 +2382,11 @@ def valid_public_state(value: object) -> bool:
             return False
         if not 0 <= bpm <= 300:
             return False
+        readiness = song.get("readiness", {})
+        if (not isinstance(readiness, dict) or len(readiness) > 250
+                or any(not key or len(key) > 160 or status not in ("ready", "practice", "unlearned")
+                       for key, status in readiness.items())):
+            return False
         print_tags = song.get("printTags") or []
         if not isinstance(print_tags, list) or len(print_tags) > 8 or any(len(str(tag)) > 32 for tag in print_tags):
             return False
@@ -2450,6 +2463,59 @@ def valid_public_state(value: object) -> bool:
             return False
         if any(not isinstance(item, dict) or len(str(item.get("label") or "")) > 120 for item in checklist):
             return False
+        fee = event.get("feeAmount")
+        if fee is not None and (type(fee) not in (int, float) or not 0 <= fee <= 1_000_000_000
+                                or not math.isfinite(fee) or round(fee, 2) != fee):
+            return False
+        if not re.fullmatch(r"[A-Z]{3}", str(event.get("feeCurrency") or "CZK")):
+            return False
+    tasks = value.get("tasks", [])
+    entries = value.get("calendarEntries", [])
+    if not isinstance(tasks, list) or not isinstance(entries, list) or len(tasks) > 1000 or len(entries) > 1000:
+        return False
+    for task in tasks:
+        if (not isinstance(task, dict) or not valid_id(task.get("id"))
+                or not valid_text(task.get("title"), 160) or not valid_text(task.get("category"), 40, optional=True)
+                or not valid_text(task.get("assigneeUserId"), 160, optional=True)
+                or not isinstance(task.get("done"), bool)
+                or (task.get("deadline") != "" and not band_calendar.valid_day(task.get("deadline")))):
+            return False
+    for entry in entries:
+        if (not isinstance(entry, dict) or not valid_id(entry.get("id")) or not valid_id(entry.get("userId"))
+                or not valid_text(entry.get("title"), 120) or not band_calendar.valid_day(entry.get("startDate"))
+                or not band_calendar.valid_day(entry.get("endDate")) or entry["endDate"] < entry["startDate"]):
+            return False
+    if len({task["id"] for task in tasks}) != len(tasks) or len({item["id"] for item in entries}) != len(entries):
+        return False
+    return True
+
+
+def valid_text(value, maximum, *, optional=False):
+    return isinstance(value, str) and len(value) <= maximum and (optional or bool(value.strip()))
+
+
+def valid_id(value):
+    return valid_text(value, 160)
+
+
+def can_change_personal_planning(old_state, new_state, user_id, role):
+    old_entries = {entry["id"]: entry for entry in old_state.get("calendarEntries", [])}
+    new_entries = {entry["id"]: entry for entry in new_state.get("calendarEntries", [])}
+    for key in old_entries.keys() | new_entries.keys():
+        before, after = old_entries.get(key), new_entries.get(key)
+        if before != after and any(item and item["userId"] != user_id for item in (before, after)):
+            return False
+    if role == "owner":
+        return True
+    old_members = {member["id"]: member.get("linkedUserId") for member in old_state.get("members", [])}
+    member_ids = {member["id"] for member in new_state.get("members", [])}
+    old_songs = {song["id"]: song.get("readiness", {}) for song in old_state.get("songs", [])}
+    for song in new_state.get("songs", []):
+        old = old_songs.get(song["id"], {})
+        current = song.get("readiness", {})
+        for member_id in (old.keys() | current.keys()) & member_ids:
+            if current.get(member_id) != old.get(member_id) and old_members.get(member_id) != user_id:
+                return False
     return True
 
 
@@ -2474,7 +2540,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.12.2"
+    server_version = "Setlister/0.12.3"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -2484,11 +2550,12 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         message = format % args
         message = re.sub(r"([?&](?:code|state)=)[^&\s]+", r"\1[REDACTED]", message)
+        message = re.sub(r"(/calendar/feed/)[^\s?]+", r"\1[REDACTED]", message)
         print(f"{self.log_date_time_string()} {self.address_string()} {message}", flush=True)
 
     def end_headers(self) -> None:
         request_path = urlparse(self.path).path
-        if not request_path.startswith(("/api/", f"{self.private_prefix}/api/")):
+        if not request_path.startswith(("/api/", "/calendar/feed/", f"{self.private_prefix}/api/")):
             self.send_header("Cache-Control", "no-cache")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
@@ -2603,7 +2670,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         if request_path.startswith("/brand/"):
             mapped = request_path
         else:
-            allowed = {"/", "/index.html", "/styles.css", "/app.js", "/manifest.webmanifest",
+            allowed = {"/", "/index.html", "/styles.css", "/app.js", "/planning.js", "/manifest.webmanifest",
                        "/service-worker.js", "/icon-192.png", "/icon-512.png"}
             if request_path not in allowed:
                 self.send_error(HTTPStatus.NOT_FOUND)
@@ -2654,6 +2721,8 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         if self.is_public_app_host():
             if request_path == "/oauth/google/callback":
                 self.handle_public_oauth_callback(parse_qs(parsed.query))
+            elif request_path.startswith("/calendar/feed/"):
+                self.serve_calendar_feed(request_path)
             elif request_path.startswith("/api/app/"):
                 self.handle_public_app_get(request_path, parse_qs(parsed.query))
             else:
@@ -2714,6 +2783,11 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
             user = self.require_public_user()
             if user:
                 self.send_json(HTTPStatus.OK, self.public_session_payload(user))
+            return
+        if path == "/api/app/calendar-feed":
+            user = self.require_public_user()
+            if user:
+                self.manage_calendar_feed(user["id"], (query.get("bandId") or [""])[0])
             return
         if path == "/api/app/repertoire-template.xlsx":
             user = self.require_public_user()
@@ -2841,6 +2915,57 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
             return str(options["base_url"]).rstrip("/")
         return "https://" + host
 
+    def manage_calendar_feed(self, user_id: str, band_id: str, enabled: bool | None = None) -> None:
+        with connect_db() as database:
+            if enabled is not None:
+                database.execute("BEGIN IMMEDIATE")
+            if not public_membership(database, user_id, band_id):
+                self.send_json(HTTPStatus.FORBIDDEN, {"error": "K této kapele nemáš přístup."})
+                return
+            row = database.execute("""SELECT encrypted_token FROM public_calendar_feeds
+                WHERE band_id=? AND user_id=?""", (band_id, user_id)).fetchone()
+            token = ""
+            if enabled is False:
+                database.execute("DELETE FROM public_calendar_feeds WHERE band_id=? AND user_id=?",
+                                 (band_id, user_id))
+            elif row:
+                token = decrypt_secret(row["encrypted_token"])
+            elif enabled:
+                token = secrets.token_urlsafe(32)
+                database.execute("INSERT INTO public_calendar_feeds VALUES (?, ?, ?, ?)",
+                                 (band_id, user_id, hashlib.sha256(token.encode()).hexdigest(), encrypt_secret(token)))
+        url = self.public_app_base_url(load_options()) + "/calendar/feed/" + token + ".ics" if token else ""
+        self.send_json(HTTPStatus.OK, {"url": url})
+
+    def serve_calendar_feed(self, path: str, *, head: bool = False) -> None:
+        match = re.fullmatch(r"/calendar/feed/([A-Za-z0-9_-]{43})\.ics", path)
+        if not match:
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        token_hash = hashlib.sha256(match[1].encode()).hexdigest()
+        with connect_db() as database:
+            row = database.execute("""
+                SELECT b.id, b.name, s.state_json, s.updated_at FROM public_calendar_feeds f
+                JOIN public_bands b ON b.id=f.band_id
+                JOIN public_band_state s ON s.band_id=b.id
+                WHERE f.token_hash=?
+            """, (token_hash,)).fetchone()
+            if not row:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            names = {member["id"]: member["name"] for member in database.execute("""
+                SELECT u.id, u.name FROM public_users u JOIN public_band_members m ON u.id=m.user_id
+                WHERE m.band_id=?
+            """, (row["id"],))}
+        body = band_calendar.calendar_feed(row["id"], row["name"], json.loads(row["state_json"]), row["updated_at"], names)
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/calendar; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        if not head:
+            self.wfile.write(body)
+
     def handle_public_oauth_callback(self, query: dict[str, list[str]]) -> None:
         options = load_options()
         state = (query.get("state") or [""])[0]
@@ -2906,7 +3031,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def public_oauth_result_page(title: str, message: str, success: bool) -> str:
         state = "success" if success else "error"
         return f'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>
-        <link rel="stylesheet" href="/styles.css?v=0.12.2"></head>
+        <link rel="stylesheet" href="/styles.css?v=0.12.3"></head>
         <body class="oauth-result {state}"><main><h1>{html.escape(title)}</h1><p>{html.escape(message)}</p><a href="/">Zpět do Setlisteru</a></main></body></html>'''
 
     def handle_oauth_callback(self, query: dict[str, list[str]]) -> None:
@@ -2951,11 +3076,14 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def do_HEAD(self) -> None:
         if self.is_public_app_host():
             request_path = unquote(urlparse(self.path).path)
+            if request_path.startswith("/calendar/feed/"):
+                self.serve_calendar_feed(request_path, head=True)
+                return
             if ".." in Path(request_path).parts:
                 self.send_error(HTTPStatus.NOT_FOUND); return
             if request_path.startswith("/brand/"):
                 mapped = request_path
-            elif request_path in {"/", "/index.html", "/styles.css", "/app.js", "/manifest.webmanifest",
+            elif request_path in {"/", "/index.html", "/styles.css", "/app.js", "/planning.js", "/manifest.webmanifest",
                                   "/service-worker.js", "/icon-192.png", "/icon-512.png"}:
                 mapped = "/app/index.html" if request_path in ("/", "/index.html") else "/app" + request_path
             else:
@@ -3146,6 +3274,15 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
 
         user = self.require_public_user()
         if not user:
+            return
+        if path == "/api/app/calendar-feed":
+            try:
+                payload = self.read_json_body(4096)
+                if not isinstance(payload.get("enabled"), bool):
+                    raise ValueError("Vyber, zda chceš odkaz k odběru povolit.")
+                self.manage_calendar_feed(user["id"], str(payload.get("bandId") or ""), payload["enabled"])
+            except ValueError as error:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         if path == "/api/app/gmail/sync":
             try:
@@ -3478,7 +3615,8 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                 timestamp = utc_now()
                 with connect_db() as database:
                     database.execute("BEGIN IMMEDIATE")
-                    if not public_membership(database, user["id"], band_id):
+                    membership = public_membership(database, user["id"], band_id)
+                    if not membership:
                         database.rollback()
                         self.send_json(HTTPStatus.FORBIDDEN, {"error": "K této kapele nemáš přístup."})
                         return
@@ -3492,7 +3630,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                             self.send_json(HTTPStatus.BAD_REQUEST,
                                            {"error": "Propojený účet už do této kapely nepatří."})
                             return
-                    row = database.execute("SELECT revision FROM public_band_state WHERE band_id=?",
+                    row = database.execute("SELECT revision, state_json FROM public_band_state WHERE band_id=?",
                                            (band_id,)).fetchone()
                     if not row:
                         database.rollback()
@@ -3502,6 +3640,18 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                         database.rollback()
                         self.send_json(HTTPStatus.CONFLICT, {"error": "Konflikt změn. Načítám novější verzi.",
                                                              "revision": row["revision"]})
+                        return
+                    old_state = json.loads(row["state_json"])
+                    if not can_change_personal_planning(old_state, state, user["id"], membership["role"]):
+                        database.rollback()
+                        self.send_json(HTTPStatus.FORBIDDEN, {"error": "Upravovat můžeš vlastní kalendářové zápisy a hodnocení."})
+                        return
+                    previous_assignments = {task["id"]: task["assigneeUserId"] for task in old_state.get("tasks", [])}
+                    new_assignees = {task["assigneeUserId"] for task in state.get("tasks", [])
+                                     if task["assigneeUserId"] and task["assigneeUserId"] != previous_assignments.get(task["id"])}
+                    if any(not public_membership(database, assignee, band_id) for assignee in new_assignees):
+                        database.rollback()
+                        self.send_json(HTTPStatus.BAD_REQUEST, {"error": "Vybraný účet není členem této kapely."})
                         return
                     next_revision = base_revision + 1
                     database.execute("""UPDATE public_band_state SET revision=?, state_json=?, updated_at=?

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.3
+
+- Checklist je přímo na kartě koncertu a přidávání i odškrtávání položek funguje z agendy.
+- Koncerty mají vlastní výběr data, honorář s měnou a měsíční kalendář se sdílenými barevnými zápisy členů.
+- Kapelní kalendář lze připojit k Apple a Google Kalendáři přes odvolatelný odkaz.
+- Zkouška zobrazuje připravenost členů po skladbách a navrhne zkušební set v časovém limitu.
+- Kapelní úkoly mají volnou kategorii, termín, odpovědný účet a stav Hotovo.
+
 ## 0.12.2
 
 - Mailový agent má volitelnou kapelní evidenci koncertů se zdroji, kterou vlastník zapne po seznámení se zpracováním v OpenAI.

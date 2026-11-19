@@ -1,4 +1,74 @@
 :root{color-scheme:dark;--bg:#0c0d0e;--surface:#141618;--raised:#1a1d20;--line:#2b2f33;--text:#f5f1e9;--muted:#969a9e;--lime:#d9ff43;--ink:#141803;--danger:#ff6b6b}
+
+.rehearsal-planner{display:grid;gap:18px;border:1px solid var(--line);border-radius:22px;padding:22px;background:var(--surface);scroll-margin-top:120px}
+.planning-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.planning-heading h2,.planning-heading h3{margin:0;letter-spacing:-.03em}
+.planning-heading p{margin:5px 0 0;color:var(--muted);font-size:.75rem}
+.rehearsal-controls,.task-form,.task-filters{display:grid;grid-template-columns:minmax(0,1fr) minmax(135px,.55fr) auto;align-items:end;gap:10px}
+.rehearsal-controls label,.task-form label,.task-filters label,.rehearsal-member-field,.calendar-feed-links label{display:grid;gap:6px;color:var(--muted);font-size:.7rem;font-weight:750}
+.rehearsal-controls input,.task-form input,.checklist-add input,.calendar-feed-links input{width:100%;min-height:42px;padding:0 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text)}
+.rehearsal-preview,.rehearsal-readiness,.calendar-day-details,.calendar-subscribe{padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--bg)}
+.rehearsal-readiness summary,.calendar-subscribe summary{cursor:pointer;font-weight:790}
+.rehearsal-readiness summary span{margin-left:8px;color:var(--lime);font-size:.68rem}
+.rehearsal-member-field{max-width:250px;margin:12px 0}
+.rehearsal-rows,.task-list{display:grid;gap:5px;margin:9px 0 0;padding:0;list-style:none}
+.rehearsal-readiness .rehearsal-rows{max-height:460px;overflow:auto;padding:3px}
+.planning-row,.task-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(125px,auto);align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.planning-row small,.task-info small{display:block;margin:3px 0;color:var(--muted);font-size:.68rem;overflow-wrap:anywhere}
+.planning-row .readiness-ready,.planning-time{color:var(--lime)}
+.planning-row .readiness-practice{color:#f4cf7a}
+.planning-row .readiness-unlearned,.task-info small.overdue{color:var(--danger)}
+.planning-time,.task-info .task-check{font-size:.8rem;font-weight:800}
+.live-stage-heading{margin:24px 0 9px}
+.concert-checklist{display:grid;gap:8px;border-top:1px solid var(--line);padding-top:10px;scroll-margin-top:140px}
+.concert-checklist h4,.concert-checklist p{margin:0}
+.checklist-add{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px}
+.checklist-add input{min-height:36px}
+.event-date-field{min-width:0;display:grid;align-content:start;gap:6px}
+.event-date-control{display:grid;grid-template-columns:minmax(0,1fr) 44px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.event-date-control:focus-within{border-color:var(--lime)}
+.event-date-control input{width:100%;min-width:0;background:none;border:0}
+.event-date-control button,.event-calendar-header button{display:grid;place-items:center;min-height:42px;border:0;border-radius:8px;background:transparent;color:var(--lime);cursor:pointer}
+.event-date-control svg{width:19px;fill:none;stroke:currentColor;stroke-width:1.6}
+.event-calendar{width:min(310px,100%);padding:10px;border:1px solid #4b5620;border-radius:14px;background:var(--bg)}
+.event-calendar-header{display:grid;grid-template-columns:35px 1fr 35px;align-items:center;text-align:center}
+.event-calendar-header button{font-size:1.3rem;min-height:36px}
+.event-calendar-week,.event-calendar-days,.band-calendar-week,.band-calendar-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center}
+.event-calendar-week,.band-calendar-week{color:var(--muted);font-size:.65rem;font-weight:760}
+.event-calendar-days button{min-width:0;min-height:35px;border:1px solid transparent;border-radius:7px;background:transparent;font-size:.75rem;cursor:pointer}
+.event-calendar-days button.outside,.band-calendar-days button.outside{color:var(--muted)}
+.event-calendar-days button[aria-current=date],.band-calendar-days button[aria-current=date]{border-color:#596622}
+.event-calendar-days button[aria-pressed=true]{color:var(--ink);background:var(--lime)}
+.event-date-control button:hover,.event-calendar-header button:hover,.event-calendar-days button:hover{border-color:var(--lime);background:var(--raised)}
+.event-calendar-days button[aria-pressed=true]:hover{background:var(--lime)}
+.event-date-field:has(.event-calendar:not([hidden])){grid-column:span 2}
+.task-form{grid-template-columns:minmax(180px,2fr) repeat(3,minmax(125px,1fr)) auto}
+.task-filters{grid-template-columns:repeat(2,minmax(0,220px))}
+.task-row{grid-template-columns:minmax(0,1fr) auto}
+.task-check{display:flex;align-items:center;gap:10px;cursor:pointer}
+.task-check input{width:18px;height:18px;accent-color:var(--lime)}
+.task-row.done strong{color:var(--muted);text-decoration:line-through}
+.task-info small{margin-left:29px}
+.concert-view-switch,.calendar-navigation,.band-calendar-legend,.calendar-feed-links .button-row{display:flex;align-items:center;flex-wrap:wrap;gap:7px}
+.concert-view-switch{margin-bottom:13px}
+.concert-view-switch [aria-pressed=true]{border-color:var(--lime);background:#21280e;color:var(--lime)}
+.band-calendar-days{gap:4px}
+.band-calendar-day{display:grid;align-content:start;gap:4px;min-height:76px;min-width:0;padding:7px;text-align:left;border:1px solid var(--line);border-radius:9px;background:var(--bg);cursor:pointer}
+.band-calendar-day:hover,.band-calendar-day[aria-pressed=true]{border-color:var(--lime);background:var(--raised)}
+.calendar-chip{display:block;overflow:hidden;padding:2px 4px;border-left:3px solid var(--calendar-color,var(--lime));white-space:nowrap;text-overflow:ellipsis;font-size:.62rem}
+.calendar-legend-item{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:.69rem}
+.calendar-legend-item i{width:8px;height:8px;border-radius:50%;background:var(--calendar-color,var(--lime))}
+.calendar-day-details h3{margin:0 0 8px}
+.calendar-day-entry{display:grid;gap:4px;padding:9px;margin-top:6px;border-left:3px solid var(--calendar-color,var(--lime));background:var(--surface)}
+.calendar-day-entry small,.calendar-subscribe p{color:var(--muted);font-size:.72rem}
+.calendar-day-entry button{justify-self:start}
+.calendar-feed-links{display:grid;gap:8px;margin-top:12px}
+@media(max-width:900px){.task-form{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){
+  .rehearsal-planner{padding:14px}.rehearsal-controls,.task-form{grid-template-columns:1fr}.planning-heading{align-items:start;flex-wrap:wrap}
+  .planning-row{grid-template-columns:minmax(0,1fr) 124px}.event-date-field:has(.event-calendar:not([hidden])){grid-column:1/-1}
+  .band-calendar-days{gap:3px}.band-calendar-day{min-height:54px;padding:4px}.calendar-chip{font-size:0;padding:0;height:4px}
+}
 *{box-sizing:border-box}
 html{background:var(--bg)}
 body{margin:0;min-width:320px;color:var(--text);background:var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
