@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.4
+
+- Kapela si v nastavení uloží výchozí položky checklistu pro Organizaci a Výbavu. Nový koncert je převezme a jednotlivé položky lze odebrat před uložením i z karty koncertu.
+
 ## 0.13.3
 
 - Našeptávač koncertních míst čerpá výhradně ze spravovaného katalogu. Ručně vyplněné místo se uloží jen do konkrétního koncertu.

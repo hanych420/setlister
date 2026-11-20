@@ -15,6 +15,13 @@
     { id: "percussion", name: "Perkuse", kind: "percussion" }
   ];
   const elements = Object.fromEntries(Array.from(document.querySelectorAll("[id]")).map(item => [item.id, item]));
+  const checklistItemLimit = 30;
+  const checklistDefaultEditors = [
+    { key: "organization", form: elements.defaultOrganizationForm, input: elements.defaultOrganizationInput,
+      list: elements.defaultOrganizationTags, status: elements.defaultOrganizationStatus },
+    { key: "gear", form: elements.defaultGearForm, input: elements.defaultGearInput,
+      list: elements.defaultGearTags, status: elements.defaultGearStatus },
+  ];
   let session = null;
   let activeBandId = localStorage.getItem(ACTIVE_BAND_KEY) || "";
   let workspace = null;
@@ -29,6 +36,7 @@
   let notesPrintFieldDraft = [];
   let eventPlayedSongDraft = [];
   let eventGearDraft = [];
+  let eventOrganizationDraft = [];
   let venueCatalog = null;
   let venueCatalogRequest = null;
   let venueOptions = [];
@@ -150,6 +158,7 @@
     const state = raw && typeof raw === "object" ? raw : {};
     state.version = 2;
     state.bandProfile = state.bandProfile || { logoDataUrl: "" };
+    state.bandProfile.concertChecklistDefaults ||= { organization: [], gear: [] };
     state.members = Array.isArray(state.members) ? state.members : [];
     state.songs = Array.isArray(state.songs) ? state.songs : [];
     state.savedSetlists = Array.isArray(state.savedSetlists) ? state.savedSetlists : [];
@@ -202,6 +211,10 @@
         elements.taskAssigneeFilter.value = "";
         elements.taskStateFilter.value = "all";
         resetTaskForm();
+        for (const { form, status } of checklistDefaultEditors) {
+          form.reset();
+          showStatus(status, "");
+        }
         bandCalendarDate = new Date();
         calendarFeedBand = "";
         elements.calendarSubscribe.open = false;
@@ -408,6 +421,15 @@
       const actions = document.createElement("div"); actions.className = "row-actions"; actions.append(rowButton("✎", "Upravit člena", () => openMemberDialog(member.id)), rowButton("×", "Odstranit člena", () => deleteMember(member.id))); row.append(info, status, actions); return row;
     }));
     elements.rotateCode.hidden = workspace.membership.role !== "owner";
+    for (const { key, input, list, status } of checklistDefaultEditors) {
+      const labels = workspace.state.bandProfile.concertChecklistDefaults[key] || [];
+      renderChecklistTags(list, labels, index => {
+        labels.splice(index, 1);
+        showStatus(status, "");
+        changed();
+        input.focus();
+      });
+    }
     const supplier = workspace.state.bandProfile.invoiceSupplier;
     elements.invoiceSupplierSummary.textContent = supplier?.name || "Vyplň dodavatele pro faktury za koncerty.";
   }
@@ -746,16 +768,18 @@
       facts.append(assignee, deadline);
       const actions = mailNode("div", "task-actions");
       const edit = iconAction("edit", "Upravit úkol", () => editTask(task));
-      const remove = rowButton("×", "Odstranit úkol", () => {
-        if (!window.confirm("Odstranit úkol „" + task.title + "“?")) return;
-        workspace.state.tasks = tasks.filter(item => item.id !== task.id);
-        changed();
-      });
+      const remove = rowButton("×", "Odstranit úkol", () => removeTask(task));
       remove.setAttribute("aria-label", "Odstranit úkol");
       actions.append(edit, remove);
       row.append(info, facts, actions);
       return row;
     }) : [mailNode("li", "section-help", "V tomto výběru nejsou žádné úkoly.")]));
+  }
+  function removeTask(task) {
+    if (!window.confirm("Odstranit úkol „" + task.title + "“?")) return false;
+    workspace.state.tasks = workspace.state.tasks.filter(item => item.id !== task.id);
+    changed();
+    return true;
   }
   function saveTaskForm(form) {
     const data = formPayload(form);
@@ -1040,6 +1064,9 @@
   function tasksForEvent(eventId) {
     return workspace.state.tasks.filter(task => task.eventId === eventId);
   }
+  function concertTask(eventId, title, done = false) {
+    return { id: uid("task"), eventId, title, done, category: "", deadline: "", assigneeUserId: "" };
+  }
   function addConcertTask(event, title, done = false) {
     const tasks = workspace.state.tasks;
     if (tasks.length >= 1000) {
@@ -1050,10 +1077,7 @@
       showToast("Takový úkol už k tomuto koncertu existuje.");
       return false;
     }
-    tasks.push({
-      id: uid("task"), eventId: event.id, title, done,
-      category: "", deadline: "", assigneeUserId: "",
-    });
+    tasks.push(concertTask(event.id, title, done));
     return true;
   }
   function renderEventChecklist(event) {
@@ -1067,6 +1091,7 @@
   }
   function renderChecklistGroup(event, isTask) {
     const group = mailNode("section", "checklist-group");
+    const sectionId = "event-checklist-" + event.id;
     const title = isTask ? "Organizace" : "Výbava";
     const items = isTask ? tasksForEvent(event.id) : event.checklist;
     group.append(mailNode("h5", "", title),
@@ -1086,7 +1111,8 @@
         changed();
         document.getElementById(input.id)?.focus();
       });
-      label.append(input, mailNode("span", "", isTask ? item.title : item.label));
+      const itemTitle = isTask ? item.title : item.label;
+      label.append(input, mailNode("span", "", itemTitle));
       row.append(label);
       const action = isTask
         ? rowButton("Upravit", "Upravit úkol", () => editTask(item))
@@ -1094,14 +1120,27 @@
             if (!addConcertTask(event, item.label, item.done)) return;
             event.checklist = event.checklist.filter(other => other.id !== item.id);
             changed();
-            document.getElementById("event-checklist-" + event.id)?.focus();
+            document.getElementById(sectionId)?.focus();
           });
       action.className = "checklist-action";
-      row.append(action);
+      const remove = rowButton("×", "Odebrat " + itemTitle, () => {
+        if (isTask) {
+          if (!removeTask(item)) return;
+        } else {
+          event.checklist = event.checklist.filter(other => other.id !== item.id);
+          changed();
+        }
+        document.getElementById(sectionId)?.focus();
+      });
+      remove.className = "checklist-action checklist-remove";
+      remove.setAttribute("aria-label", remove.title);
+      const actions = mailNode("div", "checklist-line-actions");
+      actions.append(action, remove);
+      row.append(actions);
       list.append(row);
     }
     group.append(list);
-    if (isTask || items.length < 30) {
+    if (isTask || items.length < checklistItemLimit) {
       const form = mailNode("form", "checklist-add");
       const input = document.createElement("input");
       input.id = `check-add-${isTask ? "task" : "gear"}-${event.id}`;
@@ -1126,7 +1165,7 @@
           items.push({ id: uid("check"), label: value, done: false });
         }
         changed();
-        (document.getElementById(input.id) || document.getElementById("event-checklist-" + event.id))?.focus();
+        (document.getElementById(input.id) || document.getElementById(sectionId))?.focus();
       });
       group.append(form);
     }
@@ -1180,6 +1219,9 @@
       const done = rowButton("Zapsat jako odehrané", "Zapsat jako odehrané", () => openEventDialog(event.id, true));
       done.className = "secondary-button compact";
       card.append(done);
+    }
+    if (history && (event.checklist.length || tasksForEvent(event.id).length)) {
+      card.append(renderEventChecklist(event));
     }
     const invoice = rowButton("Faktura", "Faktura za " + (event.name || event.venue), () => openInvoiceDialog(event));
     invoice.className = "secondary-button compact";
@@ -1258,26 +1300,53 @@
     elements.eventEndPreview.hidden = !end;
     elements.eventEndPreview.textContent = end ? "Konec hraní " + showEndLabel(end) : "";
   }
-  function renderEventGear() {
-    elements.eventGearTags.replaceChildren(...eventGearDraft.map(item => {
+  function renderChecklistTags(list, labels, removeLabel) {
+    list.replaceChildren(...labels.map((label, index) => {
       const tag = mailNode("li", "event-gear-tag");
-      const remove = rowButton("×", "Odebrat " + item.label, () => {
-        eventGearDraft = eventGearDraft.filter(gear => gear.id !== item.id);
-        renderEventGear();
-        elements.eventGearInput.focus();
-      });
+      const remove = rowButton("×", "Odebrat " + label, () => removeLabel(index));
       remove.setAttribute("aria-label", remove.title);
-      tag.append(mailNode("span", "", item.label), remove);
+      tag.append(mailNode("span", "", label), remove);
       return tag;
     }));
+  }
+  function addChecklistDefault({ key, input, status }) {
+    const label = input.value.trim();
+    const defaults = workspace.state.bandProfile.concertChecklistDefaults;
+    const labels = defaults[key] || [];
+    if (!label) return input.focus();
+    if (labels.length >= checklistItemLimit || labels.some(item => normalizedText(item) === normalizedText(label))) {
+      showStatus(status, labels.length >= checklistItemLimit
+        ? "V jedné skupině může být nejvýše 30 výchozích položek." : "Tahle položka už ve skupině je.");
+      return input.focus();
+    }
+    defaults[key] = [...labels, label];
+    input.value = "";
+    showStatus(status, "");
+    changed();
+    input.focus();
+  }
+  function renderEventGear() {
+    renderChecklistTags(elements.eventGearTags, eventGearDraft.map(item => item.label), index => {
+      eventGearDraft.splice(index, 1);
+      renderEventGear();
+      elements.eventGearInput.focus();
+    });
+  }
+  function renderEventOrganization() {
+    elements.eventOrganizationField.hidden = !eventOrganizationDraft.length;
+    renderChecklistTags(elements.eventOrganizationTags, eventOrganizationDraft, index => {
+      eventOrganizationDraft.splice(index, 1);
+      renderEventOrganization();
+      (elements.eventOrganizationTags.querySelector("button") || elements.eventGearInput).focus();
+    });
   }
   function addEventGear() {
     const input = elements.eventGearInput;
     const label = input.value.trim();
     showStatus(elements.eventGearStatus, "");
     if (!label) return true;
-    if (eventGearDraft.length >= 30 || eventGearDraft.some(item => normalizedText(item.label) === normalizedText(label))) {
-      showStatus(elements.eventGearStatus, eventGearDraft.length >= 30
+    if (eventGearDraft.length >= checklistItemLimit || eventGearDraft.some(item => normalizedText(item.label) === normalizedText(label))) {
+      showStatus(elements.eventGearStatus, eventGearDraft.length >= checklistItemLimit
         ? "Na koncert lze zapsat nejvýše 30 položek výbavy." : "Tahle položka už ve výbavě je.");
       input.focus();
       return false;
@@ -1380,9 +1449,14 @@
     elements.eventStatusField.hidden = !event;
     elements.eventStatus.value = forceCompleted ? "completed" : event?.status || "planned";
     form.elements.rating.value = String(event?.rating || 0);
-    eventGearDraft = (event?.checklist || []).map(item => ({ ...item }));
+    const defaults = workspace.state.bandProfile.concertChecklistDefaults;
+    eventGearDraft = event
+      ? event.checklist.map(item => ({ ...item }))
+      : (defaults.gear || []).map(label => ({ id: uid("check"), label, done: false }));
+    eventOrganizationDraft = event ? [] : [...(defaults.organization || [])];
     showStatus(elements.eventGearStatus, "");
     renderEventGear();
+    renderEventOrganization();
     refreshEventSetlistOptions(event?.setlistId || "");
     eventPlayedSongDraft = [...(event?.playedSongIds || [])];
     if (forceCompleted && !eventPlayedSongDraft.length) {
@@ -1438,6 +1512,10 @@
 
     const state = workspace.state;
     const existing = state.events.find(item => item.id === data.eventId);
+    if (!existing && eventOrganizationDraft.length && state.tasks.length + eventOrganizationDraft.length > 1000) {
+      showToast("Kapela může mít nejvýše 1 000 úkolů. Odeber některé položky z organizace koncertu.");
+      return;
+    }
     const showStart = parseClock(data.showStart);
     const end = SetlisterPlanning.showEnd(showStart, showDurationMinutes);
     const payload = {
@@ -1462,8 +1540,12 @@
         plannedSongIds: [...(existing?.plannedSongIds?.length ? existing.plannedSongIds : savedSetlistById(data.setlistId)?.songIds || [])],
       });
     }
-    if (existing) Object.assign(existing, payload);
-    else state.events.push(payload);
+    if (existing) {
+      Object.assign(existing, payload);
+    } else {
+      state.events.push(payload);
+      state.tasks.push(...eventOrganizationDraft.map(title => concertTask(payload.id, title)));
+    }
     elements.eventDialog.close();
     changed();
     showToast(existing ? "Koncert je upravený." : "Koncert je uložený.");
@@ -2172,6 +2254,12 @@
     elements.eventForm.elements[field].addEventListener("input", updateEventEndPreview);
   }
   elements.addEventGear.addEventListener("click", addEventGear);
+  for (const editor of checklistDefaultEditors) {
+    editor.form.addEventListener("submit", event => {
+      event.preventDefault();
+      if (workspace) addChecklistDefault(editor);
+    });
+  }
   elements.eventGearInput.addEventListener("keydown", event => {
     if (event.key !== "Enter" || event.isComposing) return;
     event.preventDefault();

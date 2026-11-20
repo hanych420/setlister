@@ -9,7 +9,7 @@
   <link rel="icon" href="/brand/logo-mark.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=0.13.3">
+  <link rel="stylesheet" href="/styles.css?v=0.13.4">
 </head>
 <body>
   <header class="app-header">
@@ -200,6 +200,24 @@
             <article class="settings-card brand-card"><span>VZHLED KAPELY</span><div class="logo-editor"><div class="logo-preview" id="logoPreview">LOGO</div><div><h2 id="settingsBandName">Kapela</h2><p>Nahraj libovolný obrázek a vyber z něj čtvercový výřez. Zobrazí se v aplikaci i na pódiovém výtisku.</p><div class="button-row"><label class="secondary-button file-button">Nahrát logo<input id="bandLogoInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml"></label><button class="quiet-button" id="removeBandLogo" type="button">Odebrat</button></div></div></div></article>
             <article class="settings-card"><span>POZVÁNKOVÝ KÓD</span><h2 id="inviteCode">--------</h2><p>Slouží k připojení uživatelského účtu. Pódiové členy bez účtu založíš zvlášť níže.</p><div class="button-row"><button class="primary-button" id="copyCode" type="button">Kopírovat kód</button><button class="secondary-button" id="rotateCode" type="button">Vytvořit nový</button></div></article>
             <article class="settings-card members-card"><span>ČLENOVÉ PRO SETLIST</span><div class="member-intro"><div><h2>Kapela na pódiu</h2><p>Člen nemusí mít účet. Založ mu jméno a nástroje; vlastní přihlášení mu můžeš připojit později.</p></div><button class="primary-button" id="addMember" type="button">+ Přidat člena</button></div><div id="memberList" class="member-list"></div></article>
+            <article class="settings-card concert-checklist-settings">
+              <h2>Výchozí checklist koncertů</h2>
+              <p>Položky se předvyplní při založení koncertu. U každého koncertu můžeš výběr upravit.</p>
+              <div class="checklist-default-groups">
+                <form id="defaultOrganizationForm" class="event-gear-field">
+                  <label for="defaultOrganizationInput">Organizace</label>
+                  <div class="checklist-add"><input id="defaultOrganizationInput" maxlength="160" placeholder="Např. Potvrdit příjezd" required><button class="secondary-button compact" type="submit">Přidat</button></div>
+                  <p id="defaultOrganizationStatus" class="form-status" role="status"></p>
+                  <ul id="defaultOrganizationTags" class="event-gear-tags" aria-label="Výchozí organizace"></ul>
+                </form>
+                <form id="defaultGearForm" class="event-gear-field">
+                  <label for="defaultGearInput">Výbava</label>
+                  <div class="checklist-add"><input id="defaultGearInput" maxlength="120" placeholder="Např. Náhradní struny" required><button class="secondary-button compact" type="submit">Přidat</button></div>
+                  <p id="defaultGearStatus" class="form-status" role="status"></p>
+                  <ul id="defaultGearTags" class="event-gear-tags" aria-label="Výchozí výbava"></ul>
+                </form>
+              </div>
+            </article>
             <article class="settings-card invoice-settings">
               <h2>Fakturace koncertů</h2>
               <p id="invoiceSupplierSummary"></p>
@@ -249,6 +267,9 @@
           <div class="event-gear-input"><input id="eventGearInput" maxlength="120" placeholder="Např. Náhradní struny"><button id="addEventGear" class="secondary-button compact" type="button">Přidat</button></div>
           <p class="form-status" id="eventGearStatus" role="status"></p>
           <ul id="eventGearTags" class="event-gear-tags" aria-label="Položky výbavy"></ul>
+        </div><div class="wide event-gear-field" id="eventOrganizationField" hidden>
+          <span class="event-gear-label" id="eventOrganizationLabel">Organizace</span>
+          <ul id="eventOrganizationTags" class="event-gear-tags" aria-labelledby="eventOrganizationLabel"></ul>
         </div></div>
     <details id="eventInvoiceCustomer" class="invoice-customer">
       <summary>Fakturační údaje pořadatele</summary>
@@ -359,7 +380,7 @@
 
   <div id="printRoot" aria-hidden="true"></div>
   <div class="toast" id="appToast" role="status" aria-live="polite"></div>
-  <script src="/planning.js?v=0.13.3"></script>
-  <script src="/app.js?v=0.13.3"></script>
+  <script src="/planning.js?v=0.13.4"></script>
+  <script src="/app.js?v=0.13.4"></script>
 </body>
 </html>
