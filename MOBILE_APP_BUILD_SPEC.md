@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.13.0 · aktualizováno 19. 11. 2026
+> Stav specifikace: 0.13.1 · aktualizováno 20. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -114,6 +114,7 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
   "savedSetlists": [
     { "id": "set-...", "name": "45 min festival", "targetMinutes": 45, "songIds": ["song-1"], "interludes": [] }
   ],
+  "venues": [{ "name": "Roxy", "city": "Praha", "address": "Dlouhá 33, Praha" }],
   "events": [
     {
       "id": "event-...",
@@ -129,6 +130,7 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
       "loadIn": "16:30",
       "soundcheck": "17:30",
       "showStart": "20:00",
+      "showDurationMinutes": 60,
       "showEnd": "21:00",
       "setlistId": "set-...",
       "contactName": "Pořadatel",
@@ -227,7 +229,7 @@ Náhled ukáže roli, energii a zamčenou pozici každé skladby a souhrn typu �
 
 ## Koncerty a historie hraní
 
-Koncert je kapelní provozní záznam, ne úložiště smluv. Obsahuje název, datum, město, místo, adresu, arrival, load-in, zvukovku, plánovaný začátek a konec, kontakt, telefon, praktickou poznámku a jednoduchý checklist. Neobsahuje soubory, smlouvy ani potvrzování účasti členů.
+Koncert je kapelní provozní záznam, ne úložiště smluv. Obsahuje název, datum, město, místo, adresu, arrival, load-in, zvukovku, plánovaný začátek a délku vystoupení, kontakt, telefon, praktickou poznámku a jednoduchý checklist. Neobsahuje soubory, smlouvy ani potvrzování účasti členů.
 
 - Ke koncertu se vybírá existující uložený setlist pomocí stabilního `setlistId`; jeho karta i zvýrazněný nejbližší koncert musí mít přímou akci, která setlist otevře v editoru.
 - Smazání uloženého setlistu bezpečně zruší jeho přiřazení u budoucích koncertů.
@@ -235,9 +237,13 @@ Koncert je kapelní provozní záznam, ne úložiště smluv. Obsahuje název, d
 - Checklist na kartě má části Organizace a Výbava. Organizace vytváří a zobrazuje přímo úkoly s `eventId`; obě obrazovky upravují stejný záznam. Z koncertu se k úkolu otevře jeho editace pro nastavení termínu a osoby. Výbava zůstává v `event.checklist`, včetně starších položek, které lze přesunout do Organizace se zachováním stavu. Dokončené položky jsou dole v obou částech. Karta nejbližšího koncertu má souhrn obou částí.
 - Datum koncertu používá vlastní přístupný měsíční kalendář začínající pondělím. Umožni výběr klávesami i dotykem, krok mezi měsíci a ruční zadání českého nebo ISO data. Protokol ukládá datum jako místní kalendářní den `YYYY-MM-DD`.
 - Honorář je volitelná částka `feeAmount` (prázdná hodnota `null` je odlišná od nuly) s měnou `feeCurrency` v ISO 4217. Zobrazuje se kapelním členům na kartě.
-- Akce „Zapsat jako odehrané“ přepne událost do historie. Uživatel zadá skutečný začátek/konec, hodnocení 1–5, poznámku a skutečné pořadí skladeb; skladby lze přidat, odebrat i přeskládat.
+- Nový koncert má uložený stav `planned` a ve formuláři nemá volič stavu. Zobraz ho mezi odehranými, jakmile je jeho datum před dnešním dnem v časové zóně `Europe/Prague`. Při otevřené aplikaci obnov při přechodu přes půlnoc a po návratu do aplikace. Vyhodnocuje se z data i bez otevřeného klienta nebo zápisu do databáze. Ruční „Zapsat jako odehrané“ a existující hodnota `completed` umožňují přesun i dřív. U existujícího koncertu lze zvolit „Podle data“.
+- Klub / místo je ve formuláři před městem. Kapelní adresář `venues` obsahuje až 2 000 položek `{name, city, address}`. Při načtení nabídni i místa z dříve uložených koncertů, při uložení přidej nové místo do adresáře. Sluč shodné položky podle názvu, města a adresy bez diakritiky a velikosti písmen. Výběr doplní místo, město a adresu. Nové místo i adresu lze vyplnit ručně, bez společného katalogu ostatních kapel.
+- `showDurationMinutes` je volitelné celé číslo 1 až 1439. Z `showStart` a délky vypočítej `showEnd`; u konce po půlnoci ukaž další den. U starších koncertů bez tohoto pole dopočítej délku z uloženého začátku a konce a zachovej použitelný starší konec. Bez nové délky a bez staršího konce nech konec prázdný. Kalendářový export používá stejný výpočet.
+- Ve formuláři koncertu přidá Enter nebo tlačítko položku výbavy jako odebratelný štítek. Při úpravě zachovej `id` a `done` ponechaných položek. V datech zůstávají štítky výbavy jednotlivými položkami `event.checklist`.
+- Uživatel zadá skutečný začátek a konec, hodnocení 1–5, poznámku a skutečné pořadí skladeb. Automatický přesun nevyplňuje skutečný průběh.
 - Při prvním dokončení se do `plannedSongIds` uloží neměnný snímek tehdy přiřazeného setlistu. Pozdější úpravy uloženého setlistu proto nezmění historické porovnání.
-- Pokud byl přiřazený set právě veden v live režimu, formulář dokončení předvyplní `playedSongIds` skutečně navštívenými skladbami; jinak použije celý přiřazený setlist.
+- Při ručním označení jako odehrané může formulář převzít skutečně navštívené skladby z relace stejného setlistu ve stejný den. Pokud taková relace není, při ručním dokončení předvyplň přiřazený setlist. V historii lze setlist také výslovně převzít tlačítkem. Přepnutí přiřazeného setlistu nepřepisuje skutečně zadané skladby.
 - Historie ukazuje počet odehraných skladeb, jejich součet délek, skutečný čas koncertu, počet vynechaných/přidaných skladeb, hodnocení a poznámku.
 
 ### Kapelní kalendář
@@ -248,7 +254,7 @@ Každý člen si může vytvořit nebo zrušit vlastní tajný odkaz k odběru k
 
 ### Kapelní úkoly
 
-Titulek je povinný. Kategorie je volný text do 40 znaků a stávající kategorie se nabízejí jako filtr bez rozlišování velikosti písmen a diakritiky. `deadline` je lokální datum `YYYY-MM-DD` nebo prázdný řetězec. `assigneeUserId` ukazuje na skutečný účet v aktivní kapele, případně je prázdný. Kontrola `done` dovoluje úkol označit jako hotový a zase otevřít. Filtr zobrazuje otevřené, hotové nebo všechny úkoly.
+Titulek je povinný. Kategorie je volný text do 40 znaků a stávající kategorie se nabízejí jako filtr bez rozlišování velikosti písmen a diakritiky. `deadline` je lokální datum `YYYY-MM-DD` nebo prázdný řetězec. `assigneeUserId` ukazuje na skutečný účet v aktivní kapele, případně je prázdný. Kontrola `done` dovoluje úkol označit jako hotový a zase otevřít. Filtry kombinují kategorii, stav a přiřazený účet. V roletce „Má na starost“ označ vlastní účet textem „(já)“ a umožni zobrazit položky bez přiřazení. Úprava úkolu se otevírá v samostatném dialogu z Úkolů i z checklistu koncertu a zachovává právě rozepsaný nový úkol.
 
 `eventId` je volitelné propojení na koncert téže kapely. U propojeného úkolu zobraz termín úkolu zvlášť od data a začátku hraní. Na kartě koncertu i v Úkolech ukládej dokončení do stejného `task.done`. Při smazání koncertu ponechej jeho úkoly a smaž jejich `eventId`. Výchozí filtr Úkolů zobrazuje vše s hotovými na konci. Část odpovědné osoby má název „Má na starost“.
 

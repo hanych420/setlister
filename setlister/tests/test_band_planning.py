@@ -86,3 +86,20 @@ class BandPlanningTests(unittest.TestCase):
                 self.assertFalse(server.valid_public_state(invalid))
         self.state["draft"]["interludes"].append(dict(interlude))
         self.assertFalse(server.valid_public_state(self.state))
+
+    def test_concert_duration_overrides_legacy_end_and_crosses_midnight(self):
+        event = self.state["events"][0]
+        event.update(showStart="23:45", showEnd="22:00", showDurationMinutes=60)
+        self.state["venues"] = [{"name": "Roxy", "city": "Praha", "address": "Dlouhá 33"}]
+        self.assertTrue(server.valid_public_state(self.state))
+        self.assertEqual(band_calendar.planned_show_end(event), "00:45")
+        feed = band_calendar.calendar_feed("band", "Kapela", self.state, "2026-11-19T12:00:00Z", {}).decode()
+        self.assertIn("DTSTART:20270121T224500Z", feed)
+        self.assertIn("DTEND:20270121T234500Z", feed)
+        for duration in (True, 0, 1440, "60"):
+            event["showDurationMinutes"] = duration
+            self.assertFalse(server.valid_public_state(self.state))
+        del event["showDurationMinutes"]
+        self.assertEqual(band_calendar.planned_show_end(event), "22:00")
+        self.state["venues"][0]["city"] = ""
+        self.assertFalse(server.valid_public_state(self.state))

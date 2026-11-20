@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.1
+
+- Úkoly se upravují v dialogu a mají filtr podle přiřazené osoby.
+- Po půlnoci následujícího dne se koncert přesune mezi odehrané podle českého času.
+- Místa z koncertů se nabízejí v adresáři kapely a doplňují město a adresu.
+- Výbava se v editoru zadává po položkách. Konec hraní se spočítá ze začátku a délky vystoupení.
+
 ## 0.13.0
 
 - Fakturační údaje dodavatele jsou v nastavení kapely a údaje pořadatele u koncertu. České subjekty lze doplnit podle IČO z ARES.

@@ -2341,7 +2341,7 @@ def public_default_state(owner: sqlite3.Row | None = None) -> dict[str, Any]:
             "draft": {"name": "Nový koncert", "targetMinutes": 45,
                       "songIds": ["sample-1", "sample-2"], "lockedSongIds": [], "interludes": [],
                       "viewerMemberId": owner_id if members else ""},
-            "savedSetlists": [], "events": []}
+            "savedSetlists": [], "events": [], "venues": []}
 
 
 def valid_setlist_interludes(setlist: object) -> bool:
@@ -2467,6 +2467,14 @@ def valid_public_state(value: object) -> bool:
     logo = str(profile.get("logoDataUrl") or "")
     if len(logo) > 700_000:
         return False
+    venues = value.get("venues", [])
+    if not isinstance(venues, list) or len(venues) > 2000:
+        return False
+    for venue in venues:
+        if (not isinstance(venue, dict) or not valid_text(venue.get("name"), 120)
+                or not valid_text(venue.get("city"), 100)
+                or not valid_text(venue.get("address"), 200, optional=True)):
+            return False
     for event in events:
         if (not isinstance(event, dict) or not str(event.get("id") or "")
                 or len(str(event.get("name") or "")) > 120
@@ -2477,6 +2485,9 @@ def valid_public_state(value: object) -> bool:
                 or len(str(event.get("contactPhone") or "")) > 40
                 or len(str(event.get("note") or "")) > 800
                 or len(str(event.get("performanceNote") or "")) > 800):
+            return False
+        duration = event.get("showDurationMinutes")
+        if duration is not None and (type(duration) is not int or not 1 <= duration < 1440):
             return False
         if "invoiceCustomer" in event and not invoicing.valid_party(event["invoiceCustomer"]):
             return False
@@ -2570,7 +2581,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.13.0"
+    server_version = "Setlister/0.13.1"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -3141,7 +3152,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def public_oauth_result_page(title: str, message: str, success: bool) -> str:
         state = "success" if success else "error"
         return f'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>
-        <link rel="stylesheet" href="/styles.css?v=0.13.0"></head>
+        <link rel="stylesheet" href="/styles.css?v=0.13.1"></head>
         <body class="oauth-result {state}"><main><h1>{html.escape(title)}</h1><p>{html.escape(message)}</p><a href="/">Zpět do Setlisteru</a></main></body></html>'''
 
     def handle_oauth_callback(self, query: dict[str, list[str]]) -> None:

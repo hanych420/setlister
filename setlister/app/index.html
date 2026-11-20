@@ -9,7 +9,7 @@
   <link rel="icon" href="/brand/logo-mark.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=0.13.0">
+  <link rel="stylesheet" href="/styles.css?v=0.13.1">
 </head>
 <body>
   <header class="app-header">
@@ -178,16 +178,15 @@
           <header class="view-header"><div><p class="eyebrow">Kapelní organizace</p><h1>Úkoly</h1></div></header>
           <section class="rehearsal-planner" aria-label="Kapelní úkoly">
             <form id="taskForm" class="task-form">
-              <input type="hidden" name="taskId">
               <label>Co je potřeba udělat<input id="taskTitle" name="title" maxlength="160" required placeholder="Např. Připravit příspěvek ke koncertu"></label>
               <label>Kategorie (volitelná)<input name="category" maxlength="40" placeholder="Např. Socky, Nakoupit nebo Vymyslet"></label>
               <div class="date-field"><label for="taskDeadline">Termín (volitelný)</label><input id="taskDeadline" name="deadline" type="text" data-date-picker autocomplete="off" placeholder="21. 1. 2027" maxlength="14"></div>
               <label>Má na starost<select id="taskAssignee" name="assigneeUserId"></select></label>
               <button class="primary-button" id="saveTask" type="submit">Přidat úkol</button>
-              <button class="quiet-button" id="cancelTaskEdit" type="button" hidden>Zrušit úpravu</button>
             </form>
             <div class="task-filters">
               <label>Kategorie<select id="taskCategoryFilter"></select></label>
+              <label>Má na starost<select id="taskAssigneeFilter"></select></label>
               <label>Stav<select id="taskStateFilter"><option value="all">Všechny</option><option value="open">Otevřené</option><option value="completed">Hotové</option></select></label>
             </div>
             <p id="taskSummary" class="section-help" role="status"></p>
@@ -226,10 +225,31 @@
 
   <dialog id="bulkImportDialog" class="wide-dialog"><div class="dialog-heading"><div><p class="form-kicker">Rychlé naplnění repertoáru</p><h2>Hromadný import skladeb</h2></div><button data-close-dialog="bulkImportDialog" aria-label="Zavřít" type="button">×</button></div><form id="bulkImportForm" class="dialog-form"><p class="section-help">Nejjednodušší je stáhnout XLSX šablonu, vyplnit ji v Excelu nebo Google Tabulkách a nahrát zpět. Sloupce: Název, Album, Délka, BPM, Energie, Role a Štítky.</p><textarea id="bulkImportText" rows="8" spellcheck="false" placeholder="Sem můžeš také vložit zkopírované řádky z Excelu."></textarea><div class="bulk-import-actions"><label class="secondary-button file-button">Nahrát XLSX<input id="bulkImportFile" type="file" accept=".xlsx,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/tab-separated-values,text/plain"></label><button class="quiet-button" id="downloadImportTemplate" type="button">Stáhnout XLSX šablonu</button></div><p class="form-status import-status" id="bulkImportStatus" role="status" aria-live="polite"></p><div class="dialog-actions"><button class="secondary-button" data-close-dialog="bulkImportDialog" type="button">Zrušit</button><button class="primary-button" type="submit">Importovat skladby</button></div></form></dialog>
 
+  <dialog id="taskEditDialog" aria-labelledby="taskEditHeading">
+    <div class="dialog-heading"><h2 id="taskEditHeading">Upravit úkol</h2><button data-close-dialog="taskEditDialog" aria-label="Zavřít" type="button">×</button></div>
+    <form id="taskEditForm" class="dialog-form">
+      <input type="hidden" name="taskId">
+      <label>Co je potřeba udělat<input name="title" maxlength="160" required></label>
+      <label>Kategorie (volitelná)<input name="category" maxlength="40"></label>
+      <div class="date-field"><label for="taskEditDeadline">Termín (volitelný)</label><input id="taskEditDeadline" name="deadline" type="text" data-date-picker autocomplete="off" placeholder="21. 1. 2027" maxlength="14"></div>
+      <label>Má na starost<select id="taskEditAssignee" name="assigneeUserId"></select></label>
+      <div class="dialog-actions"><button class="secondary-button" data-close-dialog="taskEditDialog" type="button">Zrušit</button><button class="primary-button" type="submit">Uložit úkol</button></div>
+    </form>
+  </dialog>
+
   <dialog id="eventDialog" class="wide-dialog event-dialog"><div class="dialog-heading"><div><p class="form-kicker">Den koncertu</p><h2 id="eventDialogTitle">Přidat koncert</h2></div><button data-close-dialog="eventDialog" aria-label="Zavřít" type="button">×</button></div><form id="eventForm" class="dialog-form"><input type="hidden" name="eventId"><div class="form-grid event-form-grid"><label>Název koncertu<input name="name" maxlength="120" placeholder="Např. Roxy — Praha" required></label><div class="date-field">
           <label for="eventDateInput">Datum koncertu</label>
           <input id="eventDateInput" name="date" type="text" data-date-picker placeholder="21. 1. 2027" autocomplete="off" maxlength="14" required>
-        </div><label>Město<input name="city" maxlength="100" required></label><label>Klub / místo<input name="venue" maxlength="120" required></label><label class="wide">Adresa<input name="address" maxlength="200" placeholder="Ulice, město"></label><label>Arrival<input name="arrival" inputmode="numeric" placeholder="15:30"></label><label>Load-in<input name="loadIn" inputmode="numeric" placeholder="16:00"></label><label>Zvukovka<input name="soundcheck" inputmode="numeric" placeholder="17:00"></label><label>Začátek koncertu<input name="showStart" inputmode="numeric" placeholder="20:00"></label><label>Konec koncertu<input name="showEnd" inputmode="numeric" placeholder="21:00"></label><label>Přiřazený setlist<select id="eventSetlist" name="setlistId"></select></label><label>Honorář<input name="feeAmount" inputmode="decimal" maxlength="14" placeholder="Např. 12 000"></label><label>Měna<select name="feeCurrency"><option value="CZK">CZK · Kč</option><option value="EUR">EUR · €</option><option value="GBP">GBP · £</option><option value="USD">USD · $</option><option value="PLN">PLN · zł</option><option value="CHF">CHF</option></select></label><label>Kontaktní osoba<input name="contactName" maxlength="100"></label><label>Telefon<input name="contactPhone" type="tel" maxlength="40"></label><label>Stav<select id="eventStatus" name="status"><option value="planned">Naplánovaný</option><option value="completed">Odehráno</option></select></label><label class="wide">Praktická poznámka<textarea name="note" maxlength="800" rows="3" placeholder="Parkování, vstup do klubu nebo jiná domluva."></textarea></label><label class="wide">Výbava — jedna položka na řádek<textarea name="checklist" maxlength="1200" rows="4" placeholder="Merch\nNáhradní struny\nBanner"></textarea></label></div>
+        </div><div class="venue-field">
+          <label for="eventVenue">Klub / místo</label>
+          <input id="eventVenue" name="venue" maxlength="120" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="eventVenueOptions" required>
+          <ul id="eventVenueOptions" class="venue-options" role="listbox" aria-label="Uložená místa" hidden></ul>
+        </div><label>Město<input name="city" maxlength="100" required></label><label class="wide">Adresa<input name="address" maxlength="200" placeholder="Ulice, město"></label><label>Arrival<input name="arrival" inputmode="numeric" placeholder="15:30"></label><label>Load-in<input name="loadIn" inputmode="numeric" placeholder="16:00"></label><label>Zvukovka<input name="soundcheck" inputmode="numeric" placeholder="17:00"></label><label>Začátek koncertu<input name="showStart" inputmode="numeric" placeholder="20:00"></label><label>Délka hraní (min)<input name="showDurationMinutes" type="text" maxlength="4" inputmode="numeric" placeholder="Např. 60"><small id="eventEndPreview" aria-live="polite" hidden></small></label><label>Přiřazený setlist<select id="eventSetlist" name="setlistId"></select></label><label>Honorář<input name="feeAmount" inputmode="decimal" maxlength="14" placeholder="Např. 12 000"></label><label>Měna<select name="feeCurrency"><option value="CZK">CZK · Kč</option><option value="EUR">EUR · €</option><option value="GBP">GBP · £</option><option value="USD">USD · $</option><option value="PLN">PLN · zł</option><option value="CHF">CHF</option></select></label><label>Kontaktní osoba<input name="contactName" maxlength="100"></label><label>Telefon<input name="contactPhone" type="tel" maxlength="40"></label><label id="eventStatusField" hidden>Stav<select id="eventStatus" name="status"><option value="planned">Podle data</option><option value="completed">Odehráno</option></select></label><label class="wide">Praktická poznámka<textarea name="note" maxlength="800" rows="3" placeholder="Parkování, vstup do klubu nebo jiná domluva."></textarea></label><div class="wide event-gear-field">
+          <label for="eventGearInput">Výbava</label>
+          <div class="event-gear-input"><input id="eventGearInput" maxlength="120" placeholder="Např. Náhradní struny"><button id="addEventGear" class="secondary-button compact" type="button">Přidat</button></div>
+          <p class="form-status" id="eventGearStatus" role="status"></p>
+          <ul id="eventGearTags" class="event-gear-tags" aria-label="Položky výbavy"></ul>
+        </div></div>
     <details id="eventInvoiceCustomer" class="invoice-customer">
       <summary>Fakturační údaje pořadatele</summary>
       <div class="invoice-party form-grid" data-invoice-party>
@@ -244,7 +264,7 @@
         <p class="form-status wide" data-ares-status role="status"></p>
       </div>
     </details>
-    <section id="eventHistoryFields" class="history-fields" hidden><div class="card-heading"><div><span>SKUTEČNÝ PRŮBĚH</span><h3>Jak koncert dopadl</h3></div></div><div class="form-grid"><label>Skutečný začátek<input name="actualStart" inputmode="numeric" placeholder="20:08"></label><label>Skutečný konec<input name="actualEnd" inputmode="numeric" placeholder="21:02"></label><label>Jak set fungoval<select name="rating"><option value="0">Bez hodnocení</option><option value="1">1 / 5</option><option value="2">2 / 5</option><option value="3">3 / 5</option><option value="4">4 / 5</option><option value="5">5 / 5</option></select></label><label class="wide">Poznámka po koncertě<textarea name="performanceNote" maxlength="800" rows="3" placeholder="Co fungovalo, co příště změnit."></textarea></label></div><div class="played-editor"><div class="played-editor-head"><div><strong>Skutečně odehrané skladby</strong><small>Výchozí je přiřazený setlist. Skladby lze odebrat, přidat a přeskládat.</small></div><div><select id="eventPlayedSongSelect"></select><button class="secondary-button compact" id="addEventPlayedSong" type="button">Přidat</button></div></div><ol id="eventPlayedSongs" class="played-song-list"></ol></div></section><div class="dialog-actions"><button class="secondary-button" data-close-dialog="eventDialog" type="button">Zrušit</button><button class="primary-button" type="submit">Uložit koncert</button></div></form></dialog>
+    <section id="eventHistoryFields" class="history-fields" hidden><div class="card-heading"><div><span>SKUTEČNÝ PRŮBĚH</span><h3>Jak koncert dopadl</h3></div></div><div class="form-grid"><label>Skutečný začátek<input name="actualStart" inputmode="numeric" placeholder="20:08"></label><label>Skutečný konec<input name="actualEnd" inputmode="numeric" placeholder="21:02"></label><label>Jak set fungoval<select name="rating"><option value="0">Bez hodnocení</option><option value="1">1 / 5</option><option value="2">2 / 5</option><option value="3">3 / 5</option><option value="4">4 / 5</option><option value="5">5 / 5</option></select></label><label class="wide">Poznámka po koncertě<textarea name="performanceNote" maxlength="800" rows="3" placeholder="Co fungovalo, co příště změnit."></textarea></label></div><div class="played-editor"><div class="played-editor-head"><div><strong>Skutečně odehrané skladby</strong><small>Skladby lze odebrat, přidat a přeskládat.</small></div><div><select id="eventPlayedSongSelect"></select><button class="secondary-button compact" id="addEventPlayedSong" type="button">Přidat</button><button class="quiet-button compact" id="copyEventSetlistSongs" type="button">Převzít ze setlistu</button></div></div><ol id="eventPlayedSongs" class="played-song-list"></ol></div></section><div class="dialog-actions"><button class="secondary-button" data-close-dialog="eventDialog" type="button">Zrušit</button><button class="primary-button" type="submit">Uložit koncert</button></div></form></dialog>
   <dialog id="calendarEntryDialog">
     <div class="dialog-heading"><h2 id="calendarEntryHeading">Vlastní zápis</h2><button data-close-dialog="calendarEntryDialog" aria-label="Zavřít" type="button">×</button></div>
     <form id="calendarEntryForm" class="dialog-form">
@@ -339,7 +359,7 @@
 
   <div id="printRoot" aria-hidden="true"></div>
   <div class="toast" id="appToast" role="status" aria-live="polite"></div>
-  <script src="/planning.js?v=0.13.0"></script>
-  <script src="/app.js?v=0.13.0"></script>
+  <script src="/planning.js?v=0.13.1"></script>
+  <script src="/app.js?v=0.13.1"></script>
 </body>
 </html>

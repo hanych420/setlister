@@ -29,6 +29,42 @@ const SetlisterPlanning = (() => {
     return new Date(year, month - 1, day);
   }
 
+  const pragueDay = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Prague", year: "numeric", month: "2-digit", day: "2-digit",
+  });
+
+  function concertDayKey(now = new Date()) {
+    return pragueDay.format(now);
+  }
+
+  function concertStatus(event, today = concertDayKey()) {
+    if (!event) return "planned";
+    const day = parseDate(event.date);
+    return event.status === "completed" || (day && day < today) ? "completed" : "planned";
+  }
+
+  function clockMinutes(value) {
+    const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(value || "").trim());
+    return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+  }
+
+  function showDuration(event) {
+    if (!event) return null;
+    if (Object.hasOwn(event, "showDurationMinutes")) return event.showDurationMinutes;
+    const start = clockMinutes(event.showStart);
+    const end = clockMinutes(event.showEnd);
+    if (start === null || end === null) return null;
+    return (1440 + end - start) % 1440 || null;
+  }
+
+  function showEnd(start, duration) {
+    const minutes = clockMinutes(start);
+    if (minutes === null || !Number.isInteger(duration) || duration < 1 || duration >= 1440) return null;
+    const end = minutes + duration;
+    const time = [Math.floor(end / 60) % 24, end % 60].map(part => String(part).padStart(2, "0")).join(":");
+    return { time, nextDay: end >= 1440 };
+  }
+
   function calendarDays(month) {
     const year = month.getFullYear();
     const number = month.getMonth();
@@ -123,5 +159,5 @@ const SetlisterPlanning = (() => {
   }
 
   return { readinessLabels, dateKey, parseDate, dateFromKey, calendarDays, readiness, buildPlan,
-    setlistEntries, updateSetlistEntries, usesCapo, tuningPlan };
+    setlistEntries, updateSetlistEntries, usesCapo, tuningPlan, concertDayKey, concertStatus, showDuration, showEnd };
 })();

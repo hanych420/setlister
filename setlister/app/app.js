@@ -28,6 +28,9 @@
   let songPrintFieldDraft = [];
   let notesPrintFieldDraft = [];
   let eventPlayedSongDraft = [];
+  let eventGearDraft = [];
+  let venueOptions = [];
+  let venueIndex = -1;
   let datePicker = null;
   let bandCalendarDate = new Date();
   let calendarFeedBand = "";
@@ -170,6 +173,7 @@
     });
     state.members.forEach(member => { member.instruments = Array.isArray(member.instruments) ? member.instruments : []; member.defaultInstrumentId = member.instruments.some(item => item.id === member.defaultInstrumentId) ? member.defaultInstrumentId : "none"; member.vocals = Boolean(member.vocals); });
     state.events = state.events.filter(event => event && event.id).map(event => ({ ...event, status: event.status === "completed" ? "completed" : "planned", checklist: Array.isArray(event.checklist) ? event.checklist.filter(item => item && item.label).map(item => ({ id: String(item.id || uid("check")), label: String(item.label).slice(0, 120), done: Boolean(item.done) })) : [], playedSongIds: Array.isArray(event.playedSongIds) ? event.playedSongIds.filter(id => state.songs.some(song => song.id === id)) : [], plannedSongIds: Array.isArray(event.plannedSongIds) ? event.plannedSongIds.filter(id => state.songs.some(song => song.id === id)) : [] }));
+    state.venues = mergeEventVenues(state.venues, state.events);
     if (!state.draft.viewerMemberId || !state.members.some(member => member.id === state.draft.viewerMemberId)) state.draft.viewerMemberId = "clean";
     return state;
   }
@@ -194,6 +198,7 @@
         elements.rehearsalScope.value = "";
         elements.rehearsalMember.value = "";
         elements.taskCategoryFilter.value = "";
+        elements.taskAssigneeFilter.value = "";
         elements.taskStateFilter.value = "all";
         resetTaskForm();
         bandCalendarDate = new Date();
@@ -633,23 +638,32 @@
       return row;
     }));
   }
-  function resetTaskForm() {
-    elements.taskForm.reset();
-    elements.taskAssignee.value = "";
-    elements.saveTask.textContent = "Přidat úkol";
-    elements.cancelTaskEdit.hidden = true;
+  function taskAssigneeOptions(emptyLabel) {
+    return [option("", emptyLabel), ...workspace.members.map(member =>
+      option(member.id, member.name + (member.id === session.user.id ? " (já)" : "")))];
   }
   function editTask(task) {
-    const form = elements.taskForm;
+    const form = elements.taskEditForm;
+    form.reset();
     form.elements.taskId.value = task.id;
     form.elements.title.value = task.title;
     form.elements.category.value = task.category;
     form.elements.deadline.value = task.deadline ? formatEventDate(task.deadline) : "";
-    elements.taskAssignee.value = task.assigneeUserId;
-    enhanceSelect(elements.taskAssignee);
-    elements.saveTask.textContent = "Uložit úkol";
-    elements.cancelTaskEdit.hidden = false;
-    elements.taskTitle.focus();
+    form.elements.deadline.setCustomValidity("");
+    const assignee = elements.taskEditAssignee;
+    assignee.replaceChildren(...taskAssigneeOptions("Bez přiřazení"));
+    if (task.assigneeUserId && !workspace.members.some(member => member.id === task.assigneeUserId)) {
+      assignee.append(option(task.assigneeUserId, "Bývalý člen"));
+    }
+    assignee.value = task.assigneeUserId;
+    enhanceSelect(assignee);
+    elements.taskEditDialog.showModal();
+    form.elements.title.focus();
+  }
+  function resetTaskForm() {
+    elements.taskForm.reset();
+    elements.taskDeadline.setCustomValidity("");
+    elements.taskAssignee.value = "";
   }
   function taskEvent(eventId) {
     return eventId ? workspace.state.events.find(event => event.id === eventId) : null;
@@ -673,19 +687,24 @@
     categoryFilter.replaceChildren(option("", "Všechny kategorie"), ...[...categories]
       .sort((a, b) => a[1].localeCompare(b[1], "cs")).map(([key, name]) => option(key, name)));
     categoryFilter.value = categories.has(picked) ? picked : "";
+    const assignment = elements.taskAssigneeFilter;
+    const pickedAssignee = assignment.value;
+    assignment.replaceChildren(...taskAssigneeOptions("Všichni"), option("unassigned", "Bez přiřazení"));
+    assignment.value = Array.from(assignment.options).some(item => item.value === pickedAssignee) ? pickedAssignee : "";
     const assignee = elements.taskAssignee.value;
-    elements.taskAssignee.replaceChildren(option("", "Bez přiřazení"), ...workspace.members.map(member =>
-      option(member.id, member.name + (member.id === session.user.id ? " (já)" : ""))));
+    elements.taskAssignee.replaceChildren(...taskAssigneeOptions("Bez přiřazení"));
     elements.taskAssignee.value = workspace.members.some(member => member.id === assignee) ? assignee : "";
     enhanceSelect(categoryFilter);
+    enhanceSelect(assignment);
     enhanceSelect(elements.taskAssignee);
     const status = elements.taskStateFilter.value || "all";
     const today = SetlisterPlanning.dateKey(new Date());
-    const visible = tasks.filter(task => (!categoryFilter.value || categoryFilter.value === normalizedText(task.category))
-      && (status === "all" || task.done === (status === "completed")))
+    const filtered = tasks.filter(task => (!categoryFilter.value || categoryFilter.value === normalizedText(task.category))
+      && (!assignment.value || assignment.value === (task.assigneeUserId || "unassigned")));
+    const visible = filtered.filter(task => status === "all" || task.done === (status === "completed"))
       .sort((a, b) => Number(a.done) - Number(b.done)
         || (a.deadline || "9999-12-31").localeCompare(b.deadline || "9999-12-31"));
-    elements.taskSummary.textContent = `${tasks.filter(task => !task.done).length} otevřených · ${tasks.filter(task => task.done).length} hotových`;
+    elements.taskSummary.textContent = `${filtered.filter(task => !task.done).length} otevřených · ${filtered.filter(task => task.done).length} hotových`;
     elements.taskList.replaceChildren(...(visible.length ? visible.map(task => {
       const row = mailNode("li", "task-row");
       row.classList.toggle("done", task.done);
@@ -729,7 +748,6 @@
       const remove = rowButton("×", "Odstranit úkol", () => {
         if (!window.confirm("Odstranit úkol „" + task.title + "“?")) return;
         workspace.state.tasks = tasks.filter(item => item.id !== task.id);
-        if (elements.taskForm.elements.taskId.value === task.id) resetTaskForm();
         changed();
       });
       remove.setAttribute("aria-label", "Odstranit úkol");
@@ -741,23 +759,38 @@
   function saveTaskForm(form) {
     const data = formPayload(form);
     const title = data.title.trim();
-    if (!title) { showToast("Napiš, co je potřeba udělat."); return; }
+    if (!title) {
+      form.elements.title.focus();
+      return;
+    }
     const deadline = parseEventDate(data.deadline);
-    if (data.deadline.trim() && !deadline) { showToast("Zadej platný termín ve formátu 21. 1. 2027."); return; }
+    if (data.deadline.trim() && !deadline) {
+      form.elements.deadline.setCustomValidity("Zadej platný termín nebo ho vyber v kalendáři.");
+      form.elements.deadline.reportValidity();
+      return;
+    }
     const list = workspace.state.tasks;
     const existing = list.find(task => task.id === data.taskId);
+    const editing = form === elements.taskEditForm;
+    if (editing && !existing) {
+      elements.taskEditDialog.close();
+      showToast("Úkol už není k dispozici.");
+      return;
+    }
     if (!existing && list.length >= 1000) { showToast("Kapela už má 1 000 úkolů."); return; }
     const task = existing || { id: uid("task"), done: false };
     Object.assign(task, { title, category: data.category.trim(), deadline, assigneeUserId: data.assigneeUserId });
-    if (!existing) {
+    if (editing) {
+      elements.taskEditDialog.close();
+    } else {
       list.push(task);
       if (elements.taskStateFilter.value === "completed") elements.taskStateFilter.value = "open";
       if (elements.taskCategoryFilter.value && elements.taskCategoryFilter.value !== normalizedText(task.category))
         elements.taskCategoryFilter.value = "";
+      resetTaskForm();
     }
-    resetTaskForm();
     changed();
-    elements.taskTitle.focus();
+    if (!editing) elements.taskTitle.focus();
   }
   function openDatePicker(input, trigger, label) {
     const selected = parseEventDate(input.value);
@@ -997,7 +1030,10 @@
     finally { button.disabled = false; }
   }
   function eventTimeline(event) {
-    return [["Arrival", event.arrival], ["Load-in", event.loadIn], ["Zvukovka", event.soundcheck], ["Začátek hraní", event.showStart], ["Konec", event.showEnd]].filter(item => item[1]);
+    const calculated = SetlisterPlanning.showEnd(event.showStart, SetlisterPlanning.showDuration(event));
+    const legacyEnd = Object.hasOwn(event, "showDurationMinutes") ? "" : event.showEnd;
+    return [["Arrival", event.arrival], ["Load-in", event.loadIn], ["Zvukovka", event.soundcheck],
+      ["Začátek hraní", event.showStart], ["Konec hraní", calculated ? showEndLabel(calculated) : legacyEnd]].filter(item => item[1]);
   }
   function elapsedClock(start, end) { if (!parseClock(start) || !parseClock(end)) return "—"; const minutes = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3)); let duration = minutes(end) - minutes(start); if (duration < 0) duration += 24 * 60; return formatTime(duration * 60); }
   function tasksForEvent(eventId) {
@@ -1052,7 +1088,7 @@
       label.append(input, mailNode("span", "", isTask ? item.title : item.label));
       row.append(label);
       const action = isTask
-        ? rowButton("Upravit", "Upravit v Úkolech", () => { showAppView("tasks"); editTask(item); })
+        ? rowButton("Upravit", "Upravit úkol", () => editTask(item))
         : rowButton("Do organizace", "Přesunout do organizace a Úkolů", () => {
             if (!addConcertTask(event, item.label, item.done)) return;
             event.checklist = event.checklist.filter(other => other.id !== item.id);
@@ -1103,8 +1139,31 @@
     const details = [event.contactName ? "Kontakt: " + event.contactName + (event.contactPhone ? " · " + event.contactPhone : "") : "", fee ? "Honorář: " + fee : "", event.note || ""].filter(Boolean); if (details.length) { const detail = document.createElement("div"); detail.className = "event-practical"; detail.replaceChildren(...details.map(text => { const line = document.createElement("p"); line.textContent = text; return line; })); card.append(detail); }
     const set = eventSetlist(event); if (set) { const setButton = document.createElement("button"); setButton.type = "button"; setButton.className = "event-setlist-link"; setButton.innerHTML = `<span>SETLIST</span><strong>${escapeText(set.name)}</strong><small>${set.songIds.length} skladeb →</small>`; setButton.addEventListener("click", () => loadSavedSetlist(set.id)); card.append(setButton); }
     else { const missing = document.createElement("p"); missing.className = "event-missing-set"; missing.textContent = "Bez přiřazeného setlistu"; card.append(missing); }
-    if (history) {
-      const planned = new Set(event.plannedSongIds?.length ? event.plannedSongIds : set?.songIds || []); const actual = event.playedSongIds || []; const skipped = [...planned].filter(id => !actual.includes(id)).length; const added = actual.filter(id => !planned.has(id)).length; const actualSeconds = actual.reduce((sum, id) => sum + Number(workspace.state.songs.find(song => song.id === id)?.seconds || 0), 0); const stats = document.createElement("div"); stats.className = "event-history-stats"; [["ODEHRÁNO", actual.length + " skladeb"], ["DÉLKA SKLADEB", formatTime(actualSeconds)], ["REÁLNÝ ČAS", elapsedClock(event.actualStart, event.actualEnd)], ["ZMĚNY", (skipped ? "−" + skipped : "0") + (added ? " / +" + added : "")], ["HODNOCENÍ", event.rating ? event.rating + " / 5" : "—"]].forEach(([label, value]) => { const item = document.createElement("div"); item.innerHTML = `<span>${label}</span><strong>${value}</strong>`; stats.append(item); }); card.append(stats); if (event.performanceNote) { const note = document.createElement("p"); note.className = "performance-note"; note.textContent = event.performanceNote; card.append(note); }
+    if (history && hasEventPerformance(event)) {
+      const planned = new Set(event.plannedSongIds?.length ? event.plannedSongIds : set?.songIds || []);
+      const actual = event.playedSongIds || [];
+      const skipped = [...planned].filter(id => !actual.includes(id)).length;
+      const added = actual.filter(id => !planned.has(id)).length;
+      const actualSeconds = actual.reduce((sum, id) => sum + Number(workspace.state.songs.find(song => song.id === id)?.seconds || 0), 0);
+      const stats = mailNode("div", "event-history-stats");
+      const values = [
+        ["ODEHRÁNO", actual.length ? actual.length + " skladeb" : "—"],
+        ["DÉLKA SKLADEB", actual.length ? formatTime(actualSeconds) : "—"],
+        ["REÁLNÝ ČAS", elapsedClock(event.actualStart, event.actualEnd)],
+        ["ZMĚNY", actual.length ? (skipped ? "−" + skipped : "0") + (added ? " / +" + added : "") : "—"],
+        ["HODNOCENÍ", event.rating ? event.rating + " / 5" : "—"],
+      ];
+      for (const [label, value] of values) {
+        const item = mailNode("div");
+        item.append(mailNode("span", "", label), mailNode("strong", "", value));
+        stats.append(item);
+      }
+      card.append(stats);
+      if (event.performanceNote) card.append(mailNode("p", "performance-note", event.performanceNote));
+    } else if (history) {
+      const record = rowButton("Zapsat průběh", "Zapsat skutečný průběh koncertu", () => openEventDialog(event.id));
+      record.className = "secondary-button compact";
+      card.append(mailNode("p", "section-help", "Skutečný průběh ještě není zapsaný."), record);
     } else {
       const timeline = document.createElement("div"); timeline.className = "event-mini-timeline"; eventTimeline(event).forEach(([label, value]) => { const item = document.createElement("span"); item.classList.toggle("concert-start", label === "Začátek hraní"); item.append(mailNode("small", "", label), mailNode("strong", "", value)); timeline.append(item); }); if (timeline.children.length) card.append(timeline);
       card.append(renderEventChecklist(event));
@@ -1128,7 +1187,15 @@
   }
   function escapeText(value) { const span = document.createElement("span"); span.textContent = String(value || ""); return span.innerHTML; }
   function renderEvents() {
-    if (!workspace) return; const planned = workspace.state.events.filter(event => event.status !== "completed").sort((a, b) => String(a.date).localeCompare(String(b.date))); const history = workspace.state.events.filter(event => event.status === "completed").sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    if (!workspace) return;
+    const today = SetlisterPlanning.concertDayKey();
+    const planned = [];
+    const history = [];
+    for (const event of workspace.state.events) {
+      (SetlisterPlanning.concertStatus(event, today) === "completed" ? history : planned).push(event);
+    }
+    planned.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    history.sort((a, b) => String(b.date).localeCompare(String(a.date)));
     elements.upcomingEvents.replaceChildren(...(planned.length ? planned.map(event => eventCard(event)) : [Object.assign(document.createElement("p"), { className: "section-help", textContent: "Zatím není naplánovaný žádný koncert." })])); elements.eventHistory.replaceChildren(...(history.length ? history.map(event => eventCard(event, true)) : [Object.assign(document.createElement("p"), { className: "section-help", textContent: "Historie se začne plnit po prvním odehraném koncertu." })]));
     const next = planned[0]; if (!next) { elements.nextEventSpotlight.innerHTML = '<div><span>DALŠÍ KONCERT</span><h2>Ještě není naplánovaný</h2><p>Přidej termín, časy a hotový setlist.</p></div>'; return; }
     const set = eventSetlist(next); const timeline = eventTimeline(next); elements.nextEventSpotlight.replaceChildren(); const intro = document.createElement("div"); intro.innerHTML = `<span>DALŠÍ KONCERT · ${escapeText(formatEventDate(next.date, true))}</span><h2>${escapeText(next.name || next.venue)}</h2><p>${escapeText([next.city, next.venue, next.address].filter(Boolean).join(" · "))}</p>`; const times = document.createElement("div"); times.className = "event-spotlight-times"; timeline.forEach(([label, value]) => { const item = document.createElement("div"); item.classList.toggle("concert-start", label === "Začátek hraní"); item.append(mailNode("span", "", label), mailNode("strong", "", value)); times.append(item); }); const actions = document.createElement("div"); actions.className = "event-spotlight-actions"; if (set) { const open = document.createElement("button"); open.type = "button"; open.className = "primary-button"; open.textContent = "Otevřít setlist · " + set.name; open.addEventListener("click", () => loadSavedSetlist(set.id)); actions.append(open); } const edit = document.createElement("button"); edit.type = "button"; edit.className = "secondary-button"; edit.textContent = "Upravit den koncertu"; edit.addEventListener("click", () => openEventDialog(next.id)); actions.append(edit);
@@ -1148,30 +1215,266 @@
     const used = new Set(eventPlayedSongDraft); elements.eventPlayedSongSelect.replaceChildren(option("", "Vyber skladbu"), ...workspace.state.songs.filter(song => !used.has(song.id)).map(song => option(song.id, song.title))); enhanceSelect(elements.eventPlayedSongSelect);
     elements.eventPlayedSongs.replaceChildren(...eventPlayedSongDraft.map((id, index) => { const song = workspace.state.songs.find(item => item.id === id); const row = document.createElement("li"); const number = document.createElement("span"); number.textContent = String(index + 1).padStart(2, "0"); const title = document.createElement("strong"); title.textContent = song?.title || "Odstraněná skladba"; const actions = document.createElement("div"); const up = rowButton("↑", "Posunout nahoru", () => { if (!index) return; [eventPlayedSongDraft[index - 1], eventPlayedSongDraft[index]] = [eventPlayedSongDraft[index], eventPlayedSongDraft[index - 1]]; renderEventPlayedSongs(); }); const down = rowButton("↓", "Posunout dolů", () => { if (index >= eventPlayedSongDraft.length - 1) return; [eventPlayedSongDraft[index + 1], eventPlayedSongDraft[index]] = [eventPlayedSongDraft[index], eventPlayedSongDraft[index + 1]]; renderEventPlayedSongs(); }); const remove = rowButton("×", "Odebrat", () => { eventPlayedSongDraft.splice(index, 1); renderEventPlayedSongs(); }); up.disabled = index === 0; down.disabled = index === eventPlayedSongDraft.length - 1; actions.append(up, down, remove); row.append(number, title, actions); return row; }));
   }
-  function toggleEventHistoryFields() { const completed = elements.eventStatus.value === "completed"; elements.eventHistoryFields.hidden = !completed; if (completed && !eventPlayedSongDraft.length) eventPlayedSongDraft = [...(savedSetlistById(elements.eventSetlist.value)?.songIds || [])]; renderEventPlayedSongs(); }
+  function hasEventPerformance(event) {
+    return Boolean(event.actualStart || event.actualEnd || event.rating || event.performanceNote || event.playedSongIds?.length);
+  }
+  function eventFormIsHistorical(form) {
+    return Boolean(form.elements.eventId.value) && SetlisterPlanning.concertStatus({
+      date: form.elements.date.value, status: form.elements.status.value,
+    }) === "completed";
+  }
+  function toggleEventHistoryFields() {
+    elements.eventHistoryFields.hidden = !eventFormIsHistorical(elements.eventForm);
+    if (!elements.eventHistoryFields.hidden) renderEventPlayedSongs();
+    elements.copyEventSetlistSongs.disabled = !savedSetlistById(elements.eventSetlist.value)?.songIds.length;
+  }
+  function watchConcertDay() {
+    let shownDay = SetlisterPlanning.concertDayKey();
+    function refresh() {
+      const today = SetlisterPlanning.concertDayKey();
+      if (today === shownDay) return;
+      shownDay = today;
+      renderEvents();
+      if (elements.eventDialog.open) toggleEventHistoryFields();
+    }
+    function nextMinute() {
+      setTimeout(() => { refresh(); nextMinute(); }, 60025 - Date.now() % 60000);
+    }
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+    nextMinute();
+  }
+  function showEndLabel(end) {
+    return end.time + (end.nextDay ? " (+1 den)" : "");
+  }
+  function readShowDuration(input) {
+    const value = input.value.trim();
+    if (!value) return null;
+    return /^\d{1,4}$/.test(value) && Number(value) >= 1 && Number(value) < 1440 ? Number(value) : NaN;
+  }
+  function updateEventEndPreview() {
+    const form = elements.eventForm;
+    const end = SetlisterPlanning.showEnd(form.elements.showStart.value, readShowDuration(form.elements.showDurationMinutes));
+    elements.eventEndPreview.hidden = !end;
+    elements.eventEndPreview.textContent = end ? "Konec hraní " + showEndLabel(end) : "";
+  }
+  function renderEventGear() {
+    elements.eventGearTags.replaceChildren(...eventGearDraft.map(item => {
+      const tag = mailNode("li", "event-gear-tag");
+      const remove = rowButton("×", "Odebrat " + item.label, () => {
+        eventGearDraft = eventGearDraft.filter(gear => gear.id !== item.id);
+        renderEventGear();
+        elements.eventGearInput.focus();
+      });
+      remove.setAttribute("aria-label", remove.title);
+      tag.append(mailNode("span", "", item.label), remove);
+      return tag;
+    }));
+  }
+  function addEventGear() {
+    const input = elements.eventGearInput;
+    const label = input.value.trim();
+    showStatus(elements.eventGearStatus, "");
+    if (!label) return true;
+    if (eventGearDraft.length >= 30 || eventGearDraft.some(item => normalizedText(item.label) === normalizedText(label))) {
+      showStatus(elements.eventGearStatus, eventGearDraft.length >= 30
+        ? "Na koncert lze zapsat nejvýše 30 položek výbavy." : "Tahle položka už ve výbavě je.");
+      input.focus();
+      return false;
+    }
+    eventGearDraft.push({ id: uid("check"), label, done: false });
+    input.value = "";
+    renderEventGear();
+    input.focus();
+    return true;
+  }
+  function mergeEventVenues(previous, events) {
+    const venues = new Map();
+    const add = ({ name, city, address }) => {
+      if (!name || !city) return;
+      const key = JSON.stringify([name, city].map(normalizedText));
+      const matches = venues.get(key) || new Map();
+      const addressKey = normalizedText(address);
+      if (addressKey) {
+        matches.delete("");
+      } else if (matches.size) {
+        return;
+      }
+      matches.set(addressKey, { name, city, address: address || "" });
+      venues.set(key, matches);
+    };
+    if (Array.isArray(previous)) previous.forEach(add);
+    events.forEach(event => add({ name: event.venue, city: event.city, address: event.address }));
+    return [...venues.values()].flatMap(byAddress => [...byAddress.values()]).slice(-2000);
+  }
+  function closeVenueOptions() {
+    venueOptions = [];
+    venueIndex = -1;
+    elements.eventVenueOptions.hidden = true;
+    elements.eventVenue.setAttribute("aria-expanded", "false");
+    elements.eventVenue.removeAttribute("aria-activedescendant");
+  }
+  function chooseVenue(venue) {
+    const form = elements.eventForm;
+    elements.eventVenue.value = venue.name;
+    form.elements.city.value = venue.city;
+    form.elements.address.value = venue.address;
+    closeVenueOptions();
+  }
+  function renderVenueOptions() {
+    const input = elements.eventVenue;
+    const query = normalizedText(input.value);
+    const matches = workspace.state.venues.filter(venue =>
+      normalizedText([venue.name, venue.city, venue.address].join(" ")).includes(query));
+    matches.sort((a, b) => Number(normalizedText(b.name).startsWith(query)) - Number(normalizedText(a.name).startsWith(query))
+      || a.name.localeCompare(b.name, "cs"));
+    venueOptions = matches.slice(0, 8);
+    venueIndex = -1;
+    input.removeAttribute("aria-activedescendant");
+    const menu = elements.eventVenueOptions;
+    menu.replaceChildren(...venueOptions.map((venue, index) => {
+      const item = mailNode("li");
+      item.id = "event-venue-option-" + index;
+      item.setAttribute("role", "option");
+      item.setAttribute("aria-selected", "false");
+      item.append(mailNode("strong", "", venue.name), mailNode("small", "", [venue.city, venue.address].filter(Boolean).join(" · ")));
+      item.addEventListener("mousedown", event => event.preventDefault());
+      item.addEventListener("click", () => chooseVenue(venue));
+      return item;
+    }));
+    menu.hidden = !venueOptions.length;
+    input.setAttribute("aria-expanded", String(venueOptions.length > 0));
+  }
+  function navigateVenueOptions(event) {
+    if (event.key === "Escape" && venueOptions.length) {
+      event.preventDefault();
+      closeVenueOptions();
+    } else if (event.key === "Enter" && venueIndex >= 0) {
+      event.preventDefault();
+      chooseVenue(venueOptions[venueIndex]);
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      if (!venueOptions.length) renderVenueOptions();
+      if (!venueOptions.length) return;
+      event.preventDefault();
+      const last = venueOptions.length - 1;
+      venueIndex = event.key === "ArrowDown" ? Math.min(last, venueIndex + 1) : venueIndex <= 0 ? last : venueIndex - 1;
+      const items = elements.eventVenueOptions.children;
+      for (const [index, item] of Array.from(items).entries()) item.setAttribute("aria-selected", String(index === venueIndex));
+      const selected = items[venueIndex];
+      elements.eventVenue.setAttribute("aria-activedescendant", selected.id);
+      selected.scrollIntoView({ block: "nearest" });
+    }
+  }
   function openEventDialog(eventId = "", forceCompleted = false, selectedDate = "") {
-    const event = workspace.state.events.find(item => item.id === eventId); const form = elements.eventForm; form.reset();
+    const event = workspace.state.events.find(item => item.id === eventId);
+    const form = elements.eventForm;
+    form.reset();
+    closeVenueOptions();
     fillInvoiceParty(form, "customer", event?.invoiceCustomer);
     elements.eventInvoiceCustomer.open = Boolean(event?.invoiceCustomer?.name);
-     elements.eventDateInput.setCustomValidity(""); form.elements.eventId.value = event?.id || ""; form.elements.name.value = event?.name || ""; const eventDate = event?.date || selectedDate; form.elements.date.value = eventDate ? formatEventDate(eventDate) : ""; form.elements.feeAmount.value = event?.feeAmount ?? ""; form.elements.feeCurrency.value = event?.feeCurrency || "CZK"; enhanceSelect(form.elements.feeCurrency); ["city", "venue", "address", "arrival", "loadIn", "soundcheck", "showStart", "showEnd", "contactName", "contactPhone", "note", "actualStart", "actualEnd", "performanceNote"].forEach(key => { form.elements[key].value = event?.[key] || ""; }); form.elements.status.value = forceCompleted ? "completed" : event?.status || "planned"; form.elements.rating.value = String(event?.rating || 0); form.elements.checklist.value = (event?.checklist || []).map(item => item.label).join("\n"); refreshEventSetlistOptions(event?.setlistId || ""); eventPlayedSongDraft = [...(event?.playedSongIds || [])]; const matchingLiveSet = event?.setlistId && liveSession.liveSet?.setlistRef === "saved:" + event.setlistId ? liveSession.liveSet : null; if (forceCompleted && !eventPlayedSongDraft.length && matchingLiveSet?.playedSongIds?.length) eventPlayedSongDraft = [...matchingLiveSet.playedSongIds]; if ((forceCompleted || event?.status === "completed") && !eventPlayedSongDraft.length) eventPlayedSongDraft = [...(eventSetlist(event)?.songIds || [])]; elements.eventDialogTitle.textContent = event ? "Upravit koncert" : "Přidat koncert"; toggleEventHistoryFields(); enhanceSelect(elements.eventStatus); enhanceSelect(form.elements.rating); elements.eventDialog.showModal();
+    elements.eventDateInput.setCustomValidity("");
+    form.elements.eventId.value = event?.id || "";
+    form.elements.name.value = event?.name || "";
+    const day = event?.date || selectedDate;
+    form.elements.date.value = day ? formatEventDate(day) : "";
+    form.elements.feeAmount.value = event?.feeAmount ?? "";
+    form.elements.feeCurrency.value = event?.feeCurrency || "CZK";
+    enhanceSelect(form.elements.feeCurrency);
+    const textFields = ["city", "venue", "address", "arrival", "loadIn", "soundcheck", "showStart",
+      "contactName", "contactPhone", "note", "actualStart", "actualEnd", "performanceNote"];
+    for (const key of textFields) form.elements[key].value = event?.[key] || "";
+    form.elements.showDurationMinutes.value = SetlisterPlanning.showDuration(event) ?? "";
+    updateEventEndPreview();
+    elements.eventStatusField.hidden = !event;
+    elements.eventStatus.value = forceCompleted ? "completed" : event?.status || "planned";
+    form.elements.rating.value = String(event?.rating || 0);
+    eventGearDraft = (event?.checklist || []).map(item => ({ ...item }));
+    showStatus(elements.eventGearStatus, "");
+    renderEventGear();
+    refreshEventSetlistOptions(event?.setlistId || "");
+    eventPlayedSongDraft = [...(event?.playedSongIds || [])];
+    if (forceCompleted && !eventPlayedSongDraft.length) {
+      const liveSet = liveSession.liveSet;
+      const sameSet = event?.setlistId && liveSet?.setlistRef === "saved:" + event.setlistId;
+      const sameDay = liveSet?.startedAtMs && SetlisterPlanning.concertDayKey(new Date(liveSet.startedAtMs)) === event?.date;
+      const visited = sameSet && sameDay ? liveSet.playedSongIds || [] : [];
+      eventPlayedSongDraft = [...(visited.length ? visited : eventSetlist(event)?.songIds || [])];
+    }
+    elements.eventDialogTitle.textContent = event ? "Upravit koncert" : "Přidat koncert";
+    toggleEventHistoryFields();
+    enhanceSelect(elements.eventStatus);
+    enhanceSelect(form.elements.rating);
+    elements.eventDialog.showModal();
   }
   function saveEventForm(form) {
-    const data = formPayload(form); const date = parseEventDate(data.date); if (!date) { elements.eventDateInput.setCustomValidity("Zadej platné datum nebo ho vyber v kalendáři."); elements.eventDateInput.reportValidity(); return; } const times = ["arrival", "loadIn", "soundcheck", "showStart", "showEnd", "actualStart", "actualEnd"]; for (const key of times) if (data[key] && !parseClock(data[key])) { showToast("Zkontroluj čas. Použij formát 16:30."); return; }
-    const rawFee = data.feeAmount.trim().replace(/\s/g, "").replace(",", ".");
-    const feeAmount = rawFee ? Number(rawFee) : null;
-    if (rawFee && (!/^\d+(?:\.\d{1,2})?$/.test(rawFee) || feeAmount > 1000000000)) {
+    const data = formPayload(form);
+    const date = parseEventDate(data.date);
+    if (!date) {
+      elements.eventDateInput.setCustomValidity("Zadej platné datum nebo ho vyber v kalendáři.");
+      elements.eventDateInput.reportValidity();
+      return;
+    }
+    if (!data.name.trim() || !data.city.trim() || !data.venue.trim()) {
+      showToast("Doplň název koncertu, místo a město.");
+      return;
+    }
+    const historical = eventFormIsHistorical(form);
+    const times = ["arrival", "loadIn", "soundcheck", "showStart", ...(historical ? ["actualStart", "actualEnd"] : [])];
+    if (times.some(key => data[key].trim() && !parseClock(data[key]))) {
+      showToast("Zkontroluj čas. Použij formát 16:30.");
+      return;
+    }
+    const showDurationMinutes = readShowDuration(form.elements.showDurationMinutes);
+    if (Number.isNaN(showDurationMinutes)) {
+      showToast("Délku hraní zadej v celých minutách od 1 do 1 439.");
+      form.elements.showDurationMinutes.focus();
+      return;
+    }
+    const feeText = data.feeAmount.trim().replace(/\s/g, "").replace(",", ".");
+    const feeAmount = feeText ? Number(feeText) : null;
+    if (feeText && (!/^\d+(?:\.\d{1,2})?$/.test(feeText) || feeAmount > 1000000000)) {
       showToast("Zadej platnou částku honoráře, například 12 000 nebo 350,50.");
       form.elements.feeAmount.focus();
       return;
     }
-    const customer = readInvoiceParty(form, "customer");
     if (!validateInvoiceIco(form.elements.customerIco)) {
       elements.eventInvoiceCustomer.open = true;
       form.elements.customerIco.reportValidity();
       return;
     }
-    const existing = workspace.state.events.find(item => item.id === data.eventId); const oldChecks = new Map((existing?.checklist || []).map(item => [normalizedText(item.label), item])); const checklist = [...new Set(String(data.checklist || "").split(/\r?\n/).map(item => item.trim()).filter(Boolean))].slice(0, 30).map(label => ({ id: oldChecks.get(normalizedText(label))?.id || uid("check"), label: label.slice(0, 120), done: Boolean(oldChecks.get(normalizedText(label))?.done) })); const completed = data.status === "completed"; const plannedSongIds = completed ? (existing?.plannedSongIds?.length ? [...existing.plannedSongIds] : [...(savedSetlistById(data.setlistId)?.songIds || [])]) : (existing?.plannedSongIds || []); const payload = { id: existing?.id || uid("event"), name: data.name.trim(), date, city: data.city.trim(), venue: data.venue.trim(), address: data.address.trim(), feeAmount, feeCurrency: data.feeCurrency || "CZK", arrival: parseClock(data.arrival), loadIn: parseClock(data.loadIn), soundcheck: parseClock(data.soundcheck), showStart: parseClock(data.showStart), showEnd: parseClock(data.showEnd), setlistId: data.setlistId || "", contactName: data.contactName.trim(), contactPhone: data.contactPhone.trim(), note: data.note.trim(), checklist, status: completed ? "completed" : "planned", actualStart: parseClock(data.actualStart), actualEnd: parseClock(data.actualEnd), rating: Math.max(0, Math.min(5, Number(data.rating) || 0)), performanceNote: data.performanceNote.trim(), playedSongIds: completed ? [...eventPlayedSongDraft] : (existing?.playedSongIds || []), plannedSongIds, invoiceCustomer: customer };
-    if (existing) Object.assign(existing, payload); else workspace.state.events.push(payload); elements.eventDialog.close(); changed(); showToast(existing ? "Koncert je upravený." : "Koncert je naplánovaný.");
+    if (!addEventGear()) return;
+
+    const state = workspace.state;
+    const existing = state.events.find(item => item.id === data.eventId);
+    const showStart = parseClock(data.showStart);
+    const end = SetlisterPlanning.showEnd(showStart, showDurationMinutes);
+    const payload = {
+      id: existing?.id || uid("event"), name: data.name.trim(), date, city: data.city.trim(), venue: data.venue.trim(),
+      address: data.address.trim(), feeAmount, feeCurrency: data.feeCurrency || "CZK",
+      arrival: parseClock(data.arrival), loadIn: parseClock(data.loadIn), soundcheck: parseClock(data.soundcheck),
+      showStart, showDurationMinutes, showEnd: end?.time || "", setlistId: data.setlistId || "",
+      contactName: data.contactName.trim(), contactPhone: data.contactPhone.trim(), note: data.note.trim(),
+      checklist: eventGearDraft.map(item => ({ ...item })), status: existing && data.status === "completed" ? "completed" : "planned",
+      invoiceCustomer: readInvoiceParty(form, "customer"),
+    };
+    if (existing && !Object.hasOwn(existing, "showDurationMinutes") && !showDurationMinutes
+        && parseClock(existing.showEnd) && showStart === parseClock(existing.showStart)
+        && SetlisterPlanning.showDuration(existing) === null) {
+      delete payload.showDurationMinutes;
+      payload.showEnd = parseClock(existing.showEnd);
+    }
+    if (historical) {
+      Object.assign(payload, {
+        actualStart: parseClock(data.actualStart), actualEnd: parseClock(data.actualEnd), rating: Number(data.rating) || 0,
+        performanceNote: data.performanceNote.trim(), playedSongIds: [...eventPlayedSongDraft],
+        plannedSongIds: [...(existing?.plannedSongIds?.length ? existing.plannedSongIds : savedSetlistById(data.setlistId)?.songIds || [])],
+      });
+    }
+    if (existing) Object.assign(existing, payload);
+    else state.events.push(payload);
+    state.venues = mergeEventVenues(state.venues, [payload]);
+    elements.eventDialog.close();
+    changed();
+    showToast(existing ? "Koncert je upravený." : "Koncert je uložený.");
   }
   const invoicePartyKeys = ["ico", "dic", "name", "address"];
   const invoicePartyInput = (form, role, key) => form.elements[role + key[0].toUpperCase() + key.slice(1)];
@@ -1858,7 +2161,35 @@
   elements.songSearch.addEventListener("input", renderWorkspace);
   elements.albumFilter.addEventListener("change", renderWorkspace); elements.energyFilter.addEventListener("change", renderWorkspace); elements.roleFilter.addEventListener("change", renderWorkspace);
   elements.smartOrderSet.addEventListener("click", openSmartOrderDialog); elements.applySmartOrder.addEventListener("click", () => { if (!smartOrderDraft.length) return; workspace.state.draft.songIds = [...smartOrderDraft]; elements.smartOrderDialog.close(); changed(); showToast("Návrh pořadí je použitý."); });
-  elements.addEvent.addEventListener("click", () => openEventDialog()); elements.eventForm.addEventListener("submit", event => { event.preventDefault(); saveEventForm(event.currentTarget); }); elements.eventStatus.addEventListener("change", toggleEventHistoryFields); elements.eventSetlist.addEventListener("change", () => { if (elements.eventStatus.value === "completed") eventPlayedSongDraft = [...(savedSetlistById(elements.eventSetlist.value)?.songIds || [])]; renderEventPlayedSongs(); }); elements.addEventPlayedSong.addEventListener("click", () => { const id = elements.eventPlayedSongSelect.value; if (!id || eventPlayedSongDraft.includes(id)) return; eventPlayedSongDraft.push(id); renderEventPlayedSongs(); });
+  elements.addEvent.addEventListener("click", () => openEventDialog());
+  elements.eventForm.addEventListener("submit", event => { event.preventDefault(); saveEventForm(event.currentTarget); });
+  elements.eventStatus.addEventListener("change", toggleEventHistoryFields);
+  elements.eventDateInput.addEventListener("input", toggleEventHistoryFields);
+  elements.eventSetlist.addEventListener("change", toggleEventHistoryFields);
+  elements.copyEventSetlistSongs.addEventListener("click", () => {
+    eventPlayedSongDraft = [...(savedSetlistById(elements.eventSetlist.value)?.songIds || [])];
+    renderEventPlayedSongs();
+  });
+  elements.addEventPlayedSong.addEventListener("click", () => {
+    const id = elements.eventPlayedSongSelect.value;
+    if (!id || eventPlayedSongDraft.includes(id)) return;
+    eventPlayedSongDraft.push(id);
+    renderEventPlayedSongs();
+  });
+  for (const field of ["showStart", "showDurationMinutes"]) {
+    elements.eventForm.elements[field].addEventListener("input", updateEventEndPreview);
+  }
+  elements.addEventGear.addEventListener("click", addEventGear);
+  elements.eventGearInput.addEventListener("keydown", event => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    event.preventDefault();
+    addEventGear();
+  });
+  elements.eventVenue.addEventListener("input", renderVenueOptions);
+  elements.eventVenue.addEventListener("focus", renderVenueOptions);
+  elements.eventVenue.addEventListener("blur", closeVenueOptions);
+  elements.eventVenue.addEventListener("keydown", navigateVenueOptions);
+  watchConcertDay();
   setupDatePickers();
   for (const button of document.querySelectorAll("[data-ares-lookup]")) {
     button.addEventListener("click", () => lookupInvoiceParty(button));
@@ -1883,9 +2214,10 @@
   });
   elements.rehearsalMinutes.addEventListener("input", () => { if (rehearsalPlanShown) renderRehearsalPreview(); });
   elements.taskForm.addEventListener("submit", event => { event.preventDefault(); saveTaskForm(event.currentTarget); });
+  elements.taskEditForm.addEventListener("submit", event => { event.preventDefault(); saveTaskForm(event.currentTarget); });
   elements.taskCategoryFilter.addEventListener("change", renderTasks);
+  elements.taskAssigneeFilter.addEventListener("change", renderTasks);
   elements.taskStateFilter.addEventListener("change", renderTasks);
-  elements.cancelTaskEdit.addEventListener("click", () => { resetTaskForm(); enhanceSelect(elements.taskAssignee); });
   elements.concertAgendaTab.addEventListener("click", () => showConcertCalendar(false));
   elements.concertCalendarTab.addEventListener("click", () => showConcertCalendar(true));
   function moveBandCalendarMonth(offset) {

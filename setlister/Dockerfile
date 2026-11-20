@@ -13,7 +13,7 @@ COPY app /app/app
 COPY brand /app/brand
 COPY run.sh /run.sh
 
-RUN apk add --no-cache su-exec font-dejavu \
+RUN apk add --no-cache su-exec font-dejavu tzdata \
     && mkdir -p /data \
     && addgroup -S setlister \
     && adduser -S -G setlister setlister \
