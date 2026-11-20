@@ -175,7 +175,6 @@
     });
     state.members.forEach(member => { member.instruments = Array.isArray(member.instruments) ? member.instruments : []; member.defaultInstrumentId = member.instruments.some(item => item.id === member.defaultInstrumentId) ? member.defaultInstrumentId : "none"; member.vocals = Boolean(member.vocals); });
     state.events = state.events.filter(event => event && event.id).map(event => ({ ...event, status: event.status === "completed" ? "completed" : "planned", checklist: Array.isArray(event.checklist) ? event.checklist.filter(item => item && item.label).map(item => ({ id: String(item.id || uid("check")), label: String(item.label).slice(0, 120), done: Boolean(item.done) })) : [], playedSongIds: Array.isArray(event.playedSongIds) ? event.playedSongIds.filter(id => state.songs.some(song => song.id === id)) : [], plannedSongIds: Array.isArray(event.plannedSongIds) ? event.plannedSongIds.filter(id => state.songs.some(song => song.id === id)) : [] }));
-    state.venues = mergeEventVenues(state.venues, state.events);
     if (!state.draft.viewerMemberId || !state.members.some(member => member.id === state.draft.viewerMemberId)) state.draft.viewerMemberId = "clean";
     return state;
   }
@@ -1289,25 +1288,6 @@
     input.focus();
     return true;
   }
-  function mergeEventVenues(previous, events) {
-    const venues = new Map();
-    const add = ({ name, city, address }) => {
-      if (!name || !city) return;
-      const key = JSON.stringify([name, city].map(normalizedText));
-      const matches = venues.get(key) || new Map();
-      const addressKey = normalizedText(address);
-      if (addressKey) {
-        matches.delete("");
-      } else if (matches.size) {
-        return;
-      }
-      matches.set(addressKey, { name, city, address: address || "" });
-      venues.set(key, matches);
-    };
-    if (Array.isArray(previous)) previous.forEach(add);
-    events.forEach(event => add({ name: event.venue, city: event.city, address: event.address }));
-    return [...venues.values()].flatMap(byAddress => [...byAddress.values()]).slice(-2000);
-  }
   function closeVenueOptions() {
     venueOptions = [];
     venueIndex = -1;
@@ -1332,14 +1312,14 @@
       venueCatalog = payload.venues;
       if (document.activeElement === elements.eventVenue && venueIndex === -1) renderVenueOptions();
     }).catch(() => {
-      // A failed catalog load leaves band venues and manual entry available.
+      // Manual entry remains available if the catalog cannot be loaded.
     }).finally(() => { venueCatalogRequest = null; });
   }
   function renderVenueOptions() {
     const input = elements.eventVenue;
     if (!workspace) return;
     loadVenueCatalog();
-    venueOptions = SetlisterPlanning.venueSuggestions(input.value, workspace.state.venues, venueCatalog || []);
+    venueOptions = SetlisterPlanning.venueSuggestions(input.value, venueCatalog || []);
     venueIndex = -1;
     input.removeAttribute("aria-activedescendant");
     const menu = elements.eventVenueOptions;
@@ -1484,7 +1464,6 @@
     }
     if (existing) Object.assign(existing, payload);
     else state.events.push(payload);
-    state.venues = mergeEventVenues(state.venues, [payload]);
     elements.eventDialog.close();
     changed();
     showToast(existing ? "Koncert je upravený." : "Koncert je uložený.");

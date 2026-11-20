@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.13.2 · aktualizováno 20. 11. 2026
+> Stav specifikace: 0.13.3 · aktualizováno 20. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -52,7 +52,7 @@ Uživatel může být členem více kapel. Aktivní kapela se přepíná v hlavi
 
 ## Datový model kapely — schemaVersion 2
 
-Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplikace musí neznámá pole zachovat.
+Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplikace musí neznámá pole zachovat. Staré pole `venues` je vyřazené a server ho ze stavu kapely při čtení i uložení odstraňuje.
 
 ```json
 {
@@ -114,7 +114,6 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
   "savedSetlists": [
     { "id": "set-...", "name": "45 min festival", "targetMinutes": 45, "songIds": ["song-1"], "interludes": [] }
   ],
-  "venues": [{ "name": "Roxy", "city": "Praha", "address": "Dlouhá 33, Praha" }],
   "events": [
     {
       "id": "event-...",
@@ -238,8 +237,8 @@ Koncert je kapelní provozní záznam, ne úložiště smluv. Obsahuje název, d
 - Datum koncertu používá vlastní přístupný měsíční kalendář začínající pondělím. Umožni výběr klávesami i dotykem, krok mezi měsíci a ruční zadání českého nebo ISO data. Protokol ukládá datum jako místní kalendářní den `YYYY-MM-DD`.
 - Honorář je volitelná částka `feeAmount` (prázdná hodnota `null` je odlišná od nuly) s měnou `feeCurrency` v ISO 4217. Zobrazuje se kapelním členům na kartě.
 - Nový koncert má uložený stav `planned` a ve formuláři nemá volič stavu. Zobraz ho mezi odehranými, jakmile je jeho datum před dnešním dnem v časové zóně `Europe/Prague`. Při otevřené aplikaci obnov při přechodu přes půlnoc a po návratu do aplikace. Vyhodnocuje se z data i bez otevřeného klienta nebo zápisu do databáze. Ruční „Zapsat jako odehrané“ a existující hodnota `completed` umožňují přesun i dřív. U existujícího koncertu lze zvolit „Podle data“.
-- Pole **Klub / místo** je před městem. Načti český adresář z `GET https://app.setlister.cz/venue-catalog.json` při prvním otevření našeptávače a ulož poslední úspěšnou verzi pro použití offline. Po nové relaci aplikace načti katalog znovu při prvním použití. Při výpadku použij dostupnou kopii a místa aktivní kapely. Vyhledávej v zařízení bez rozlišování diakritiky a velikosti písmen. Slova mohou být v jiném pořadí a hledají se napříč názvem, městem, adresou, krajem a PSČ. Upřednostni shodu názvu, potom částečné shody. Při stejné úrovni shody zobraz místa kapely jako první. Zobraz nejvýše osm výsledků s městem, adresou a krajem, pokud je k dispozici. Pro prázdný dotaz nabídni jen místa aktivní kapely.
-- Kapelní adresář `state.venues` obsahuje až 2 000 položek `{name, city, address}`. Nabídni i místa z dříve uložených koncertů. Při zobrazení slouč shodné položky podle názvu, města a adresy po normalizaci mezer, interpunkce, diakritiky a velikosti písmen. Když je k dispozici adresa pro stejný název a město, vynech variantu s prázdnou adresou. Výběr doplní název, město a adresu, vše zůstává ručně upravitelné. Do kapelního adresáře se uloží pouze místo z uloženého koncertu, nikdy celý celostátní katalog ani místa jiných kapel.
+- Pole **Klub / místo** je před městem. Našeptávač čerpá výhradně z centrálního katalogu spravovaného v repozitáři Setlisteru. Načti jej z `GET https://app.setlister.cz/venue-catalog.json` při prvním použití v relaci a ulož poslední úspěšnou verzi pro použití offline. Vyhledávej v zařízení bez rozlišování diakritiky a velikosti písmen. Slova mohou být v jiném pořadí a hledají se napříč názvem, městem, adresou, krajem a PSČ. Upřednostni shodu názvu, potom částečné shody. Zobraz nejvýše osm výsledků s městem, adresou a krajem. Při prázdném dotazu nabídku skryj.
+- Výběr z katalogu doplní název místa, město a adresu. Všechna tři pole lze vyplnit či upravit ručně, i při výpadku katalogu. Hodnoty se ukládají pouze do polí `event.venue`, `event.city` a `event.address` daného koncertu. Ukládání koncertu nemění zdroj návrhů pro žádnou kapelu.
 - `showDurationMinutes` je volitelné celé číslo 1 až 1439. Z `showStart` a délky vypočítej `showEnd`; u konce po půlnoci ukaž další den. U starších koncertů bez tohoto pole dopočítej délku z uloženého začátku a konce a zachovej použitelný starší konec. Bez nové délky a bez staršího konce nech konec prázdný. Kalendářový export používá stejný výpočet.
 - Ve formuláři koncertu přidá Enter nebo tlačítko položku výbavy jako odebratelný štítek. Při úpravě zachovej `id` a `done` ponechaných položek. V datech zůstávají štítky výbavy jednotlivými položkami `event.checklist`.
 - Uživatel zadá skutečný začátek a konec, hodnocení 1–5, poznámku a skutečné pořadí skladeb. Automatický přesun nevyplňuje skutečný průběh.

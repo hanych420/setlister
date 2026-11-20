@@ -2341,7 +2341,7 @@ def public_default_state(owner: sqlite3.Row | None = None) -> dict[str, Any]:
             "draft": {"name": "Nový koncert", "targetMinutes": 45,
                       "songIds": ["sample-1", "sample-2"], "lockedSongIds": [], "interludes": [],
                       "viewerMemberId": owner_id if members else ""},
-            "savedSetlists": [], "events": [], "venues": []}
+            "savedSetlists": [], "events": []}
 
 
 def valid_setlist_interludes(setlist: object) -> bool:
@@ -2467,14 +2467,6 @@ def valid_public_state(value: object) -> bool:
     logo = str(profile.get("logoDataUrl") or "")
     if len(logo) > 700_000:
         return False
-    venues = value.get("venues", [])
-    if not isinstance(venues, list) or len(venues) > 2000:
-        return False
-    for venue in venues:
-        if (not isinstance(venue, dict) or not valid_text(venue.get("name"), 120)
-                or not valid_text(venue.get("city"), 100)
-                or not valid_text(venue.get("address"), 200, optional=True)):
-            return False
     for event in events:
         if (not isinstance(event, dict) or not str(event.get("id") or "")
                 or len(str(event.get("name") or "")) > 120
@@ -2581,7 +2573,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.13.2"
+    server_version = "Setlister/0.13.3"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -2940,6 +2932,8 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
             if not band or not state_row:
                 self.send_json(HTTPStatus.NOT_FOUND, {"error": "Kapela nebyla nalezena."})
                 return
+            state = json.loads(state_row["state_json"])
+            state.pop("venues", None)
             self.send_json(HTTPStatus.OK, {
                 "band": {"id": band["id"], "name": band["name"], "inviteCode": band["invite_code"]},
                 "membership": {"role": membership["role"]},
@@ -2951,7 +2945,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                     "entitlementSource": subscription["entitlement_source"] if subscription else None,
                     "currentPeriodEnd": subscription["current_period_end"] if subscription else None,
                 },
-                "state": json.loads(state_row["state_json"]), "revision": state_row["revision"],
+                "state": state, "revision": state_row["revision"],
                 "updatedAt": state_row["updated_at"],
             })
             return
@@ -3155,7 +3149,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def public_oauth_result_page(title: str, message: str, success: bool) -> str:
         state = "success" if success else "error"
         return f'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>
-        <link rel="stylesheet" href="/styles.css?v=0.13.2"></head>
+        <link rel="stylesheet" href="/styles.css?v=0.13.3"></head>
         <body class="oauth-result {state}"><main><h1>{html.escape(title)}</h1><p>{html.escape(message)}</p><a href="/">Zpět do Setlisteru</a></main></body></html>'''
 
     def handle_oauth_callback(self, query: dict[str, list[str]]) -> None:
@@ -3706,6 +3700,8 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                 state = payload.get("state")
                 if not isinstance(base_revision, int) or not valid_public_state(state):
                     raise ValueError("Neplatná data kapely.")
+                # Older clients can still send their local venue history.
+                state.pop("venues", None)
                 serialized = json.dumps(state, ensure_ascii=False, separators=(",", ":"))
                 timestamp = utc_now()
                 with connect_db() as database:

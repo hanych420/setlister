@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.3
+
+- Našeptávač koncertních míst čerpá výhradně ze spravovaného katalogu. Ručně vyplněné místo se uloží jen do konkrétního koncertu.
+- Kabinet MÚZ má v katalogu úplnou adresu Sukova 49/4.
+
 ## 0.13.2
 
 - Našeptávač u koncertů nabízí 429 míst ze všech 14 krajů Česka i místa uložená vlastní kapelou. Vyhledává i bez diakritiky a výběr doplní město a adresu.

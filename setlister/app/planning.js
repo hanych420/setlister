@@ -48,30 +48,21 @@ const SetlisterPlanning = (() => {
       .replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   }
 
-  function venueSuggestions(value, bandVenues, catalog) {
+  function venueSuggestions(value, catalog) {
     const query = venueSearchText(value);
-    if (!query) return bandVenues.slice(-8).reverse();
+    if (!query) return [];
     const terms = query.split(" ");
-    const groups = new Map();
-    for (const venue of [...bandVenues, ...catalog]) {
+    const matches = [];
+    for (const venue of catalog) {
       const name = venueSearchText(venue.name);
-      const city = venueSearchText(venue.city);
-      const address = venueSearchText(venue.address);
-      const searchable = [name, city, address, venueSearchText(venue.region), venueSearchText(venue.postalCode)].join(" ");
+      const searchable = [name, ...[venue.city, venue.address, venue.region, venue.postalCode].map(venueSearchText)].join(" ");
       if (!terms.every(term => searchable.includes(term))) continue;
-      const addressKey = address.endsWith(" " + city) ? address.slice(0, -(city.length + 1)) : address;
-      const groupKey = JSON.stringify([name, city]);
-      const variants = groups.get(groupKey) || new Map();
-      if (addressKey) variants.delete("");
-      if (variants.has(addressKey) || (!addressKey && variants.size)) continue;
-      const catalogEntry = Boolean(venue.region);
-      const rank = name === query ? 0 : name.startsWith(query) ? 1 : terms.every(term => name.includes(term)) ? 2
-        : terms.some(term => name.includes(term)) ? 3 : 4;
-      variants.set(addressKey, { venue, rank, catalogEntry });
-      groups.set(groupKey, variants);
+      const nameMatches = terms.filter(term => name.includes(term)).length;
+      const rank = name === query ? 0 : name.startsWith(query) ? 1 : nameMatches === terms.length ? 2 : nameMatches ? 3 : 4;
+      matches.push({ venue, rank });
     }
-    return [...groups.values()].flatMap(variants => [...variants.values()])
-      .sort((a, b) => a.rank - b.rank || Number(a.catalogEntry) - Number(b.catalogEntry)
+    return matches
+      .sort((a, b) => a.rank - b.rank
         || a.venue.name.localeCompare(b.venue.name, "cs") || a.venue.city.localeCompare(b.venue.city, "cs"))
       .slice(0, 8).map(match => match.venue);
   }
