@@ -73,16 +73,18 @@ class BandPlanningTests(unittest.TestCase):
         task.pop("eventId")
         self.assertTrue(server.valid_public_state(self.state))
 
-    def test_concert_checklist_defaults_are_optional_and_validate_both_groups(self):
+    def test_default_gear_is_optional_and_accepts_legacy_templates(self):
         self.assertTrue(server.valid_public_state(self.state))
         profile = self.state["bandProfile"] = {}
+        profile["concertChecklistDefaults"] = {"gear": ["Náhradní struny"]}
+        self.assertTrue(server.valid_public_state(self.state))
         profile["concertChecklistDefaults"] = {
             "organization": ["Potvrdit příjezd"],
             "gear": ["Náhradní struny"],
         }
         self.assertTrue(server.valid_public_state(self.state))
         for invalid in (None, [], {"gear": "Kabel"}, {"gear": ["   "]}, {"gear": ["x" * 121]},
-                        {"organization": [2]}, {"organization": ["x" * 161]}, {"organization": ["Úkol"] * 31}):
+                        {"gear": [2]}, {"gear": ["Kabel"] * 31}):
             with self.subTest(invalid=invalid):
                 profile["concertChecklistDefaults"] = invalid
                 self.assertFalse(server.valid_public_state(self.state))

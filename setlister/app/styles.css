@@ -292,8 +292,8 @@ dialog{width:min(480px,calc(100% - 30px));border:1px solid #3a3f43;border-radius
 .event-gear-tag button{flex:none;min-height:28px;min-width:28px;border:0;border-radius:15px;background:transparent;color:var(--muted);cursor:pointer;font-size:1rem}
 .event-gear-tag button:hover{color:var(--text);background:var(--line)}
 .concert-checklist-settings{grid-column:1/-1}
-.checklist-default-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:14px;margin-top:14px}
-.checklist-default-groups label,.event-gear-label{color:#c7cacc;font-size:.68rem;font-weight:800}
-#eventGearStatus:empty,.checklist-default-groups .form-status:empty{display:none}
+#defaultGearForm{max-width:34rem;margin-top:14px}
+#defaultGearForm label{color:#c7cacc;font-size:.68rem;font-weight:800}
+#eventGearStatus:empty,#defaultGearStatus:empty{display:none}
 #eventEndPreview{color:var(--lime)}
 @media(max-width:630px){.task-filters{grid-template-columns:minmax(0,1fr)}}

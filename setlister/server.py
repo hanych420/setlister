@@ -2467,11 +2467,9 @@ def valid_public_state(value: object) -> bool:
     defaults = profile.get("concertChecklistDefaults", {})
     if not isinstance(defaults, dict):
         return False
-    for group, maximum_length in (("organization", 160), ("gear", 120)):
-        labels = defaults.get(group, [])
-        if (not isinstance(labels, list) or len(labels) > 30
-                or not all(valid_text(label, maximum_length) for label in labels)):
-            return False
+    gear = defaults.get("gear", [])
+    if not isinstance(gear, list) or len(gear) > 30 or not all(valid_text(label, 120) for label in gear):
+        return False
     logo = str(profile.get("logoDataUrl") or "")
     if len(logo) > 700_000:
         return False
@@ -2581,7 +2579,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.13.4"
+    server_version = "Setlister/0.13.5"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -3157,7 +3155,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def public_oauth_result_page(title: str, message: str, success: bool) -> str:
         state = "success" if success else "error"
         return f'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>
-        <link rel="stylesheet" href="/styles.css?v=0.13.4"></head>
+        <link rel="stylesheet" href="/styles.css?v=0.13.5"></head>
         <body class="oauth-result {state}"><main><h1>{html.escape(title)}</h1><p>{html.escape(message)}</p><a href="/">Zpět do Setlisteru</a></main></body></html>'''
 
     def handle_oauth_callback(self, query: dict[str, list[str]]) -> None:

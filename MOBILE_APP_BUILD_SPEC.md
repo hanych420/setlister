@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.13.4 · aktualizováno 20. 11. 2026
+> Stav specifikace: 0.13.5 · aktualizováno 20. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -59,7 +59,7 @@ Server dnes ukládá celý dokument kapely jako verzovaný JSON. Mobilní aplika
   "version": 2,
   "bandProfile": {
     "logoDataUrl": "data:image/webp;base64,...",
-    "concertChecklistDefaults": { "organization": ["Potvrdit příjezd"], "gear": ["Náhradní struny"] },
+    "concertChecklistDefaults": { "gear": ["Náhradní struny"] },
     "invoiceSupplier": { "ico": "", "dic": "", "name": "", "address": "", "bankAccount": "", "registration": "", "vatPayer": false }
   },
   "members": [
@@ -235,8 +235,8 @@ Koncert je kapelní provozní záznam, ne úložiště smluv. Obsahuje název, d
 - Smazání uloženého setlistu bezpečně zruší jeho přiřazení u budoucích koncertů.
 - Nadcházející koncerty jsou řazené vzestupně podle data; odehrané sestupně.
 - Checklist na kartě má části Organizace a Výbava. Organizace vytváří a zobrazuje přímo úkoly s `eventId`; obě obrazovky upravují stejný záznam. Z koncertu se k úkolu otevře jeho editace pro nastavení termínu a osoby. Výbava zůstává v `event.checklist`, včetně starších položek, které lze přesunout do Organizace se zachováním stavu. Dokončené položky jsou dole v obou částech. Karta nejbližšího koncertu má souhrn obou částí.
-- V **Kapela a účet → Výchozí checklist koncertů** upravuje kapela šablonu uloženou v `state.bandProfile.concertChecklistDefaults` přes stávající `PUT /api/app/band-state`. `organization` a `gear` jsou volitelná pole názvů v pořadí přidání, každé nejvýše s 30 položkami. Organizace má nejvýše 160 znaků na položku a Výbava 120. Klient ořízne mezery, odmítne prázdný název i shodný název v téže skupině bez ohledu na diakritiku a velikost písmen. Chybějící šablonu zobraz prázdnou.
-- Při založení koncertu z agendy nebo kalendáře předvyplň obě skupiny jako samostatnou kopii. Nové položky jsou nehotové. Před uložením lze kteroukoli odebrat přímo ve formuláři a po uložení křížkem na kartě koncertu. Výbavu ulož do `event.checklist` s novými ID. Z Organizace vytvoř jednotlivé úkoly s novými ID, `eventId` nového koncertu a prázdným termínem, kategorií a přiřazením. Koncert i jeho úkoly ulož jedním požadavkem. Limit 1 000 úkolů na kapelu platí i zde. Odebrání organizační položky z koncertu odstraní propojený úkol z Úkolů. Změny šablony platí pro nové koncerty. Při editaci existujícího koncertu pracuj s uloženými položkami a zachovej dříve odebrané položky mimo jeho checklist.
+- V **Kapela a účet → Výchozí výbava koncertů** upravuje kapela šablonu uloženou v `state.bandProfile.concertChecklistDefaults.gear` přes stávající `PUT /api/app/band-state`. Pole obsahuje až 30 názvů v pořadí přidání, každý do 120 znaků. Klient ořízne mezery a odmítne prázdný nebo duplicitní název bez ohledu na diakritiku a velikost písmen. Chybějící šablonu zobraz prázdnou. Pokud starší záznam obsahuje `concertChecklistDefaults.organization`, klient tuto vlastnost při vytváření koncertu ignoruje.
+- Při založení koncertu z agendy nebo kalendáře vytvoř samostatnou kopii výchozí výbavy. Každá položka dostane vlastní ID a `done: false`. Před uložením lze kteroukoli odebrat přímo ve formuláři a po uložení křížkem na kartě koncertu. Výbavu ulož do `event.checklist`. Organizaci přidává uživatel samostatně přímo u koncertu. Odebrání organizační položky odstraní propojený úkol z Úkolů. Při editaci existujícího koncertu používá klient jeho uložený checklist. Změny šablony se použijí při založení dalšího koncertu.
 - Datum koncertu používá vlastní přístupný měsíční kalendář začínající pondělím. Umožni výběr klávesami i dotykem, krok mezi měsíci a ruční zadání českého nebo ISO data. Protokol ukládá datum jako místní kalendářní den `YYYY-MM-DD`.
 - Honorář je volitelná částka `feeAmount` (prázdná hodnota `null` je odlišná od nuly) s měnou `feeCurrency` v ISO 4217. Zobrazuje se kapelním členům na kartě.
 - Nový koncert má uložený stav `planned` a ve formuláři nemá volič stavu. Zobraz ho mezi odehranými, jakmile je jeho datum před dnešním dnem v časové zóně `Europe/Prague`. Při otevřené aplikaci obnov při přechodu přes půlnoc a po návratu do aplikace. Vyhodnocuje se z data i bez otevřeného klienta nebo zápisu do databáze. Ruční „Zapsat jako odehrané“ a existující hodnota `completed` umožňují přesun i dřív. U existujícího koncertu lze zvolit „Podle data“.

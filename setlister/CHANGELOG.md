@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.5
+
+- Šablona nového koncertu předvyplňuje pouze výbavu. Organizační úkoly se přidávají ručně u konkrétního koncertu.
+
 ## 0.13.4
 
 - Kapela si v nastavení uloží výchozí položky checklistu pro Organizaci a Výbavu. Nový koncert je převezme a jednotlivé položky lze odebrat před uložením i z karty koncertu.
