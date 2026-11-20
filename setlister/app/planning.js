@@ -43,6 +43,39 @@ const SetlisterPlanning = (() => {
     return event.status === "completed" || (day && day < today) ? "completed" : "planned";
   }
 
+  function venueSearchText(value) {
+    return String(value || "").normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase("cs")
+      .replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  }
+
+  function venueSuggestions(value, bandVenues, catalog) {
+    const query = venueSearchText(value);
+    if (!query) return bandVenues.slice(-8).reverse();
+    const terms = query.split(" ");
+    const groups = new Map();
+    for (const venue of [...bandVenues, ...catalog]) {
+      const name = venueSearchText(venue.name);
+      const city = venueSearchText(venue.city);
+      const address = venueSearchText(venue.address);
+      const searchable = [name, city, address, venueSearchText(venue.region), venueSearchText(venue.postalCode)].join(" ");
+      if (!terms.every(term => searchable.includes(term))) continue;
+      const addressKey = address.endsWith(" " + city) ? address.slice(0, -(city.length + 1)) : address;
+      const groupKey = JSON.stringify([name, city]);
+      const variants = groups.get(groupKey) || new Map();
+      if (addressKey) variants.delete("");
+      if (variants.has(addressKey) || (!addressKey && variants.size)) continue;
+      const catalogEntry = Boolean(venue.region);
+      const rank = name === query ? 0 : name.startsWith(query) ? 1 : terms.every(term => name.includes(term)) ? 2
+        : terms.some(term => name.includes(term)) ? 3 : 4;
+      variants.set(addressKey, { venue, rank, catalogEntry });
+      groups.set(groupKey, variants);
+    }
+    return [...groups.values()].flatMap(variants => [...variants.values()])
+      .sort((a, b) => a.rank - b.rank || Number(a.catalogEntry) - Number(b.catalogEntry)
+        || a.venue.name.localeCompare(b.venue.name, "cs") || a.venue.city.localeCompare(b.venue.city, "cs"))
+      .slice(0, 8).map(match => match.venue);
+  }
+
   function clockMinutes(value) {
     const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(value || "").trim());
     return match ? Number(match[1]) * 60 + Number(match[2]) : null;
@@ -159,5 +192,6 @@ const SetlisterPlanning = (() => {
   }
 
   return { readinessLabels, dateKey, parseDate, dateFromKey, calendarDays, readiness, buildPlan,
-    setlistEntries, updateSetlistEntries, usesCapo, tuningPlan, concertDayKey, concertStatus, showDuration, showEnd };
+    setlistEntries, updateSetlistEntries, usesCapo, tuningPlan, concertDayKey, concertStatus, showDuration, showEnd,
+    venueSuggestions };
 })();

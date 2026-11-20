@@ -9,7 +9,7 @@
   <link rel="icon" href="/brand/logo-mark.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=0.13.1">
+  <link rel="stylesheet" href="/styles.css?v=0.13.2">
 </head>
 <body>
   <header class="app-header">
@@ -242,8 +242,8 @@
           <input id="eventDateInput" name="date" type="text" data-date-picker placeholder="21. 1. 2027" autocomplete="off" maxlength="14" required>
         </div><div class="venue-field">
           <label for="eventVenue">Klub / místo</label>
-          <input id="eventVenue" name="venue" maxlength="120" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="eventVenueOptions" required>
-          <ul id="eventVenueOptions" class="venue-options" role="listbox" aria-label="Uložená místa" hidden></ul>
+          <input id="eventVenue" name="venue" maxlength="120" placeholder="Hledej podle názvu nebo města" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="eventVenueOptions" required>
+          <ul id="eventVenueOptions" class="venue-options" role="listbox" aria-label="Koncertní místa" hidden></ul>
         </div><label>Město<input name="city" maxlength="100" required></label><label class="wide">Adresa<input name="address" maxlength="200" placeholder="Ulice, město"></label><label>Arrival<input name="arrival" inputmode="numeric" placeholder="15:30"></label><label>Load-in<input name="loadIn" inputmode="numeric" placeholder="16:00"></label><label>Zvukovka<input name="soundcheck" inputmode="numeric" placeholder="17:00"></label><label>Začátek koncertu<input name="showStart" inputmode="numeric" placeholder="20:00"></label><label>Délka hraní (min)<input name="showDurationMinutes" type="text" maxlength="4" inputmode="numeric" placeholder="Např. 60"><small id="eventEndPreview" aria-live="polite" hidden></small></label><label>Přiřazený setlist<select id="eventSetlist" name="setlistId"></select></label><label>Honorář<input name="feeAmount" inputmode="decimal" maxlength="14" placeholder="Např. 12 000"></label><label>Měna<select name="feeCurrency"><option value="CZK">CZK · Kč</option><option value="EUR">EUR · €</option><option value="GBP">GBP · £</option><option value="USD">USD · $</option><option value="PLN">PLN · zł</option><option value="CHF">CHF</option></select></label><label>Kontaktní osoba<input name="contactName" maxlength="100"></label><label>Telefon<input name="contactPhone" type="tel" maxlength="40"></label><label id="eventStatusField" hidden>Stav<select id="eventStatus" name="status"><option value="planned">Podle data</option><option value="completed">Odehráno</option></select></label><label class="wide">Praktická poznámka<textarea name="note" maxlength="800" rows="3" placeholder="Parkování, vstup do klubu nebo jiná domluva."></textarea></label><div class="wide event-gear-field">
           <label for="eventGearInput">Výbava</label>
           <div class="event-gear-input"><input id="eventGearInput" maxlength="120" placeholder="Např. Náhradní struny"><button id="addEventGear" class="secondary-button compact" type="button">Přidat</button></div>
@@ -359,7 +359,7 @@
 
   <div id="printRoot" aria-hidden="true"></div>
   <div class="toast" id="appToast" role="status" aria-live="polite"></div>
-  <script src="/planning.js?v=0.13.1"></script>
-  <script src="/app.js?v=0.13.1"></script>
+  <script src="/planning.js?v=0.13.2"></script>
+  <script src="/app.js?v=0.13.2"></script>
 </body>
 </html>

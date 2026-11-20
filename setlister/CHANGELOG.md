@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.2
+
+- Našeptávač u koncertů nabízí 429 míst ze všech 14 krajů Česka i místa uložená vlastní kapelou. Vyhledává i bez diakritiky a výběr doplní město a adresu.
+
 ## 0.13.1
 
 - Úkoly se upravují v dialogu a mají filtr podle přiřazené osoby.

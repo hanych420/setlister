@@ -2581,7 +2581,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.13.1"
+    server_version = "Setlister/0.13.2"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -2704,7 +2704,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                   + str(PUBLIC_SESSION_SECONDS) + secure)
         return {"payload": self.public_session_payload(user), "cookie": cookie}
 
-    def serve_public_app_file(self, request_path: str) -> None:
+    def serve_public_app_file(self, request_path: str, *, head: bool = False) -> None:
         if ".." in Path(request_path).parts:
             self.send_error(HTTPStatus.NOT_FOUND)
             return
@@ -2712,7 +2712,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
             mapped = request_path
         else:
             allowed = {"/", "/index.html", "/styles.css", "/app.js", "/planning.js", "/manifest.webmanifest",
-                       "/service-worker.js", "/icon-192.png", "/icon-512.png"}
+                       "/service-worker.js", "/icon-192.png", "/icon-512.png", "/venue-catalog.json"}
             if request_path not in allowed:
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
@@ -2720,7 +2720,10 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         original = self.path
         self.path = mapped
         try:
-            super().do_GET()
+            if head:
+                super().do_HEAD()
+            else:
+                super().do_GET()
         finally:
             self.path = original
 
@@ -3152,7 +3155,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def public_oauth_result_page(title: str, message: str, success: bool) -> str:
         state = "success" if success else "error"
         return f'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>
-        <link rel="stylesheet" href="/styles.css?v=0.13.1"></head>
+        <link rel="stylesheet" href="/styles.css?v=0.13.2"></head>
         <body class="oauth-result {state}"><main><h1>{html.escape(title)}</h1><p>{html.escape(message)}</p><a href="/">Zpět do Setlisteru</a></main></body></html>'''
 
     def handle_oauth_callback(self, query: dict[str, list[str]]) -> None:
@@ -3200,18 +3203,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
             if request_path.startswith("/calendar/feed/"):
                 self.serve_calendar_feed(request_path, head=True)
                 return
-            if ".." in Path(request_path).parts:
-                self.send_error(HTTPStatus.NOT_FOUND); return
-            if request_path.startswith("/brand/"):
-                mapped = request_path
-            elif request_path in {"/", "/index.html", "/styles.css", "/app.js", "/planning.js", "/manifest.webmanifest",
-                                  "/service-worker.js", "/icon-192.png", "/icon-512.png"}:
-                mapped = "/app/index.html" if request_path in ("/", "/index.html") else "/app" + request_path
-            else:
-                self.send_error(HTTPStatus.NOT_FOUND); return
-            original = self.path; self.path = mapped
-            try: super().do_HEAD()
-            finally: self.path = original
+            self.serve_public_app_file(request_path, head=True)
             return
         if not self.public_path(unquote(urlparse(self.path).path)):
             self.send_error(HTTPStatus.NOT_FOUND); return

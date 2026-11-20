@@ -29,6 +29,8 @@
   let notesPrintFieldDraft = [];
   let eventPlayedSongDraft = [];
   let eventGearDraft = [];
+  let venueCatalog = null;
+  let venueCatalogRequest = null;
   let venueOptions = [];
   let venueIndex = -1;
   let datePicker = null;
@@ -1320,14 +1322,24 @@
     form.elements.address.value = venue.address;
     closeVenueOptions();
   }
+  function loadVenueCatalog() {
+    if (venueCatalog || venueCatalogRequest) return;
+    venueCatalogRequest = fetch("/venue-catalog.json").then(response => {
+      if (!response.ok) throw new Error("Katalog koncertních míst není dostupný.");
+      return response.json();
+    }).then(payload => {
+      if (payload?.version !== 1 || !Array.isArray(payload.venues)) return;
+      venueCatalog = payload.venues;
+      if (document.activeElement === elements.eventVenue && venueIndex === -1) renderVenueOptions();
+    }).catch(() => {
+      // A failed catalog load leaves band venues and manual entry available.
+    }).finally(() => { venueCatalogRequest = null; });
+  }
   function renderVenueOptions() {
     const input = elements.eventVenue;
-    const query = normalizedText(input.value);
-    const matches = workspace.state.venues.filter(venue =>
-      normalizedText([venue.name, venue.city, venue.address].join(" ")).includes(query));
-    matches.sort((a, b) => Number(normalizedText(b.name).startsWith(query)) - Number(normalizedText(a.name).startsWith(query))
-      || a.name.localeCompare(b.name, "cs"));
-    venueOptions = matches.slice(0, 8);
+    if (!workspace) return;
+    loadVenueCatalog();
+    venueOptions = SetlisterPlanning.venueSuggestions(input.value, workspace.state.venues, venueCatalog || []);
     venueIndex = -1;
     input.removeAttribute("aria-activedescendant");
     const menu = elements.eventVenueOptions;
@@ -1336,7 +1348,8 @@
       item.id = "event-venue-option-" + index;
       item.setAttribute("role", "option");
       item.setAttribute("aria-selected", "false");
-      item.append(mailNode("strong", "", venue.name), mailNode("small", "", [venue.city, venue.address].filter(Boolean).join(" · ")));
+      item.append(mailNode("strong", "", venue.name),
+        mailNode("small", "", [venue.city, venue.address, venue.region].filter(Boolean).join(" · ")));
       item.addEventListener("mousedown", event => event.preventDefault());
       item.addEventListener("click", () => chooseVenue(venue));
       return item;

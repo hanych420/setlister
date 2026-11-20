@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.13.1 · aktualizováno 20. 11. 2026
+> Stav specifikace: 0.13.2 · aktualizováno 20. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 
@@ -238,7 +238,8 @@ Koncert je kapelní provozní záznam, ne úložiště smluv. Obsahuje název, d
 - Datum koncertu používá vlastní přístupný měsíční kalendář začínající pondělím. Umožni výběr klávesami i dotykem, krok mezi měsíci a ruční zadání českého nebo ISO data. Protokol ukládá datum jako místní kalendářní den `YYYY-MM-DD`.
 - Honorář je volitelná částka `feeAmount` (prázdná hodnota `null` je odlišná od nuly) s měnou `feeCurrency` v ISO 4217. Zobrazuje se kapelním členům na kartě.
 - Nový koncert má uložený stav `planned` a ve formuláři nemá volič stavu. Zobraz ho mezi odehranými, jakmile je jeho datum před dnešním dnem v časové zóně `Europe/Prague`. Při otevřené aplikaci obnov při přechodu přes půlnoc a po návratu do aplikace. Vyhodnocuje se z data i bez otevřeného klienta nebo zápisu do databáze. Ruční „Zapsat jako odehrané“ a existující hodnota `completed` umožňují přesun i dřív. U existujícího koncertu lze zvolit „Podle data“.
-- Klub / místo je ve formuláři před městem. Kapelní adresář `venues` obsahuje až 2 000 položek `{name, city, address}`. Při načtení nabídni i místa z dříve uložených koncertů, při uložení přidej nové místo do adresáře. Sluč shodné položky podle názvu, města a adresy bez diakritiky a velikosti písmen. Výběr doplní místo, město a adresu. Nové místo i adresu lze vyplnit ručně, bez společného katalogu ostatních kapel.
+- Pole **Klub / místo** je před městem. Načti český adresář z `GET https://app.setlister.cz/venue-catalog.json` při prvním otevření našeptávače a ulož poslední úspěšnou verzi pro použití offline. Po nové relaci aplikace načti katalog znovu při prvním použití. Při výpadku použij dostupnou kopii a místa aktivní kapely. Vyhledávej v zařízení bez rozlišování diakritiky a velikosti písmen. Slova mohou být v jiném pořadí a hledají se napříč názvem, městem, adresou, krajem a PSČ. Upřednostni shodu názvu, potom částečné shody. Při stejné úrovni shody zobraz místa kapely jako první. Zobraz nejvýše osm výsledků s městem, adresou a krajem, pokud je k dispozici. Pro prázdný dotaz nabídni jen místa aktivní kapely.
+- Kapelní adresář `state.venues` obsahuje až 2 000 položek `{name, city, address}`. Nabídni i místa z dříve uložených koncertů. Při zobrazení slouč shodné položky podle názvu, města a adresy po normalizaci mezer, interpunkce, diakritiky a velikosti písmen. Když je k dispozici adresa pro stejný název a město, vynech variantu s prázdnou adresou. Výběr doplní název, město a adresu, vše zůstává ručně upravitelné. Do kapelního adresáře se uloží pouze místo z uloženého koncertu, nikdy celý celostátní katalog ani místa jiných kapel.
 - `showDurationMinutes` je volitelné celé číslo 1 až 1439. Z `showStart` a délky vypočítej `showEnd`; u konce po půlnoci ukaž další den. U starších koncertů bez tohoto pole dopočítej délku z uloženého začátku a konce a zachovej použitelný starší konec. Bez nové délky a bez staršího konce nech konec prázdný. Kalendářový export používá stejný výpočet.
 - Ve formuláři koncertu přidá Enter nebo tlačítko položku výbavy jako odebratelný štítek. Při úpravě zachovej `id` a `done` ponechaných položek. V datech zůstávají štítky výbavy jednotlivými položkami `event.checklist`.
 - Uživatel zadá skutečný začátek a konec, hodnocení 1–5, poznámku a skutečné pořadí skladeb. Automatický přesun nevyplňuje skutečný průběh.
@@ -378,6 +379,7 @@ Webové API dnes používá zabezpečenou HttpOnly cookie `setlister_session`, `
 | `POST` | `/invoices` | `{bandId,eventId,revision,description,issueDate,dueDate,number?,variableSymbol?,vatRate?,taxDate?}`. Vrací `{invoice}`, částky `totalMinor`, `netMinor`, `vatMinor` jsou v setinách měny. Konflikt revize má stav 409. |
 | `GET` | `/invoice.pdf?bandId=…&eventId=…` | Stáhne PDF uloženého dokladu. |
 | `GET` | `/workspace?bandId=...` | vrátí kapelu, roli, účty členů, subscription, `state`, `revision` |
+| `GET` | `https://app.setlister.cz/venue-catalog.json` | Veřejný čtecí katalog `{version:1, updatedAt:"YYYY-MM-DD", venues:[{name, city, address, region, postalCode?, source}]}`. `source` je URL podkladu k adrese. |
 | `PUT` | `/band-state` | `{bandId,revision,state}`; atomicky uloží JSON a zvýší revizi |
 | `GET` | `/calendar-feed?bandId=…` | Vrátí `{url}` s HTTPS odkazem daného účtu, nebo prázdnou hodnotou. |
 | `POST` | `/calendar-feed` | `{bandId,enabled}` vytvoří nebo zruší vlastní odkaz. |
