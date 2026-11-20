@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.6
+
+- Marketingová stránka představuje aktuální funkce Setlisteru a ukazuje editor setlistu i kapelní kalendář na ukázkových datech.
+
 ## 0.13.5
 
 - Šablona nového koncertu předvyplňuje pouze výbavu. Organizační úkoly se přidávají ručně u konkrétního koncertu.

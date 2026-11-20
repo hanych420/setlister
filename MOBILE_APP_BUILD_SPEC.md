@@ -1,8 +1,10 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.13.5 · aktualizováno 20. 11. 2026
+> Stav specifikace: 0.13.6 · aktualizováno 20. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
+>
+> Veřejná stránka `setlister.cz` představuje funkce a obsahuje lokální demo. Přihlášení, sdílená kapelní data a mobilní integrace používají `app.setlister.cz`.
 
 ## Prompt pro AI vývojáře
 

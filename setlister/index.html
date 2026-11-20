@@ -4,18 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0c0d0e">
-  <meta name="description" content="Setlister pomáhá kapelám skládat setlisty, hlídat délku koncertu a připravit čitelné podklady pro každého člena.">
-  <title>Setlister — setlist bez chaosu</title>
+  <meta name="description" content="Skládej setlisty, připrav osobní podklady na pódium a spravuj koncerty, zkoušky, úkoly i faktury v jednom kapelním prostoru.">
+  <title>Setlister — setlisty, koncerty a zkoušky pro kapely</title>
   <link rel="icon" href="/brand/logo-mark.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/mvp-icon-192.png">
-  <link rel="manifest" href="/manifest.webmanifest?v=0.7.0">
-  <link rel="stylesheet" href="/mvp.css?v=0.7.0">
+  <link rel="manifest" href="/manifest.webmanifest?v=0.8.0">
+  <link rel="stylesheet" href="/mvp.css?v=0.8.0">
 </head>
 <body>
   <header class="site-header">
     <a class="wordmark" href="#top" aria-label="Setlister — domů"><img src="/brand/logo-mark.svg" alt=""><strong>Setlister</strong></a>
     <nav aria-label="Hlavní navigace">
-      <a href="#produkt">Produkt</a><a href="#demo">Demo</a><a href="#agent">Mailový agent</a><a href="#kontakt">Kontakt</a>
+      <a href="#produkt">Funkce</a><a href="#koncerty">Koncerty</a><a href="#demo">Demo</a><a href="#agent">Mailový agent</a><a href="#kontakt">Kontakt</a>
     </nav>
     <a class="button button-primary header-cta" href="https://app.setlister.cz">Otevřít aplikaci</a>
   </header>
@@ -23,42 +23,44 @@
   <main id="top">
     <section class="hero">
       <div class="hero-copy">
-        <p class="eyebrow">Pracovní prostor pro celou kapelu</p>
-        <h1>Setlist bez chaosu.<br><em>Kapela připravená.</em></h1>
-        <p class="hero-lead">Repertoár, délky skladeb, energie setu a osobní poznámky na jednom místě. Od první zkoušky až po čitelný setlist na pódiu.</p>
+        <h1>Setlisty, zkoušky <em>a koncerty.</em></h1>
+        <p class="hero-lead">Slož set a vytiskni každému vlastní pódiové pokyny. Na stejném místě naplánuješ zkoušku, rozdělíš úkoly a připravíš celý den koncertu.</p>
         <div class="hero-actions">
-          <a class="button button-primary" href="https://app.setlister.cz">Začít se Setlisterem</a>
+          <a class="button button-primary" href="https://app.setlister.cz">Otevřít aplikaci</a>
           <a class="button button-quiet" href="#demo">Vyzkoušet demo</a>
         </div>
-        <p class="microcopy">Demo funguje bez registrace a ukládá se pouze v tomto prohlížeči.</p>
+        <p class="microcopy">Demo je dostupné bez registrace.</p>
       </div>
-      <div class="hero-stage" aria-label="Ukázka sestaveného setlistu">
-        <div class="stage-grid"></div>
-        <div class="set-card">
-          <header><span>LIVE SET · 45 MIN</span><b>43:20</b></header>
-          <ol>
-            <li><span>01</span><strong>První jiskra</strong><small>ENERGY 4</small></li>
-            <li><span>02</span><strong>Noční linka</strong><small>K2 · ENERGY 3</small></li>
-            <li class="transition">Petr · akustika → elektrika</li>
-            <li><span>03</span><strong>Bez mapy</strong><small>ENERGY 5</small></li>
-            <li><span>04</span><strong>Poslední refrén</strong><small>CLOSER</small></li>
-          </ol>
-          <footer><i></i><span>Připraveno pro celou kapelu</span></footer>
-        </div>
-      </div>
+      <figure class="product-preview hero-preview">
+        <img src="/brand/preview-setlist.jpg" width="1100" height="605" alt="Editor Setlisteru s repertoárem, sestaveným setlistem a ukazatelem délky">
+        <figcaption>Editor setlistu v Setlisteru</figcaption>
+      </figure>
     </section>
 
     <section class="product-section" id="produkt">
       <div class="section-intro">
-        <div><p class="eyebrow">Méně tabulek, více hraní</p><h2>Jedna verze pravdy pro celou kapelu</h2></div>
-        <p>Každý vidí stejné pořadí skladeb, ale dostane právě ty pokyny, které potřebuje.</p>
+        <div><h2>Od repertoáru po pódium</h2></div>
+        <p>Kapela sdílí repertoár a pořadí skladeb. Každý člen má vlastní poznámky a pódiový výtisk.</p>
       </div>
       <div class="feature-grid">
-        <article><span>01</span><h3>Repertoár pod kontrolou</h3><p>Délky, alba, energie, archiv skladeb i hromadný import.</p></article>
-        <article><span>02</span><h3>Chytrá kostra setu</h3><p>Pořadí zohlední energii koncertu a omezí zbytečné změny vybavení.</p></article>
-        <article><span>03</span><h3>Pokyny pro každého</h3><p>Kapo, nástroj, zvuk, vlastní název skladby a osobní poznámky členů.</p></article>
-        <article><span>04</span><h3>Čitelné na pódiu</h3><p>Každý člen dostane vlastní přehled, připravený pro obrazovku i tisk.</p></article>
+        <article><h3>Repertoár</h3><p>Importuj skladby z Excelu. Eviduj alba, délky, BPM, energii a roli ve vystoupení. Starší skladby můžeš archivovat.</p></article>
+        <article><h3>Skládání setlistu</h3><p>Přesouvej skladby a sleduj celkový čas včetně pauz. Návrh pořadí zohlední energii setu a změny nástrojů nebo kapodastru.</p></article>
+        <article><h3>Osobní výtisky A4</h3><p>Připrav čisté kopie i výtisky pro jednotlivé členy s poznámkami, kapem, presety a připomínkami přeladění nebo výměny nástroje.</p></article>
+        <article><h3>Společná zkouška</h3><p>Označte, co potřebuje dopilovat. Podle připravenosti skladeb si nechte navrhnout plán zkoušky a projděte set se synchronizovaným metronomem.</p></article>
+        <article><h3>Kapelní úkoly</h3><p>Rozděl práci podle lidí a termínů. Organizační checklist u koncertu používá stejné položky jako společný seznam úkolů.</p></article>
+        <article><h3>Honoráře a faktury</h3><p>Zapiš honorář k vystoupení, načti údaje pořadatele podle IČO z ARES a vystav fakturu v PDF.</p></article>
       </div>
+    </section>
+
+    <section class="product-section concert-section" id="koncerty">
+      <div class="section-intro">
+        <div><h2>Celý den koncertu v kalendáři</h2></div>
+        <p>Přiřaď uložený setlist a zapiš příjezd, zvukovku a čas hraní. Oblíbenou výbavu můžeš předvyplnit u každého nového koncertu.</p>
+      </div>
+      <figure class="product-preview calendar-preview">
+        <img src="/brand/preview-kalendar.jpg" width="1098" height="641" loading="lazy" alt="Kapelní kalendář Setlisteru s měsíčním přehledem koncertů">
+        <figcaption>Kapelní kalendář můžeš odebírat v Apple nebo Google Kalendáři.</figcaption>
+      </figure>
     </section>
 
     <section class="demo-section" id="demo">
@@ -97,23 +99,23 @@
 
     <section class="agent-section" id="agent">
       <div class="agent-copy">
-        <p class="eyebrow">Read-only mailový agent</p>
-        <h2>Odpovědi z kapelní komunikace, ne další hledání.</h2>
-        <p>Připojíš až dva kapelní Gmaily a jednoduše se zeptáš. Agent najde čas příjezdu, místo koncertu, domluvený honorář, chybějící fakturu nebo zprávu, na kterou jste možná zapomněli odpovědět.</p>
+        <p class="eyebrow">Mailový agent · beta</p>
+        <h2>Zeptej se, co jste si domluvili.</h2>
+        <p>Připoj až dvě kapelní schránky Gmail. Zeptej se na příjezd, domluvený honorář nebo zprávu, která čeká na odpověď. Agent odpovídá podle dohledaných e-mailů a odkazuje na zdroje.</p>
       </div>
       <div class="question-stack" aria-label="Příklady dotazů">
         <blockquote>„V kolik máme být 23. 1. na koncertě v Olomouci?“</blockquote>
         <blockquote>„Nečeká někdo na fakturu nebo naši odpověď?“</blockquote>
         <blockquote>„Jaké potvrzené koncerty nás čekají v únoru?“</blockquote>
-        <small>Agent nikdy nebude e-maily odesílat, upravovat ani mazat.</small>
+        <small>Přístup ke Gmailu je pouze pro čtení.</small>
       </div>
     </section>
 
     <section class="early-section">
       <div>
         <p class="eyebrow">Začni s kapelou</p>
-        <h2>Jeden účet. Jedna kapela. Stejná data na každém zařízení.</h2>
-        <p>Založ kapelu nebo se připoj pozvánkovým kódem. Předplatné bude vždy patřit kapele, takže jej nebude potřeba kupovat zvlášť na webu, Androidu a iPhonu.</p>
+        <h2>Pozvi kapelu do Setlisteru.</h2>
+        <p>Založ kapelu a pošli ostatním pozvánkový kód. Po přihlášení uvidíte společný repertoár, uložené setlisty i plán koncertů v prohlížeči na počítači a v telefonu.</p>
       </div>
       <div class="access-card">
         <span>SETLISTER</span><strong>Kapelní prostor</strong>
@@ -125,7 +127,7 @@
     <section class="contact-section" id="kontakt">
       <div>
         <p class="eyebrow">Kontakt</p><h2>Napiš nám, co tvoje kapela potřebuje.</h2>
-        <p>Dotaz, nápad nebo zájem o dřívější přístup. Zpráva přijde přímo týmu Setlisteru.</p>
+        <p>Máš dotaz nebo nápad na zlepšení? Napiš nám přes formulář.</p>
       </div>
       <form class="contact-form" id="contactForm">
         <div class="form-grid"><label>Jméno<input name="name" maxlength="80" autocomplete="name" required></label><label>E-mail<input name="email" type="email" maxlength="160" autocomplete="email" required></label></div>
@@ -139,9 +141,9 @@
 
   <footer class="site-footer">
     <a class="wordmark" href="#top"><img src="/brand/logo-mark.svg" alt=""><strong>Setlister</strong></a>
-    <p>Setlisty, které drží kapelu pohromadě.</p><a href="#kontakt">Kontakt</a>
+    <p>Setlisty, koncerty a zkoušky pro kapely.</p><a href="#kontakt">Kontakt</a>
   </footer>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/mvp.js?v=0.7.0"></script>
+  <script src="/mvp.js?v=0.8.0"></script>
 </body>
 </html>

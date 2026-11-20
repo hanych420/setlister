@@ -2579,7 +2579,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.13.5"
+    server_version = "Setlister/0.13.6"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
