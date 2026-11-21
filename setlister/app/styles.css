@@ -297,3 +297,103 @@ dialog{width:min(480px,calc(100% - 30px));border:1px solid #3a3f43;border-radius
 #eventGearStatus:empty,#defaultGearStatus:empty{display:none}
 #eventEndPreview{color:var(--lime)}
 @media(max-width:630px){.task-filters{grid-template-columns:minmax(0,1fr)}}
+
+/* Song selection and batch editor */
+.bulk-song-selection {
+  display:flex; align-items:center; flex-wrap:wrap; gap:12px;
+  margin:12px 0; padding:12px; border:1px solid var(--line);
+  border-radius:12px; color:var(--muted); background:var(--surface);
+}
+.bulk-song-selection > button {margin-inline-start:auto}
+.repertoire-row.repertoire-row-selectable {grid-template-columns:auto minmax(0,1fr) auto auto auto}
+.repertoire-row-selectable > input {width:18px;height:18px;accent-color:var(--lime);cursor:pointer}
+.repertoire-row-selectable:has(> input:checked) {border-color:#59662e;background:#171b12}
+dialog.bulk-song-dialog {width:min(1220px,calc(100% - 24px));max-width:none}
+.bulk-song-dialog .dialog-form {gap:12px;margin-top:12px}
+.bulk-song-dialog .field-help,.bulk-song-dialog .form-status {margin:0}
+.bulk-song-scroll {
+  overflow:auto; max-height:60vh; max-height:60dvh;
+  border:1px solid var(--line); border-radius:12px;
+}
+.bulk-song-table {width:100%;min-width:970px;border-collapse:separate;border-spacing:0;text-align:left}
+.bulk-song-table th {
+  position:sticky;top:0;z-index:2;padding:12px 9px;
+  color:var(--muted);background:var(--raised);font-size:.73rem;
+}
+.bulk-song-table td {padding:8px 6px;border-top:1px solid var(--line);vertical-align:top}
+.bulk-song-table td:first-child {width:21%}
+.bulk-song-table td:nth-child(2),.bulk-song-table td:nth-child(6) {width:14%}
+.bulk-song-table td:nth-child(n+3):nth-child(-n+5) {width:8%}
+.bulk-song-table td > input,.bulk-song-table td > textarea,.bulk-song-table .custom-select-trigger {width:100%;min-width:0}
+.bulk-song-table td > textarea {min-height:42px;resize:vertical}
+.bulk-song-table .custom-select.open .custom-select-menu {position:relative;top:auto;margin-top:4px}
+
+.readiness-filters {
+  display:grid; grid-template-columns:minmax(180px,1fr) repeat(2,minmax(150px,.8fr)) auto;
+  gap:9px; align-items:end; margin:12px 0 8px;
+}
+.readiness-filters label {display:grid;gap:6px;min-width:0;color:var(--muted);font-size:.7rem;font-weight:750}
+.readiness-filters input,.readiness-filters .custom-select-trigger {min-height:42px}
+.readiness-result {margin:4px 0 8px}
+@media(max-width:1050px) {
+  .readiness-filters {grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:620px) {
+  .readiness-filters > label:first-child {grid-column:1/-1}
+  .readiness-filters .custom-select-trigger {font-size:.68rem}
+  .repertoire-row.repertoire-row-selectable {grid-template-columns:auto minmax(0,1fr) auto}
+  .repertoire-row-selectable .repertoire-actions {grid-column:2/-1}
+  .bulk-song-selection > button {margin-inline-start:0}
+}
+
+.live-toolbar {display:flex;align-items:center;gap:14px}
+.live-toolbar .live-position {flex:1;min-width:0}
+.live-song-card {transform:translateX(var(--live-swipe,0px));transition:transform 160ms ease-out;overflow-wrap:anywhere}
+.live-song-card.is-dragging {transition:none}
+.live-song-shell:has(.is-dragging) {overflow:clip}
+dialog.live-focus-dialog {
+  inset:0;width:100%;height:100%;height:100dvh;max-width:none;max-height:none;margin:0;
+  border:0;border-radius:0;padding:0;overflow:auto;background:#0d0f10;
+}
+.live-focus-dialog .live-stage {
+  width:100%;height:100%;margin:0;padding:clamp(12px,3vw,32px);
+  display:grid;grid-template-rows:auto minmax(min-content,1fr) auto;
+  gap:12px;overflow:auto;background:#0d0f10;
+}
+.live-focus-dialog .live-stage:fullscreen {max-width:none;max-height:none}
+.live-focus-dialog .live-song-shell {align-items:stretch}
+.live-focus-dialog .live-arrow {align-self:center}
+.live-focus-dialog .live-song-card {
+  display:grid;align-content:center;min-height:0;box-shadow:none;padding:clamp(20px,4vh,44px);
+}
+.live-focus-dialog .live-song-card h2 {font-size:clamp(2.6rem,8vw,7rem)}
+.live-focus-dialog .metronome-card {
+  grid-template-columns:minmax(110px,.65fr) minmax(0,2fr) auto;align-items:center;
+  gap:8px 16px;padding:12px 16px;
+}
+.live-focus-dialog .metronome-card h2 {font-size:1.12rem;margin:0}
+.live-focus-dialog .metronome-card > div:first-child p {display:none}
+.live-focus-dialog .metronome-controls {
+  grid-template-columns:minmax(62px,.65fr) minmax(86px,1fr) repeat(3,auto);
+  align-items:end;
+}
+.live-focus-dialog .beat-dots {grid-column:auto;gap:8px}
+.live-focus-dialog .beat-dots i {width:11px;height:11px}
+.live-focus-dialog .metronome-note {text-align:left}
+@media(max-width:860px) {
+  .live-focus-dialog .metronome-card {grid-template-columns:1fr auto}
+  .live-focus-dialog .metronome-controls {grid-row:2;grid-column:1/-1}
+}
+@media(max-width:600px) {
+  .live-focus-dialog .live-song-shell {grid-template-columns:1fr 1fr;gap:6px}
+  .live-focus-dialog .live-song-card {grid-column:1/-1;grid-row:1}
+  .live-focus-dialog .live-arrow {position:static;width:100%;height:40px;border-radius:10px}
+  .live-focus-dialog .live-song-card > small {display:none}
+  .live-focus-dialog .live-instructions {margin-top:12px}
+  .live-focus-dialog .metronome-controls {grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}
+  .live-focus-dialog .metronome-controls > label {grid-column:span 3}
+  .live-focus-dialog .metronome-controls > button {grid-column:span 2;padding:0 5px;font-size:.64rem}
+}
+@media(prefers-reduced-motion:reduce) {
+  .live-song-card,.live-position-track i {transition:none}
+}

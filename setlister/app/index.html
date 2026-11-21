@@ -9,7 +9,7 @@
   <link rel="icon" href="/brand/logo-mark.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=0.13.7">
+  <link rel="stylesheet" href="/styles.css?v=0.13.8">
 </head>
 <body>
   <header class="app-header">
@@ -61,9 +61,13 @@
         </section>
 
         <section class="app-view" data-app-view="repertoire">
-          <header class="view-header"><div><p class="eyebrow">Knihovna kapely</p><h1>Repertoár</h1></div><button class="secondary-button" id="openBulkImport" type="button">Hromadně importovat</button></header>
+          <header class="view-header"><div><p class="eyebrow">Knihovna kapely</p><h1>Repertoár</h1></div><div class="button-row"><button class="secondary-button" id="toggleBulkSongs" type="button" aria-pressed="false">Hromadně upravit</button><button class="secondary-button" id="openBulkImport" type="button">Hromadně importovat</button></div></header>
           <form class="repertoire-form" id="appSongForm"><label>Název skladby<input name="title" maxlength="120" required></label><label>Album<input name="album" maxlength="120" placeholder="Singl / album"></label><label>Délka<input name="duration" inputmode="numeric" placeholder="3:30" value="3:30" required></label><label>BPM<input name="bpm" type="number" inputmode="numeric" min="1" max="300" placeholder="120"></label><label>Energie<select name="energy"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label><label>Role v setu<select name="role"><option value="standard">Běžná</option><option value="opener">Otevírací</option><option value="encore">Přídavková</option><option value="closer">Závěrečná</option></select></label><button class="primary-button" type="submit">Přidat skladbu</button></form>
-          <p class="section-help">Poznámky, nástroj a kapodastr se nastavují pro každého člena zvlášť přes „Pokyny členů“.</p><label class="check-row" id="archivedSongsFilter" hidden><input type="checkbox" id="showArchivedSongs"> Zobrazit archivované skladby</label><div class="repertoire-table" id="appRepertoire"></div>
+          <p class="section-help">Poznámky, nástroj a kapodastr se nastavují pro každého člena zvlášť přes „Pokyny členů“.</p><label class="check-row" id="archivedSongsFilter" hidden><input type="checkbox" id="showArchivedSongs"> Zobrazit archivované skladby</label><div class="bulk-song-selection" id="bulkSongSelection" hidden>
+            <label class="check-row"><input id="selectVisibleSongs" type="checkbox"> Vybrat zobrazené</label>
+            <span id="bulkSongCount" role="status"></span>
+            <button class="primary-button compact" id="openBulkSongEdit" type="button" disabled>Upravit vybrané</button>
+          </div><div class="repertoire-table" id="appRepertoire"></div>
         </section>
 
         <section class="app-view" data-app-view="events">
@@ -117,7 +121,7 @@
           </section>
         </section>
 
-        <section class="app-view" data-app-view="live">
+        <section class="app-view" data-app-view="live" id="liveView">
           <header class="view-header"><div><p class="eyebrow">Live režim</p><h1>Zkouška</h1></div><span class="live-sync-state" id="liveSyncState">Metronom je zastavený</span></header>
           <section class="rehearsal-planner" id="rehearsalPlanner" aria-labelledby="rehearsalTitle">
             <div class="planning-heading">
@@ -138,16 +142,28 @@
               <summary>Připravenost členů <span id="rehearsalReadySummary"></span></summary>
               <label class="rehearsal-member-field" id="rehearsalMemberField">Hodnocení člena<select id="rehearsalMember"></select></label>
               <p class="section-help" id="rehearsalMemberHelp"></p>
+              <div class="readiness-filters">
+                <label>Skladba<input id="readinessSearch" type="search" placeholder="Hledat podle názvu"></label>
+                <label>Filtrovat podle člena<select id="readinessFilterMember"></select></label>
+                <label>Stav připravenosti<select id="readinessFilterStatus"><option value="">Všechny stavy</option><option value="ready">Připraveno</option><option value="practice">Dopilovat</option><option value="unlearned">Nenacvičeno</option><option value="unknown">Bez hodnocení</option></select></label>
+                <button class="secondary-button compact" id="clearReadinessFilters" type="button" hidden>Zrušit filtry</button>
+              </div>
+              <p class="section-help readiness-result" id="readinessResult" role="status" hidden></p>
               <div id="rehearsalReadinessRows" class="rehearsal-rows"></div>
             </details>
           </section>
           <h2 class="live-stage-heading">Společné hraní</h2>
           <div class="live-setup"><label>Setlist<select id="liveSetSelect"></select></label><button class="primary-button" id="startLiveSet" type="button">Spustit jako vedoucí</button><button class="quiet-button" id="stopLiveSet" type="button" hidden>Ukončit společný set</button><p><span id="liveLeaderState">Nikdo právě nevede set.</span><br>Osobní pohled: <strong id="liveMemberName">—</strong></p></div>
           <div class="live-empty" id="liveEmpty"><strong>Vyber setlist a spusť zkoušku.</strong><span>Můžeš použít právě skládaný set i kterýkoliv uložený setlist.</span></div>
+          <div id="liveStageHome">
           <div class="live-stage" id="liveStage" hidden>
-            <div class="live-position"><span id="livePosition">1 / 1</span><div class="live-position-track"><i id="livePositionProgress"></i></div></div>
-            <div class="live-song-shell"><button class="live-arrow" id="livePrevious" type="button" aria-label="Předchozí skladba">←</button><article class="live-song-card" id="liveSongCard" tabindex="0"><p id="liveSongRole"></p><div class="tuning-cue" id="liveTuning" hidden></div><h2 id="liveSongTitle">Skladba</h2><div class="live-song-meta" id="liveSongMeta"></div><div class="live-instructions" id="liveInstructions"></div><small>Listuj tažením nebo šipkami. Mezerník posune na další skladbu.</small></article><button class="live-arrow" id="liveNext" type="button" aria-label="Další skladba">→</button></div>
-            <section class="metronome-card"><div><p class="eyebrow">Synchronizovaný klik</p><h2>Kapelní metronom</h2><p>Každý telefon musí nejdřív jednou povolit zvuk. Start se naplánuje společně s dvousekundovým předstihem.</p></div><div class="metronome-controls"><label>BPM<input id="liveBpm" type="number" inputmode="numeric" min="30" max="300" value="120"></label><label>Kalibrace zařízení <span><input id="liveCalibration" type="number" inputmode="numeric" min="-250" max="250" value="0"><b>ms</b></span></label><button class="secondary-button" id="enableLiveAudio" type="button">Povolit zvuk</button><button class="primary-button" id="startSharedMetronome" type="button">Spustit všem</button><button class="quiet-button" id="stopSharedMetronome" type="button">Zastavit</button></div><div class="beat-dots" id="liveBeatDots" aria-label="Doby metronomu"><i></i><i></i><i></i><i></i></div><p class="metronome-note" id="liveMetronomeNote">Pro synchronizaci otevři sekci Zkouška na všech zařízeních.</p></section>
+            <div class="live-toolbar">
+              <div class="live-position"><span id="livePosition">1 / 1</span><div class="live-position-track"><i id="livePositionProgress"></i></div></div>
+              <button class="secondary-button compact" id="toggleLiveFocus" type="button" aria-pressed="false">Celá obrazovka</button>
+            </div>
+            <div class="live-song-shell"><button class="live-arrow" id="livePrevious" type="button" aria-label="Předchozí skladba">←</button><article class="live-song-card" id="liveSongCard" tabindex="0" aria-keyshortcuts="ArrowLeft ArrowRight Space"><p id="liveSongRole"></p><div class="tuning-cue" id="liveTuning" hidden></div><h2 id="liveSongTitle">Skladba</h2><div class="live-song-meta" id="liveSongMeta"></div><div class="live-instructions" id="liveInstructions"></div><small>Listuj tažením nebo šipkami. Mezerník posune na další skladbu.</small></article><button class="live-arrow" id="liveNext" type="button" aria-label="Další skladba">→</button></div>
+            <section class="metronome-card" aria-label="Kapelní metronom"><div><p class="eyebrow">Synchronizovaný klik</p><h2>Kapelní metronom</h2><p>Každý telefon musí nejdřív jednou povolit zvuk. Start se naplánuje společně s dvousekundovým předstihem.</p></div><div class="metronome-controls"><label>BPM<input id="liveBpm" type="number" inputmode="numeric" min="30" max="300" value="120"></label><label>Kalibrace zařízení <span><input id="liveCalibration" type="number" inputmode="numeric" min="-250" max="250" value="0"><b>ms</b></span></label><button class="secondary-button" id="enableLiveAudio" type="button">Povolit zvuk</button><button class="primary-button" id="startSharedMetronome" type="button">Spustit všem</button><button class="quiet-button" id="stopSharedMetronome" type="button">Zastavit</button></div><div class="beat-dots" id="liveBeatDots" aria-label="Doby metronomu"><i></i><i></i><i></i><i></i></div><p class="metronome-note" id="liveMetronomeNote">Pro synchronizaci otevři sekci Zkouška na všech zařízeních.</p></section>
+          </div>
           </div>
         </section>
 
@@ -230,6 +246,23 @@
       </div>
     </section>
   </main>
+
+  <dialog id="liveFocusDialog" class="live-focus-dialog" aria-label="Zkouška na celé obrazovce"></dialog>
+
+  <dialog id="bulkSongDialog" class="wide-dialog bulk-song-dialog" aria-labelledby="bulkSongTitle">
+    <div class="dialog-heading"><h2 id="bulkSongTitle">Hromadná úprava skladeb</h2><button data-close-dialog="bulkSongDialog" aria-label="Zavřít" type="button">×</button></div>
+    <form class="dialog-form" id="bulkSongForm" novalidate>
+      <p class="field-help">Každý řádek je jedna skladba. Nepotřebné BPM smažeš vyprázdněním pole. Štítky zadávej po jednom na řádek jako „Název: hodnota“.</p>
+      <div class="bulk-song-scroll" role="region" aria-label="Vybrané skladby" tabindex="0">
+        <table class="bulk-song-table">
+          <thead><tr><th scope="col">Název</th><th scope="col">Album</th><th scope="col">Délka</th><th scope="col">BPM</th><th scope="col">Energie</th><th scope="col">Role</th><th scope="col">Štítky pro všechny</th></tr></thead>
+          <tbody id="bulkSongRows"></tbody>
+        </table>
+      </div>
+      <p class="form-status" id="bulkSongStatus" role="status"></p>
+      <div class="dialog-actions"><button class="secondary-button" data-close-dialog="bulkSongDialog" type="button">Zrušit</button><button class="primary-button" id="saveBulkSongs" type="submit">Uložit změny</button></div>
+    </form>
+  </dialog>
 
   <dialog id="bandDialog"><div class="dialog-heading"><h2>Moje kapely</h2><button id="closeBandDialog" aria-label="Zavřít" type="button">×</button></div><div id="bandList" class="band-list"></div><button class="secondary-button" id="showOnboarding" type="button">Přidat další kapelu</button></dialog>
 
@@ -375,8 +408,8 @@
 
   <div id="printRoot" aria-hidden="true"></div>
   <div class="toast" id="appToast" role="status" aria-live="polite"></div>
-  <script src="/planning.js?v=0.13.7"></script>
-  <script src="/legacy-import.js?v=0.13.7"></script>
-  <script src="/app.js?v=0.13.7"></script>
+  <script src="/planning.js?v=0.13.8"></script>
+  <script src="/legacy-import.js?v=0.13.8"></script>
+  <script src="/app.js?v=0.13.8"></script>
 </body>
 </html>

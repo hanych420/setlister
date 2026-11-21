@@ -38,10 +38,16 @@
   let bandCalendarDate = new Date();
   let calendarFeedBand = "";
   let rehearsalPlanShown = false;
+  let selectingBulkSongs = false;
+  const selectedBulkSongs = new Set();
+  let bulkSongEdit = null;
   let smartOrderDraft = [];
   let liveSongIds = [];
   let liveSongIndex = 0;
   let liveSwipeStart = null;
+  let liveSwipeAnimation = null;
+  let liveNativeFullscreen = false;
+  let liveMoveRequest = null;
   let liveAudioContext = null;
   let liveSession = { status: "stopped", bpm: 120, startedAtMs: 0, leaderName: "" };
   let liveSessionRevision = 0;
@@ -203,6 +209,11 @@
         rehearsalPlanShown = false;
         elements.rehearsalScope.value = "";
         elements.rehearsalMember.value = "";
+        resetReadinessFilters();
+        selectingBulkSongs = false;
+        selectedBulkSongs.clear();
+        if (elements.bulkSongDialog.open) elements.bulkSongDialog.close();
+        resetLiveSet();
         elements.taskCategoryFilter.value = "";
         elements.taskAssigneeFilter.value = "";
         elements.taskStateFilter.value = "all";
@@ -339,6 +350,7 @@
     const target = Math.max(1, Number(state.draft.targetMinutes) || 45) * 60;
     elements.appTotalTime.textContent = formatTime(total); elements.appTargetLabel.textContent = "z " + formatTime(target); elements.appTargetMinutes.value = String(state.draft.targetMinutes || 45); elements.appProgress.style.width = Math.min(100, total / target * 100) + "%"; elements.appProgress.classList.toggle("over", total > target);
     renderRepertoire(); renderSettings(); renderSavedSetlists(); renderEvents(); renderLiveSetup();
+    if (!elements.liveStage.hidden) renderLiveSong();
     if (elements.rehearsalPlanner.closest(".app-view").classList.contains("active")) renderRehearsalPlanner();
     if (elements.taskForm.closest(".app-view").classList.contains("active")) renderTasks();
     if (!elements.bandCalendar.hidden) renderBandCalendar();
@@ -391,15 +403,177 @@
     changed();
   }
   function renderRepertoire() {
-    const songs = workspace.state.songs.filter(song => !song.archived || elements.showArchivedSongs.checked);
+    const songs = visibleRepertoireSongs();
+    for (const id of selectedBulkSongs) {
+      if (!workspace.state.songs.some(song => song.id === id)) selectedBulkSongs.delete(id);
+    }
     elements.archivedSongsFilter.hidden = !workspace.state.songs.some(song => song.archived);
     elements.appRepertoire.replaceChildren(...songs.map(song => {
       const row = document.createElement("article"); row.className = "repertoire-row";
+      if (selectingBulkSongs) {
+        row.classList.add("repertoire-row-selectable");
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.dataset.songId = song.id;
+        checkbox.setAttribute("aria-label", "Vybrat " + song.title);
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) selectedBulkSongs.add(song.id);
+          else selectedBulkSongs.delete(song.id);
+          updateBulkSongSelection(songs);
+        });
+        row.append(checkbox);
+      }
       const title = document.createElement("div"); const strong = document.createElement("strong"); strong.textContent = song.title; const album = document.createElement("span"); album.className = "song-note"; album.textContent = [song.album || "Bez alba", song.archived ? "Archivovaná" : ""].filter(Boolean).join(" · "); title.append(strong, album);
       const energy = document.createElement("span"); energy.className = "energy"; energy.textContent = "Energie " + song.energy;
       const meta = document.createElement("small"); meta.textContent = [songDurationLabel(song), song.bpm ? song.bpm + " BPM" : "", song.role !== "standard" ? ROLE_LABELS[song.role] : ""].filter(Boolean).join(" · ");
       const actions = document.createElement("div"); actions.className = "repertoire-actions"; actions.append(iconAction("edit", "Upravit skladbu", () => openSongDialog(song.id)), iconAction("member", "Poznámky členů", () => openNotesDialog(song.id)), rowButton("×", "Odstranit skladbu", () => deleteSong(song.id))); row.append(title, energy, meta, actions); return row;
     }));
+    updateBulkSongSelection(songs);
+  }
+  function visibleRepertoireSongs() {
+    return workspace.state.songs.filter(song => !song.archived || elements.showArchivedSongs.checked);
+  }
+  function updateBulkSongSelection(songs) {
+    const visibleCount = songs.filter(song => selectedBulkSongs.has(song.id)).length;
+    elements.bulkSongSelection.hidden = !selectingBulkSongs;
+    elements.toggleBulkSongs.setAttribute("aria-pressed", String(selectingBulkSongs));
+    elements.toggleBulkSongs.textContent = selectingBulkSongs ? "Ukončit výběr" : "Hromadně upravit";
+    elements.selectVisibleSongs.disabled = !songs.length;
+    elements.selectVisibleSongs.checked = songs.length > 0 && visibleCount === songs.length;
+    elements.selectVisibleSongs.indeterminate = visibleCount > 0 && visibleCount < songs.length;
+    elements.bulkSongCount.textContent = "Vybrané skladby: " + selectedBulkSongs.size;
+    elements.openBulkSongEdit.disabled = !selectedBulkSongs.size;
+    elements.appRepertoire.querySelectorAll("input[data-song-id]").forEach(checkbox => {
+      checkbox.checked = selectedBulkSongs.has(checkbox.dataset.songId);
+    });
+  }
+  function openBulkSongEdit() {
+    const songs = workspace.state.songs.filter(song => selectedBulkSongs.has(song.id));
+    if (!songs.length) return;
+    const labels = { title: "Název", album: "Album", duration: "Délka", bpm: "BPM",
+      energy: "Energie", role: "Role", tags: "Štítky pro všechny" };
+    const rows = songs.map((song, index) => {
+      const initial = {
+        title: song.title, album: song.album || "", duration: song.durationUnknown ? "" : formatTime(song.seconds),
+        bpm: song.bpm ? String(song.bpm) : "", energy: String(song.energy), role: song.role,
+        tags: song.printFields.map(field => field.label ? field.label + ": " + field.value : field.value).join("\n")
+      };
+      const row = document.createElement("tr");
+      const inputs = {};
+      for (const [key, label] of Object.entries(labels)) {
+        const cell = document.createElement("td");
+        const input = document.createElement(key === "role" ? "select" : key === "tags" ? "textarea" : "input");
+        input.setAttribute("aria-label", label + " – " + song.title);
+        if (key === "role") {
+          input.id = "bulk-song-role-" + index;
+          input.append(...Object.entries(ROLE_LABELS).map(([value, text]) => option(value, text)));
+        }
+        if (key === "tags") { input.rows = 2; input.maxLength = 800; }
+        if (key === "title" || key === "album") input.maxLength = 120;
+        if (["duration", "energy", "bpm"].includes(key)) input.inputMode = "numeric";
+        if (key === "duration") input.placeholder = "3:30";
+        input.value = initial[key];
+        cell.append(input);
+        row.append(cell);
+        inputs[key] = input;
+      }
+      return { id: song.id, row, inputs, initial };
+    });
+    bulkSongEdit = { bandId: activeBandId, rows };
+    elements.bulkSongRows.replaceChildren(...rows.map(item => item.row));
+    showStatus(elements.bulkSongStatus, "");
+    enhanceSelects(elements.bulkSongRows);
+    elements.bulkSongDialog.showModal();
+    rows[0].inputs.title.focus();
+  }
+  function bulkSongChanges(row, song) {
+    const { initial, inputs } = row;
+    const change = {};
+    const value = key => inputs[key].value.trim();
+    const changed = key => inputs[key].value !== initial[key];
+    function check(key, valid, message) {
+      if (valid) return;
+      if (inputs[key].tagName === "SELECT") inputs[key].nextElementSibling.querySelector("button")?.focus();
+      else inputs[key].focus();
+      throw new Error(song.title + " · " + message);
+    }
+    if (changed("title")) {
+      check("title", value("title").length > 0, "Zadej název skladby.");
+      change.title = value("title");
+    }
+    if (changed("album")) change.album = value("album");
+    if (changed("duration")) {
+      const seconds = parseDuration(value("duration"));
+      check("duration", seconds > 0 && seconds <= 3600, "Délku zadej jako 3:30 nebo počet sekund (nejvýše 3600).");
+      change.seconds = seconds;
+    }
+    if (changed("bpm")) {
+      const bpm = Number(value("bpm"));
+      check("bpm", !value("bpm") || /^\d+$/.test(value("bpm")) && bpm >= 1 && bpm <= 300, "Zadej celé BPM od 1 do 300.");
+      change.bpm = bpm;
+    }
+    if (changed("energy")) {
+      check("energy", /^[1-5]$/.test(value("energy")), "Zadej energii od 1 do 5.");
+      change.energy = Number(value("energy"));
+    }
+    if (changed("role")) change.role = value("role");
+    if (changed("tags")) {
+      const lines = value("tags").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      check("tags", lines.length <= 8, "Skladba může mít nejvýše osm štítků.");
+      change.printFields = lines.map(line => {
+        const separator = line.indexOf(":");
+        const label = separator >= 0 ? line.slice(0, separator).trim() : "";
+        const fieldValue = separator >= 0 ? line.slice(separator + 1).trim() : line;
+        check("tags", label.length <= 32 && fieldValue.length <= 64, "Název štítku má nejvýše 32 znaků a hodnota 64.");
+        return { id: uid("field"), label, value: fieldValue };
+      });
+    }
+    return change;
+  }
+  async function saveBulkSongEdit(event) {
+    event.preventDefault();
+    const edit = bulkSongEdit;
+    if (!edit || elements.saveBulkSongs.disabled) return;
+    elements.saveBulkSongs.disabled = true;
+    showStatus(elements.bulkSongStatus, "");
+    try {
+      if (!await flushWorkspace() || workspace?.band.id !== edit.bandId || activeBandId !== edit.bandId) {
+        throw new Error("Předchozí změny se neuložily. Zkus uložení znovu.");
+      }
+      const target = workspace;
+      const state = structuredClone(target.state);
+      const songs = new Map(state.songs.map(song => [song.id, song]));
+      let count = 0;
+      for (const row of edit.rows) {
+        const song = songs.get(row.id);
+        if (!song) throw new Error("Skladba „" + row.initial.title + "“ už v repertoáru není.");
+        const change = bulkSongChanges(row, song);
+        if (!Object.keys(change).length) continue;
+        Object.assign(song, change);
+        if (Object.hasOwn(change, "seconds")) delete song.durationUnknown;
+        count += 1;
+      }
+      if (count) {
+        const result = await api("/band-state", {
+          method: "PUT", body: JSON.stringify({ bandId: edit.bandId, revision, state })
+        });
+        if (workspace !== target || activeBandId !== edit.bandId) return;
+        target.state = state;
+        revision = result.revision;
+        elements.saveState.textContent = "Uloženo";
+      }
+      if (bulkSongEdit === edit) elements.bulkSongDialog.close();
+      selectingBulkSongs = false;
+      selectedBulkSongs.clear();
+      renderWorkspace();
+      elements.toggleBulkSongs.focus();
+      showToast(count ? "Upravené skladby: " + count : "Žádná skladba se nezměnila.");
+    } catch (error) {
+      if (error.message.includes("Konflikt") && activeBandId === edit.bandId) await loadWorkspace();
+      if (bulkSongEdit === edit) showStatus(elements.bulkSongStatus, error.message);
+    } finally {
+      elements.saveBulkSongs.disabled = false;
+    }
   }
   function deleteSong(id) {
     const song = workspace.state.songs.find(item => item.id === id); if (!song || !window.confirm("Opravdu odstranit skladbu „" + song.title + "“?")) return;
@@ -590,14 +764,41 @@
     elements.rehearsalMemberHelp.textContent = state.members.length
       ? "Pro vlastní hodnocení propoj účet se členem v sekci Kapela a účet."
       : "Nejdřív přidej pódiové členy v sekci Kapela a účet.";
+    const currentFilterMember = elements.readinessFilterMember.value;
+    elements.readinessFilterMember.replaceChildren(option("", "Všichni členové"),
+      ...state.members.map(member => option(member.id, member.name)));
+    elements.readinessFilterMember.value = state.members.some(member => member.id === currentFilterMember)
+      ? currentFilterMember : "";
     const readyCount = state.members.length ? songs.filter(song =>
       state.members.every(member => song.readiness?.[member.id] === "ready")).length : 0;
     elements.rehearsalReadySummary.textContent = `${readyCount} / ${songs.length} skladeb připraveno`;
-    const rows = songs.map(song => {
+    renderRehearsalReadiness(songs);
+    if (rehearsalPlanShown) renderRehearsalPreview(songs);
+    else elements.rehearsalPlanPreview.hidden = true;
+  }
+  function resetReadinessFilters() {
+    elements.readinessSearch.value = "";
+    elements.readinessFilterMember.value = "";
+    elements.readinessFilterStatus.value = "";
+  }
+  function renderRehearsalReadiness(songs = scopedRehearsalSongs(elements.rehearsalScope.value)) {
+    const { members } = workspace.state;
+    const memberId = elements.rehearsalMember.value;
+    const filterMemberId = elements.readinessFilterMember.value;
+    const filterMembers = filterMemberId ? members.filter(member => member.id === filterMemberId) : members;
+    const query = normalizedText(elements.readinessSearch.value);
+    const status = elements.readinessFilterStatus.value;
+    const filtering = Boolean(query || filterMemberId || status);
+    const matched = songs.filter(song => normalizedText(song.title).includes(query) &&
+      (!status || filterMembers.some(member => (song.readiness?.[member.id] || "unknown") === status)));
+    elements.clearReadinessFilters.hidden = !filtering;
+    elements.readinessResult.hidden = !filtering;
+    elements.readinessResult.textContent = "Zobrazeno: " + matched.length + " z " + songs.length;
+    const rows = matched.map(song => {
       const row = mailNode("div", "planning-row");
       const info = mailNode("div");
       info.append(mailNode("strong", "", song.title));
-      const groups = SetlisterPlanning.readiness(song, state.members);
+      const groups = SetlisterPlanning.readiness(song, filterMembers);
       for (const [key, label] of Object.entries({ ...SetlisterPlanning.readinessLabels, unknown: "Bez hodnocení" })) {
         if (!groups[key].length) continue;
         info.append(mailNode("small", "readiness-" + key, label + " · " + groups[key].map(member => member.name).join(", ")));
@@ -623,9 +824,8 @@
       return row;
     });
     elements.rehearsalReadinessRows.replaceChildren(...(rows.length ? rows :
-      [mailNode("p", "section-help", "Ve vybraném setlistu nejsou žádné skladby.")]));
-    if (rehearsalPlanShown) renderRehearsalPreview(songs);
-    else elements.rehearsalPlanPreview.hidden = true;
+      [mailNode("p", "section-help", songs.length ? "Filtrům neodpovídá žádná skladba." : "Ve vybraném výběru nejsou žádné skladby.")]));
+    enhanceSelects(elements.rehearsalReadinessRows);
   }
   function renderRehearsalPreview(songs = scopedRehearsalSongs(elements.rehearsalScope.value)) {
     const minutes = Number(elements.rehearsalMinutes.value);
@@ -1788,14 +1988,65 @@
   function renderLiveSetup() {
     if (!workspace) return; const current = elements.liveSetSelect.value || "draft"; const options = [option("draft", "Aktuální set — " + workspace.state.draft.name), ...workspace.state.savedSetlists.map(set => option("saved:" + set.id, set.name))]; elements.liveSetSelect.replaceChildren(...options); elements.liveSetSelect.value = options.some(item => item.value === current) ? current : "draft"; elements.liveMemberName.textContent = liveMember()?.name || "Bez přiřazeného člena";
     const shared = liveSession.liveSet || {}; elements.liveLeaderState.textContent = shared.active ? (isLiveLeader() ? "Vedeš společný set · " + shared.setlistName : "Set vede " + (shared.leaderName || "člen kapely") + " · " + shared.setlistName) : "Nikdo právě nevede set."; elements.startLiveSet.textContent = shared.active && !isLiveLeader() ? "Převzít vedení" : "Spustit jako vedoucí"; elements.stopLiveSet.hidden = !isLiveLeader();
-    if (!elements.liveStage.hidden) renderLiveSong();
+  }
+  function setLiveFocus(active) {
+    const dialog = elements.liveFocusDialog;
+    if (!active) {
+      if (dialog.open) dialog.close();
+      return;
+    }
+    if (elements.liveStage.hidden || dialog.open) return;
+    dialog.append(elements.liveStage);
+    elements.liveStage.append(elements.appToast);
+    dialog.showModal();
+    elements.toggleLiveFocus.textContent = "Opustit celou obrazovku";
+    elements.toggleLiveFocus.setAttribute("aria-pressed", "true");
+    elements.liveSongCard.focus({ preventScroll: true });
+    if (elements.liveStage.requestFullscreen && document.fullscreenEnabled && !document.fullscreenElement) {
+      elements.liveStage.requestFullscreen().catch(() => {});
+    }
+  }
+  function restoreLiveStage() {
+    if (document.fullscreenElement === elements.liveStage) document.exitFullscreen().catch(() => {});
+    elements.liveStageHome.append(elements.liveStage);
+    document.body.append(elements.appToast);
+    elements.toggleLiveFocus.textContent = "Celá obrazovka";
+    elements.toggleLiveFocus.setAttribute("aria-pressed", "false");
+    if (!elements.liveStage.hidden && elements.liveView.classList.contains("active")) {
+      elements.toggleLiveFocus.focus({ preventScroll: true });
+    }
+  }
+  function resetLiveSet() {
+    setLiveFocus(false);
+    liveSwipeAnimation?.cancel();
+    liveSession = { status: "stopped", bpm: 120, startedAtMs: 0, leaderName: "" };
+    liveSessionRevision = 0;
+    liveSongIds = [];
+    liveSongIndex = 0;
+    liveLastScheduledBeat = -1;
+    liveBestRtt = Infinity;
+    liveServerOffset = 0;
+    liveMoveRequest = null;
+    elements.liveStage.hidden = true;
+    elements.liveEmpty.hidden = false;
+    elements.liveBpm.value = "120";
+    elements.liveSyncState.textContent = "Metronom je zastavený";
+    updateBeatDots(-1);
+  }
+  function animateLiveSong(direction) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    liveSwipeAnimation?.cancel();
+    liveSwipeAnimation = elements.liveSongCard.animate([
+      { transform: "translateX(" + direction * 46 + "px)", opacity: .28 },
+      { transform: "translateX(0)", opacity: 1 }
+    ], { duration: 235, easing: "cubic-bezier(.2,.7,.23,1)" });
   }
   async function startLiveSet() {
     const source = elements.liveSetSelect.value; const songIds = source === "draft" ? workspace.state.draft.songIds : (workspace.state.savedSetlists.find(set => "saved:" + set.id === source)?.songIds || []); if (!songIds.length) { showToast("Vybraný setlist neobsahuje žádné skladby."); return; }
-    try { const started = Date.now(); const payload = await api("/live-session", { method: "POST", body: JSON.stringify({ bandId: activeBandId, action: "start_set", setlistRef: source }) }); applyLiveSession(payload, started, Date.now()); startLivePolling(); requestLiveWakeLock(); showToast("Teď vedeš set na všech připojených zařízeních."); } catch (error) { showToast(error.message); }
+    try { const started = Date.now(); const payload = await api("/live-session", { method: "POST", body: JSON.stringify({ bandId: activeBandId, action: "start_set", setlistRef: source }) }); applyLiveSession(payload, started, Date.now()); startLivePolling(); showToast("Teď vedeš set na všech připojených zařízeních."); } catch (error) { showToast(error.message); }
   }
   async function stopLiveSet() { try { const payload = await api("/live-session", { method: "POST", body: JSON.stringify({ bandId: activeBandId, action: "stop_set" }) }); applyLiveSession(payload); showToast("Společný set je ukončený."); } catch (error) { showToast(error.message); } }
-  async function requestLiveWakeLock() { if (!navigator.wakeLock || document.visibilityState !== "visible") return; try { liveWakeLock = await navigator.wakeLock.request("screen"); } catch (_) {} }
+  async function requestLiveWakeLock() { if (!navigator.wakeLock || document.visibilityState !== "visible" || (liveWakeLock && !liveWakeLock.released)) return; try { liveWakeLock = await navigator.wakeLock.request("screen"); } catch (_) {} }
   function renderLiveSong() {
     const songsById = new Map(workspace.state.songs.map(song => [song.id, song]));
     const songs = liveSongIds.map(id => songsById.get(id));
@@ -1808,9 +2059,24 @@
     const meta = [songDurationLabel(song), song.bpm ? song.bpm + " BPM" : "BPM nezadané", "Energie " + song.energy]; elements.liveSongMeta.replaceChildren(...meta.map(text => { const span = document.createElement("span"); span.textContent = text; return span; }));
     const instructions = []; if (instrument && instrument.kind !== "none") instructions.push({ label: "Nástroj", value: instrument.name }); if (instrument && usesCapo(instrument) && Number(detail.capo)) instructions.push({ label: "Kapo", value: "K" + detail.capo }); if (instrument?.kind === "electric-guitar" && detail.preset) instructions.push({ label: "Preset", value: detail.preset }); normalizePrintFields(song.printFields).filter(field => field.value).forEach(field => instructions.push({ label: field.label || "Pokyn pro všechny", value: field.value })); normalizePrintFields(detail.printFields).filter(field => field.value).forEach(field => instructions.push({ label: field.label || "Můj pokyn", value: field.value })); if (detail.note) instructions.push({ label: "Poznámka", value: detail.note });
     elements.liveInstructions.replaceChildren(...instructions.map(item => { const row = document.createElement("div"); const label = document.createElement("span"); label.textContent = item.label; const value = document.createElement("strong"); value.textContent = item.value; row.append(label, value); return row; })); if (!instructions.length) { const empty = document.createElement("p"); empty.textContent = "K této skladbě nemáš žádné osobní pokyny."; elements.liveInstructions.append(empty); }
-    elements.livePrevious.disabled = !isLiveLeader() || liveSongIndex === 0; elements.liveNext.disabled = !isLiveLeader() || liveSongIndex === liveSongIds.length - 1; if (song.bpm) elements.liveBpm.value = String(song.bpm);
+    elements.livePrevious.disabled = !isLiveLeader() || liveSongIndex === 0; elements.liveNext.disabled = !isLiveLeader() || liveSongIndex === liveSongIds.length - 1;
   }
-  async function moveLiveSong(direction) { const next = Math.max(0, Math.min(liveSongIds.length - 1, liveSongIndex + direction)); if (next === liveSongIndex) return; if (!isLiveLeader()) { showToast("Pořadí právě ovládá " + (liveSession.liveSet?.leaderName || "vedoucí setu") + "."); return; } try { const payload = await api("/live-session", { method: "POST", body: JSON.stringify({ bandId: activeBandId, action: "set_song", songIndex: next }) }); applyLiveSession(payload); } catch (error) { showToast(error.message); } }
+  async function moveLiveSong(direction) {
+    const next = liveSongIndex + direction;
+    if (next < 0 || next >= liveSongIds.length || liveMoveRequest) return;
+    if (!isLiveLeader()) return;
+    const request = { bandId: activeBandId, started: Date.now() };
+    liveMoveRequest = request;
+    try {
+      const payload = await api("/live-session", { method: "POST",
+        body: JSON.stringify({ bandId: request.bandId, action: "set_song", songIndex: next }) });
+      if (activeBandId === request.bandId && workspace?.band.id === request.bandId) applyLiveSession(payload, request.started, Date.now());
+    } catch (error) {
+      if (activeBandId === request.bandId) showToast(error.message);
+    } finally {
+      if (liveMoveRequest === request) liveMoveRequest = null;
+    }
+  }
   async function enableLiveAudio() {
     const AudioEngine = window.AudioContext || window.webkitAudioContext; if (!AudioEngine) throw new Error("Tento prohlížeč nepodporuje Web Audio."); liveAudioContext = liveAudioContext || new AudioEngine({ latencyHint: "interactive" }); await liveAudioContext.resume(); const oscillator = liveAudioContext.createOscillator(); const gain = liveAudioContext.createGain(); gain.gain.value = 0; oscillator.connect(gain).connect(liveAudioContext.destination); oscillator.start(); oscillator.stop(liveAudioContext.currentTime + .01); elements.enableLiveAudio.textContent = "Zvuk povolen"; elements.enableLiveAudio.classList.add("ready"); return liveAudioContext;
   }
@@ -1824,12 +2090,67 @@
     while (liveSession.startedAtMs + beat * interval <= horizon) { const serverBeat = liveSession.startedAtMs + beat * interval; const localWall = serverBeat - liveServerOffset - calibration; const delay = (localWall - Date.now()) / 1000; if (delay >= -.03) playLiveClick(liveAudioContext.currentTime + Math.max(.006, delay), beat % 4 === 0); liveLastScheduledBeat = beat; beat += 1; }
   }
   function applyLiveSession(payload, requestStarted = Date.now(), requestFinished = Date.now()) {
-    const rtt = requestFinished - requestStarted; const measuredOffset = Number(payload.serverTimeMs) - (requestStarted + requestFinished) / 2; if (rtt <= liveBestRtt + 5) { liveBestRtt = Math.min(liveBestRtt, rtt); liveServerOffset = measuredOffset; }
-    if (payload.revision !== liveSessionRevision || payload.state.startedAtMs !== liveSession.startedAtMs) liveLastScheduledBeat = -1; liveSessionRevision = payload.revision; liveSession = payload.state; liveSession.liveSet = liveSession.liveSet || { active: false, songIds: [], songIndex: 0, leaderUserId: "", leaderName: "", setlistName: "" }; elements.liveSyncState.textContent = liveSession.status === "running" ? liveSession.bpm + " BPM · spustil/a " + (liveSession.leaderName || "člen kapely") : "Metronom je zastavený"; elements.liveMetronomeNote.textContent = liveSession.status === "running" ? (liveAudioContext?.state === "running" ? "Zařízení je připojené ke společnému kliku." : "Klik běží. Na tomto zařízení ještě povol zvuk.") : "Pro synchronizaci otevři sekci Zkouška na všech zařízeních."; if (liveSession.status === "running") elements.liveBpm.value = String(liveSession.bpm);
-    if (liveSession.liveSet.active && liveSession.liveSet.songIds?.length) { liveSongIds = liveSession.liveSet.songIds.filter(id => workspace.state.songs.some(song => song.id === id)); liveSongIndex = Math.max(0, Math.min(liveSongIds.length - 1, Number(liveSession.liveSet.songIndex) || 0)); elements.liveEmpty.hidden = true; elements.liveStage.hidden = false; renderLiveSong(); requestLiveWakeLock(); } else if (liveSongIds.length) { liveSongIds = []; liveSongIndex = 0; elements.liveStage.hidden = true; elements.liveEmpty.hidden = false; }
-    renderLiveSetup();
+    if (payload.revision < liveSessionRevision) return;
+    const rtt = requestFinished - requestStarted;
+    const measuredOffset = Number(payload.serverTimeMs) - (requestStarted + requestFinished) / 2;
+    if (rtt <= liveBestRtt + 5) {
+      liveBestRtt = Math.min(liveBestRtt, rtt);
+      liveServerOffset = measuredOffset;
+    }
+    const previousSession = liveSession;
+    const previousSet = previousSession.liveSet;
+    const previousIndex = liveSongIndex;
+    const clickChanged = payload.state.startedAtMs !== previousSession.startedAtMs ||
+      payload.state.status !== previousSession.status || payload.state.bpm !== previousSession.bpm;
+    if (clickChanged) liveLastScheduledBeat = -1;
+    liveSessionRevision = payload.revision;
+    liveSession = payload.state;
+    const set = liveSession.liveSet;
+    const playing = liveSession.status === "running";
+    elements.liveSyncState.textContent = playing ? liveSession.bpm + " BPM · spustil/a " + (liveSession.leaderName || "člen kapely") : "Metronom je zastavený";
+    elements.liveMetronomeNote.textContent = playing
+      ? (liveAudioContext?.state === "running" ? "Společný klik běží · " + liveSession.bpm + " BPM" : "Klik běží. Na tomto zařízení ještě povol zvuk.")
+      : "Pro synchronizaci otevři sekci Zkouška na všech zařízeních.";
+
+    if (set?.active && set.songIds?.length) {
+      const sameRun = previousSet?.active && previousSet.startedAtMs === set.startedAtMs;
+      const wasHidden = elements.liveStage.hidden;
+      liveSongIds = set.songIds.filter(id => workspace.state.songs.some(song => song.id === id));
+      liveSongIndex = Math.max(0, Math.min(liveSongIds.length - 1, Number(set.songIndex) || 0));
+      const songChanged = !sameRun || wasHidden || liveSongIndex !== previousIndex;
+      elements.liveEmpty.hidden = true;
+      elements.liveStage.hidden = false;
+      if (songChanged || previousSet?.leaderUserId !== set.leaderUserId) renderLiveSong();
+      if (songChanged && sameRun && !wasHidden && liveSongIndex !== previousIndex &&
+          elements.liveView.classList.contains("active")) animateLiveSong(Math.sign(liveSongIndex - previousIndex));
+      if (wasHidden && elements.liveView.classList.contains("active")) requestLiveWakeLock();
+      const songBpm = workspace.state.songs.find(song => song.id === liveSongIds[liveSongIndex])?.bpm;
+      if (document.activeElement !== elements.liveBpm) {
+        if (playing && clickChanged) elements.liveBpm.value = String(liveSession.bpm);
+        else if (songChanged && songBpm) elements.liveBpm.value = String(songBpm);
+      }
+    } else if (!elements.liveStage.hidden) {
+      liveSongIds = [];
+      liveSongIndex = 0;
+      elements.liveStage.hidden = true;
+      elements.liveEmpty.hidden = false;
+      setLiveFocus(false);
+    }
+    if (previousSet?.active !== set?.active || previousSet?.startedAtMs !== set?.startedAtMs ||
+        previousSet?.leaderUserId !== set?.leaderUserId) {
+      renderLiveSetup();
+      enhanceSelect(elements.liveSetSelect);
+    }
   }
-  async function pollLiveSession() { if (!workspace || !activeBandId) return; const started = Date.now(); try { const payload = await api("/live-session?bandId=" + encodeURIComponent(activeBandId)); applyLiveSession(payload, started, Date.now()); } catch (_) {} }
+  async function pollLiveSession() {
+    const bandId = activeBandId;
+    if (!workspace || workspace.band.id !== bandId) return;
+    const started = Date.now();
+    try {
+      const payload = await api("/live-session?bandId=" + encodeURIComponent(bandId));
+      if (activeBandId === bandId && workspace?.band.id === bandId) applyLiveSession(payload, started, Date.now());
+    } catch (_) {}
+  }
   function startLivePolling() { if (!livePollTimer) livePollTimer = setInterval(pollLiveSession, 1000); if (!liveSchedulerTimer) liveSchedulerTimer = setInterval(scheduleLiveMetronome, 25); pollLiveSession(); }
   async function setSharedMetronome(action) {
     try { if (action === "start") await enableLiveAudio(); const bpm = Math.max(30, Math.min(300, Number(elements.liveBpm.value) || 120)); const started = Date.now(); const payload = await api("/live-session", { method: "POST", body: JSON.stringify({ bandId: activeBandId, action, bpm }) }); applyLiveSession(payload, started, Date.now()); showToast(action === "start" ? "Společný klik odstartuje za 2 sekundy." : "Společný klik je zastavený."); startLivePolling(); } catch (error) { showToast(error.message); }
@@ -2300,6 +2621,16 @@
   elements.rehearsalMember.addEventListener("change", () => {
     renderRehearsalPlanner(); enhanceSelects(elements.rehearsalPlanner);
   });
+  elements.readinessSearch.addEventListener("input", () => renderRehearsalReadiness());
+  elements.readinessFilterMember.addEventListener("change", () => renderRehearsalReadiness());
+  elements.readinessFilterStatus.addEventListener("change", () => renderRehearsalReadiness());
+  elements.clearReadinessFilters.addEventListener("click", () => {
+    resetReadinessFilters();
+    enhanceSelect(elements.readinessFilterMember);
+    enhanceSelect(elements.readinessFilterStatus);
+    renderRehearsalReadiness();
+    elements.readinessSearch.focus();
+  });
   elements.rehearsalMinutes.addEventListener("input", () => { if (rehearsalPlanShown) renderRehearsalPreview(); });
   elements.taskForm.addEventListener("submit", event => { event.preventDefault(); saveTaskForm(event.currentTarget); });
   elements.taskEditForm.addEventListener("submit", event => { event.preventDefault(); saveTaskForm(event.currentTarget); });
@@ -2343,15 +2674,46 @@
       elements.liveSongCard.focus();
     }
   }); elements.stopLiveSet.addEventListener("click", stopLiveSet); elements.livePrevious.addEventListener("click", () => moveLiveSong(-1)); elements.liveNext.addEventListener("click", () => moveLiveSong(1));
-  elements.liveSongCard.addEventListener("pointerdown", event => { liveSwipeStart = { id: event.pointerId, x: event.clientX }; elements.liveSongCard.setPointerCapture(event.pointerId); });
-  elements.liveSongCard.addEventListener("pointerup", event => { if (!liveSwipeStart || liveSwipeStart.id !== event.pointerId) return; const distance = event.clientX - liveSwipeStart.x; liveSwipeStart = null; if (Math.abs(distance) >= 55) moveLiveSong(distance < 0 ? 1 : -1); });
-  elements.liveSongCard.addEventListener("pointercancel", () => { liveSwipeStart = null; });
+  elements.toggleLiveFocus.addEventListener("click", () => setLiveFocus(!elements.liveFocusDialog.open));
+  elements.liveFocusDialog.addEventListener("close", restoreLiveStage);
+  document.addEventListener("fullscreenchange", () => {
+    const wasFullscreen = liveNativeFullscreen;
+    liveNativeFullscreen = document.fullscreenElement === elements.liveStage;
+    if (wasFullscreen && !liveNativeFullscreen) setLiveFocus(false);
+  });
+  elements.liveSongCard.addEventListener("pointerdown", event => {
+    if (!isLiveLeader() || !event.isPrimary || event.button !== 0) return;
+    liveSwipeAnimation?.cancel();
+    liveSwipeStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    elements.liveSongCard.setPointerCapture(event.pointerId);
+  });
+  elements.liveSongCard.addEventListener("pointermove", event => {
+    if (liveSwipeStart?.id !== event.pointerId || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const x = event.clientX - liveSwipeStart.x;
+    const y = event.clientY - liveSwipeStart.y;
+    if (Math.abs(x) <= Math.max(8, Math.abs(y))) return;
+    elements.liveSongCard.classList.add("is-dragging");
+    const atEdge = x > 0 ? liveSongIndex === 0 : liveSongIndex === liveSongIds.length - 1;
+    elements.liveSongCard.style.setProperty("--live-swipe", Math.max(-115, Math.min(115, x * (atEdge ? .18 : .55))) + "px");
+  });
+  function finishLiveSwipe(event) {
+    if (liveSwipeStart?.id !== event.pointerId) return;
+    const x = event.clientX - liveSwipeStart.x;
+    const y = event.clientY - liveSwipeStart.y;
+    liveSwipeStart = null;
+    elements.liveSongCard.classList.remove("is-dragging");
+    elements.liveSongCard.style.removeProperty("--live-swipe");
+    if (event.type === "pointerup" && Math.abs(x) >= 55 && Math.abs(x) > Math.abs(y)) moveLiveSong(x < 0 ? 1 : -1);
+  }
+  elements.liveSongCard.addEventListener("pointerup", finishLiveSwipe);
+  elements.liveSongCard.addEventListener("pointercancel", finishLiveSwipe);
+  elements.liveSongCard.addEventListener("lostpointercapture", finishLiveSwipe);
   document.addEventListener("keydown", event => {
     if (!["ArrowLeft", "ArrowRight", " "].includes(event.key) || event.defaultPrevented ||
         event.repeat || event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
         elements.workspaceView.hidden || elements.liveStage.hidden || !isLiveLeader() ||
-        !elements.liveStage.closest(".app-view").classList.contains("active") ||
-        document.querySelector("dialog[open]") ||
+        !elements.liveView.classList.contains("active") ||
+        document.querySelector("dialog[open]:not(#liveFocusDialog)") ||
         event.target instanceof Element && event.target.closest("input, textarea, select, button, a, [contenteditable], [role=combobox]")) return;
     event.preventDefault();
     moveLiveSong(event.key === "ArrowLeft" ? -1 : 1);
@@ -2368,6 +2730,24 @@
     changed();
   });
   elements.showArchivedSongs.addEventListener("change", renderRepertoire);
+  elements.toggleBulkSongs.addEventListener("click", () => {
+    selectingBulkSongs = !selectingBulkSongs;
+    if (!selectingBulkSongs) selectedBulkSongs.clear();
+    renderRepertoire();
+  });
+  elements.selectVisibleSongs.addEventListener("change", event => {
+    const songs = visibleRepertoireSongs();
+    for (const song of songs) {
+      if (event.target.checked) selectedBulkSongs.add(song.id);
+      else selectedBulkSongs.delete(song.id);
+    }
+    updateBulkSongSelection(songs);
+  });
+  elements.openBulkSongEdit.addEventListener("click", openBulkSongEdit);
+  elements.bulkSongForm.addEventListener("submit", saveBulkSongEdit);
+  elements.bulkSongDialog.addEventListener("close", () => {
+    if (!elements.bulkSongDialog.open) bulkSongEdit = null;
+  });
   elements.legacyImportInput.addEventListener("change", event => importLegacyBackup(event.target.files[0]));
   elements.addInterlude.addEventListener("click", () => openInterludeDialog());
   elements.interludeForm.addEventListener("submit", event => { event.preventDefault(); saveInterlude(event.currentTarget); });

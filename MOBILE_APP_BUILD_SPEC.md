@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.13.7 · aktualizováno 21. 11. 2026
+> Stav specifikace: 0.13.8 · aktualizováno 21. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 >
@@ -457,3 +457,9 @@ Všechny POST/PUT požadavky posílej s `Content-Type: application/json`. Server
 - Vlastník může v nastavení kapely nahrát JSON zálohu verze 1 z původního Setlisteru. Při převodu použij stejný formát a slučovací pravidla jako ve webovém `setlister/app/legacy-import.js`. Ulož přes `PUT /api/app/band-state` s aktuální revizí. Přidej členy, skladby, osobní pokyny a setlisty. Oddělený rozpracovaný set archivuj mezi uložené. Existující propojení účtů, koncerty a úkoly ponech v cílové kapele.
 - Importovaná skladba bez délky má `seconds: 0` a `durationUnknown: true`. Zobraz „Délka nezadaná“, čas připočítej až po doplnění délky. Archivované skladby vynech v nabídce pro skládání, v repertoáru je zobraz volitelně a v existujících setlistech je ponech. Příznak `includeGaps` přičítá 20 s mezi skladbami a kopíruje se při uložení či načtení.
 - Při aktivní společné zkoušce má vedoucí na externí klávesnici šipku vlevo pro předchozí skladbu a šipku vpravo i mezerník pro další skladbu. Použij stejnou změnu jako přes šipky na obrazovce a zachovej psaní i ovládání formulářů.
+
+### Režim zkoušky a hromadná úprava repertoáru
+
+- V připravenosti přidej lokální filtry podle názvu skladby, člena a stavu (připraveno, dopilovat, nenacvičeno, bez hodnocení). Člen ve filtru omezuje zobrazené výsledky. Hodnocení se dál zapisuje za zvoleného editovatelného člena. Souhrn a návrh zkoušky používají celý zvolený rozsah.
+- Ve spuštěné společné zkoušce nabídni celou obrazovku s názvem skladby, pozicí, osobními pokyny, oběma šipkami a metronomem včetně BPM, povolení zvuku, startu, stopu a kalibrace. Otevření a návrat zachovají relaci i zvuk. Obrazovku lze zavřít bez ukončení hraní. Při změně skladby posuň kartu ve směru listování a respektuj systémové nastavení omezení animací. Posouvá vedoucí stávajícím voláním `POST /api/app/live-session` s `action: "set_song"`. Přechod na skladbu s vlastním BPM připraví hodnotu do ovládání. Běžící klik změní tempo po novém startu.
+- V repertoáru nabídni výběr jednotlivých skladeb, výběr zobrazených a počet vybraných. Otevři tabulku s jedním řádkem na skladbu a s poli název, album, délka, BPM, energie, role a společné štítky. Prázdné BPM vymaže uložené tempo. Validuj všechny změněné hodnoty a ulož je jedním `PUT /api/app/band-state` s aktuální revizí. Pokyny členů a hodnocení připravenosti patří ke skladbě a v této úpravě se nepřepisují. Při chybě uložení ponech rozepsané hodnoty v editoru.

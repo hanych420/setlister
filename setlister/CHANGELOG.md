@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.8
+
+- Společná zkouška má posun karty skladby ve směru gesta a režim celé obrazovky s navigací a ovládáním metronomu.
+- Připravenost skladeb lze filtrovat podle názvu, člena a stavu.
+- Hromadná úprava repertoáru zobrazuje jednu skladbu na řádek a ukládá změny ve vybraných skladbách najednou.
+
 ## 0.13.7
 
 - Vlastník kapely může přidat repertoár, členy, osobní pokyny a setlisty ze zálohy původního Setlisteru. Aktuální rozpracovaný set zůstává v editoru a rozpracovaný set ze zálohy se přidá mezi uložené.
