@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.13.6 · aktualizováno 20. 11. 2026
+> Stav specifikace: 0.13.7 · aktualizováno 21. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 >
@@ -450,3 +450,10 @@ Všechny POST/PUT požadavky posílej s `Content-Type: application/json`. Server
 - Ukládání je nyní dokumentové a konflikt načte novější serverovou verzi; jemné slučování změn ještě chybí.
 - PDF na webu používá tiskový dialog prohlížeče; nativní aplikace má vytvořit skutečný PDF soubor se shodným layoutem.
 - Webový metronom je limitovaný audio latencí a pravidly prohlížeče na pozadí; nativní aplikace má přesnější audio scheduler. Nezávislé reproduktory nelze garantovat jako sample-perfect.
+
+
+### Přenos z původního Setlisteru a klávesy při zkoušce
+
+- Vlastník může v nastavení kapely nahrát JSON zálohu verze 1 z původního Setlisteru. Při převodu použij stejný formát a slučovací pravidla jako ve webovém `setlister/app/legacy-import.js`. Ulož přes `PUT /api/app/band-state` s aktuální revizí. Přidej členy, skladby, osobní pokyny a setlisty. Oddělený rozpracovaný set archivuj mezi uložené. Existující propojení účtů, koncerty a úkoly ponech v cílové kapele.
+- Importovaná skladba bez délky má `seconds: 0` a `durationUnknown: true`. Zobraz „Délka nezadaná“, čas připočítej až po doplnění délky. Archivované skladby vynech v nabídce pro skládání, v repertoáru je zobraz volitelně a v existujících setlistech je ponech. Příznak `includeGaps` přičítá 20 s mezi skladbami a kopíruje se při uložení či načtení.
+- Při aktivní společné zkoušce má vedoucí na externí klávesnici šipku vlevo pro předchozí skladbu a šipku vpravo i mezerník pro další skladbu. Použij stejnou změnu jako přes šipky na obrazovce a zachovej psaní i ovládání formulářů.

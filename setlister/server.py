@@ -2390,7 +2390,7 @@ def valid_public_state(value: object) -> bool:
             seconds = int(song.get("seconds") or 0)
         except (TypeError, ValueError):
             return False
-        if not 0 < seconds <= 3600:
+        if not 0 < seconds <= 3600 and not (seconds == 0 and song.get("durationUnknown") is True):
             return False
         if len(str(song.get("title") or "")) > 120 or len(str(song.get("album") or "")) > 120:
             return False
@@ -2579,7 +2579,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.13.6"
+    server_version = "Setlister/0.13.7"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -2709,7 +2709,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         if request_path.startswith("/brand/"):
             mapped = request_path
         else:
-            allowed = {"/", "/index.html", "/styles.css", "/app.js", "/planning.js", "/manifest.webmanifest",
+            allowed = {"/", "/index.html", "/styles.css", "/app.js", "/planning.js", "/legacy-import.js", "/manifest.webmanifest",
                        "/service-worker.js", "/icon-192.png", "/icon-512.png", "/venue-catalog.json"}
             if request_path not in allowed:
                 self.send_error(HTTPStatus.NOT_FOUND)
@@ -3155,7 +3155,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def public_oauth_result_page(title: str, message: str, success: bool) -> str:
         state = "success" if success else "error"
         return f'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>
-        <link rel="stylesheet" href="/styles.css?v=0.13.5"></head>
+        <link rel="stylesheet" href="/styles.css?v=0.13.7"></head>
         <body class="oauth-result {state}"><main><h1>{html.escape(title)}</h1><p>{html.escape(message)}</p><a href="/">Zpět do Setlisteru</a></main></body></html>'''
 
     def handle_oauth_callback(self, query: dict[str, list[str]]) -> None:

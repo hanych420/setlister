@@ -111,6 +111,9 @@
     const value = Math.max(0, Math.round(Number(seconds) || 0));
     return Math.floor(value / 60) + ":" + String(value % 60).padStart(2, "0");
   }
+  function songDurationLabel(song) {
+    return song.durationUnknown ? "Délka nezadaná" : formatTime(song.seconds);
+  }
   function parseDuration(value) {
     const text = String(value || "").trim();
     if (/^\d+$/.test(text)) return Number(text);
@@ -245,7 +248,7 @@
     const selected = new Set(state.draft.songIds); const query = elements.songSearch.value.trim().toLocaleLowerCase("cs");
     const currentAlbum = elements.albumFilter.value || "all"; const albums = [...new Set(state.songs.map(song => song.album).filter(Boolean))].sort((a, b) => a.localeCompare(b, "cs"));
     elements.albumFilter.replaceChildren(option("all", "Všechna alba"), ...albums.map(album => option(album, album))); elements.albumFilter.value = albums.includes(currentAlbum) ? currentAlbum : "all";
-    const available = state.songs.filter(song => !selected.has(song.id)).filter(song => !query || (song.title + " " + song.album + " " + ROLE_LABELS[song.role]).toLocaleLowerCase("cs").includes(query)).filter(song => elements.albumFilter.value === "all" || song.album === elements.albumFilter.value).filter(song => elements.energyFilter.value === "all" || String(song.energy) === elements.energyFilter.value).filter(song => elements.roleFilter.value === "all" || song.role === elements.roleFilter.value);
+    const available = state.songs.filter(song => !selected.has(song.id) && !song.archived).filter(song => !query || (song.title + " " + song.album + " " + ROLE_LABELS[song.role]).toLocaleLowerCase("cs").includes(query)).filter(song => elements.albumFilter.value === "all" || song.album === elements.albumFilter.value).filter(song => elements.energyFilter.value === "all" || String(song.energy) === elements.energyFilter.value).filter(song => elements.roleFilter.value === "all" || song.role === elements.roleFilter.value);
     const setEntries = setlistEntries(state.draft);
     const songsById = new Map(state.songs.map(song => [song.id, song]));
     const setSongs = state.draft.songIds.map(id => songsById.get(id));
@@ -258,7 +261,7 @@
     elements.appAvailableSongs.replaceChildren(...available.map(song => {
       const row = document.createElement("article"); row.className = "song-item";
       const info = document.createElement("div"); const title = document.createElement("strong"); title.textContent = song.title; const album = document.createElement("span"); album.className = "song-note"; album.textContent = song.album || "Bez alba"; info.append(title, album);
-      const meta = document.createElement("small"); meta.textContent = [formatTime(song.seconds), song.bpm ? song.bpm + " BPM" : "", "E" + song.energy].filter(Boolean).join(" · ");
+      const meta = document.createElement("small"); meta.textContent = [songDurationLabel(song), song.bpm ? song.bpm + " BPM" : "", "E" + song.energy].filter(Boolean).join(" · ");
       const actions = document.createElement("div"); actions.className = "library-actions"; actions.append(iconAction("edit", "Upravit skladbu", () => openSongDialog(song.id)), iconAction("member", "Poznámky členů", () => openNotesDialog(song.id)), iconAction("add", "Přidat do setu", () => { updateSetlistEntries(state.draft, [...setEntries, {kind: "song", id: song.id}]); changed(); }, true)); row.append(info, meta, actions); return row;
     }));
     elements.appSetSongs.replaceChildren(...setEntries.map((entry, index) => {
@@ -299,7 +302,7 @@
         info.append(mailNode("span", "song-note",
           detailSummary(song, viewer?.id) || song.album || ROLE_LABELS[song.role]));
         const role = song.role !== "standard" ? ROLE_LABELS[song.role] : "";
-        meta.textContent = [role, formatTime(song.seconds), song.bpm ? song.bpm + " BPM" : ""].filter(Boolean).join(" · ");
+        meta.textContent = [role, songDurationLabel(song), song.bpm ? song.bpm + " BPM" : ""].filter(Boolean).join(" · ");
         const locked = state.draft.lockedSongIds.includes(song.id);
         const lock = rowButton(locked ? "●" : "○", locked ? "Odemknout pozici" : "Zamknout pozici pro chytré řazení", () => {
           const ids = state.draft.lockedSongIds;
@@ -328,9 +331,11 @@
       return row;
     }));
     elements.appSetEmpty.hidden = setEntries.length > 0;
+    elements.appIncludeGaps.checked = Boolean(state.draft.includeGaps);
     elements.addInterlude.disabled = state.draft.interludes.length >= 50;
     const total = setSongs.reduce((sum, song) => sum + Number(song.seconds || 0), 0)
-      + state.draft.interludes.reduce((sum, entry) => sum + entry.seconds, 0);
+      + state.draft.interludes.reduce((sum, entry) => sum + entry.seconds, 0)
+      + (state.draft.includeGaps ? Math.max(0, setSongs.length - 1) * 20 : 0);
     const target = Math.max(1, Number(state.draft.targetMinutes) || 45) * 60;
     elements.appTotalTime.textContent = formatTime(total); elements.appTargetLabel.textContent = "z " + formatTime(target); elements.appTargetMinutes.value = String(state.draft.targetMinutes || 45); elements.appProgress.style.width = Math.min(100, total / target * 100) + "%"; elements.appProgress.classList.toggle("over", total > target);
     renderRepertoire(); renderSettings(); renderSavedSetlists(); renderEvents(); renderLiveSetup();
@@ -386,11 +391,13 @@
     changed();
   }
   function renderRepertoire() {
-    elements.appRepertoire.replaceChildren(...workspace.state.songs.map(song => {
+    const songs = workspace.state.songs.filter(song => !song.archived || elements.showArchivedSongs.checked);
+    elements.archivedSongsFilter.hidden = !workspace.state.songs.some(song => song.archived);
+    elements.appRepertoire.replaceChildren(...songs.map(song => {
       const row = document.createElement("article"); row.className = "repertoire-row";
-      const title = document.createElement("div"); const strong = document.createElement("strong"); strong.textContent = song.title; const album = document.createElement("span"); album.className = "song-note"; album.textContent = song.album || "Bez alba"; title.append(strong, album);
+      const title = document.createElement("div"); const strong = document.createElement("strong"); strong.textContent = song.title; const album = document.createElement("span"); album.className = "song-note"; album.textContent = [song.album || "Bez alba", song.archived ? "Archivovaná" : ""].filter(Boolean).join(" · "); title.append(strong, album);
       const energy = document.createElement("span"); energy.className = "energy"; energy.textContent = "Energie " + song.energy;
-      const meta = document.createElement("small"); meta.textContent = [formatTime(song.seconds), song.bpm ? song.bpm + " BPM" : "", song.role !== "standard" ? ROLE_LABELS[song.role] : ""].filter(Boolean).join(" · ");
+      const meta = document.createElement("small"); meta.textContent = [songDurationLabel(song), song.bpm ? song.bpm + " BPM" : "", song.role !== "standard" ? ROLE_LABELS[song.role] : ""].filter(Boolean).join(" · ");
       const actions = document.createElement("div"); actions.className = "repertoire-actions"; actions.append(iconAction("edit", "Upravit skladbu", () => openSongDialog(song.id)), iconAction("member", "Poznámky členů", () => openNotesDialog(song.id)), rowButton("×", "Odstranit skladbu", () => deleteSong(song.id))); row.append(title, energy, meta, actions); return row;
     }));
   }
@@ -412,6 +419,7 @@
       const actions = document.createElement("div"); actions.className = "row-actions"; actions.append(rowButton("✎", "Upravit člena", () => openMemberDialog(member.id)), rowButton("×", "Odstranit člena", () => deleteMember(member.id))); row.append(info, status, actions); return row;
     }));
     elements.rotateCode.hidden = workspace.membership.role !== "owner";
+    elements.legacyImportCard.hidden = workspace.membership.role !== "owner";
     const defaultGear = workspace.state.bandProfile.concertChecklistDefaults.gear || [];
     renderChecklistTags(elements.defaultGearTags, defaultGear, index => {
       defaultGear.splice(index, 1);
@@ -546,7 +554,7 @@
   }
   function loadSavedSetlist(id) {
     const set = savedSetlistById(id); if (!set) { showToast("Přiřazený setlist už neexistuje."); return; }
-    workspace.state.draft = { ...workspace.state.draft, name: set.name, targetMinutes: set.targetMinutes, songIds: [...set.songIds], interludes: set.interludes.map(item => ({ ...item })), lockedSongIds: [] }; changed(); showAppView("setlist"); showToast("„" + set.name + "“ je otevřený v editoru.");
+    workspace.state.draft = { ...workspace.state.draft, name: set.name, targetMinutes: set.targetMinutes, includeGaps: Boolean(set.includeGaps), songIds: [...set.songIds], interludes: set.interludes.map(item => ({ ...item })), lockedSongIds: [] }; changed(); showAppView("setlist"); showToast("„" + set.name + "“ je otevřený v editoru.");
   }
   function eventSetlist(event) { return savedSetlistById(event?.setlistId); }
   function scopedRehearsalSongs(scope) {
@@ -1797,7 +1805,7 @@
     elements.liveTuning.hidden = !cue;
     elements.liveTuning.textContent = cue ? "Ladění · " + cue : "";
     elements.livePosition.textContent = (liveSongIndex + 1) + " / " + liveSongIds.length; elements.livePositionProgress.style.width = ((liveSongIndex + 1) / liveSongIds.length * 100) + "%"; elements.liveSongRole.textContent = song.role !== "standard" ? ROLE_LABELS[song.role] : song.album || "Skladba"; elements.liveSongTitle.textContent = detail.customTitle || song.title;
-    const meta = [formatTime(song.seconds), song.bpm ? song.bpm + " BPM" : "BPM nezadané", "Energie " + song.energy]; elements.liveSongMeta.replaceChildren(...meta.map(text => { const span = document.createElement("span"); span.textContent = text; return span; }));
+    const meta = [songDurationLabel(song), song.bpm ? song.bpm + " BPM" : "BPM nezadané", "Energie " + song.energy]; elements.liveSongMeta.replaceChildren(...meta.map(text => { const span = document.createElement("span"); span.textContent = text; return span; }));
     const instructions = []; if (instrument && instrument.kind !== "none") instructions.push({ label: "Nástroj", value: instrument.name }); if (instrument && usesCapo(instrument) && Number(detail.capo)) instructions.push({ label: "Kapo", value: "K" + detail.capo }); if (instrument?.kind === "electric-guitar" && detail.preset) instructions.push({ label: "Preset", value: detail.preset }); normalizePrintFields(song.printFields).filter(field => field.value).forEach(field => instructions.push({ label: field.label || "Pokyn pro všechny", value: field.value })); normalizePrintFields(detail.printFields).filter(field => field.value).forEach(field => instructions.push({ label: field.label || "Můj pokyn", value: field.value })); if (detail.note) instructions.push({ label: "Poznámka", value: detail.note });
     elements.liveInstructions.replaceChildren(...instructions.map(item => { const row = document.createElement("div"); const label = document.createElement("span"); label.textContent = item.label; const value = document.createElement("strong"); value.textContent = item.value; row.append(label, value); return row; })); if (!instructions.length) { const empty = document.createElement("p"); empty.textContent = "K této skladbě nemáš žádné osobní pokyny."; elements.liveInstructions.append(empty); }
     elements.livePrevious.disabled = !isLiveLeader() || liveSongIndex === 0; elements.liveNext.disabled = !isLiveLeader() || liveSongIndex === liveSongIds.length - 1; if (song.bpm) elements.liveBpm.value = String(song.bpm);
@@ -1870,6 +1878,38 @@
     }
     return elements.saveState.textContent !== "Neuloženo";
   }
+  async function importLegacyBackup(file) {
+    if (!file || workspace?.membership.role !== "owner") return;
+    const target = workspace;
+    elements.legacyImportInput.disabled = true;
+    showStatus(elements.legacyImportStatus, "Importuji zálohu…");
+    try {
+      if (file.size > 5_000_000) throw new Error("Záloha může mít nejvýše 5 MB.");
+      const source = JSON.parse((await file.text()).replace(/^\uFEFF/, ""));
+      if (!await flushWorkspace() || workspace !== target || target.band.id !== activeBandId) {
+        throw new Error("Kapela se změnila nebo se neuložily předchozí úpravy. Zkus import znovu.");
+      }
+      const { state, counts } = SetlisterLegacyImport.merge(source, target.state, INSTRUMENTS);
+      const { songs, members, sets } = counts;
+      if (songs || sets || JSON.stringify(state.members) !== JSON.stringify(target.state.members)) {
+        const result = await api("/band-state", {
+          method: "PUT",
+          body: JSON.stringify({ bandId: target.band.id, revision, state })
+        });
+        if (workspace !== target || target.band.id !== activeBandId) return;
+        await loadWorkspace();
+        showStatus(elements.legacyImportStatus, "Import hotový. Skladby: " + songs + " · Členové: " + members + " · Setlisty: " + sets, true);
+      } else {
+        showStatus(elements.legacyImportStatus, "Všechny položky z této zálohy už jsou v kapele.", true);
+      }
+    } catch (error) {
+      if (workspace === target) showStatus(elements.legacyImportStatus,
+        error instanceof SyntaxError ? "Soubor není platná záloha JSON." : error.message);
+    } finally {
+      elements.legacyImportInput.value = "";
+      elements.legacyImportInput.disabled = false;
+    }
+  }
   function printFieldDraft(kind) { return kind === "song" ? songPrintFieldDraft : notesPrintFieldDraft; }
   function renderPrintFieldEditor(kind, focusLast = false) {
     const draft = printFieldDraft(kind); const container = kind === "song" ? elements.songPrintFields : elements.notesPrintFields;
@@ -1886,7 +1926,7 @@
   }
   function openSongDialog(songId) {
     const song = workspace.state.songs.find(item => item.id === songId); if (!song) return;
-    const form = elements.songEditForm; form.elements.songId.value = song.id; form.elements.title.value = song.title; form.elements.album.value = song.album || ""; form.elements.duration.value = formatTime(song.seconds); form.elements.bpm.value = song.bpm || ""; form.elements.energy.value = String(song.energy); form.elements.role.value = song.role || "standard"; songPrintFieldDraft = normalizePrintFields(song.printFields, song.printTags).map(field => ({ ...field })); elements.songNewFieldLabel.value = ""; renderPrintFieldEditor("song"); elements.songDialogTitle.textContent = song.title;
+    const form = elements.songEditForm; form.elements.songId.value = song.id; form.elements.title.value = song.title; form.elements.album.value = song.album || ""; form.elements.duration.value = song.durationUnknown ? "" : formatTime(song.seconds); form.elements.duration.required = !song.durationUnknown; form.elements.bpm.value = song.bpm || ""; form.elements.energy.value = String(song.energy); form.elements.role.value = song.role || "standard"; songPrintFieldDraft = normalizePrintFields(song.printFields, song.printTags).map(field => ({ ...field })); elements.songNewFieldLabel.value = ""; renderPrintFieldEditor("song"); elements.songDialogTitle.textContent = song.title;
     enhanceSelects(form); elements.songDialog.showModal();
   }
   function openNotesDialog(songId, requestedMemberId = "") {
@@ -1958,9 +1998,9 @@
     if (!existing) workspace.state.members.push(member); elements.memberDialog.close(); changed();
   }
   function saveSongForm(form) {
-    const payload = formPayload(form); const song = workspace.state.songs.find(item => item.id === payload.songId); const seconds = parseDuration(payload.duration); if (!song || seconds < 1 || seconds > 3600) { showToast("Délku zadej jako 3:30 nebo počet sekund."); return; }
+    const payload = formPayload(form); const song = workspace.state.songs.find(item => item.id === payload.songId); const seconds = parseDuration(payload.duration); const keepUnknown = song?.durationUnknown && !payload.duration.trim(); if (!song || (seconds < 1 && !keepUnknown) || seconds > 3600) { showToast("Délku zadej jako 3:30 nebo počet sekund."); return; }
     const bpm = Number(payload.bpm || 0); if (!Number.isFinite(bpm) || bpm < 0 || bpm > 300) { showToast("BPM musí být mezi 1 a 300."); return; }
-    song.title = payload.title.trim(); song.album = payload.album.trim(); song.seconds = seconds; song.bpm = bpm; song.energy = Number(payload.energy); song.role = payload.role; song.printFields = normalizePrintFields(songPrintFieldDraft); delete song.printTags; song.memberDetails = song.memberDetails || {};
+    song.title = payload.title.trim(); song.album = payload.album.trim(); song.seconds = seconds; if (seconds) delete song.durationUnknown; song.bpm = bpm; song.energy = Number(payload.energy); song.role = payload.role; song.printFields = normalizePrintFields(songPrintFieldDraft); delete song.printTags; song.memberDetails = song.memberDetails || {};
     elements.songDialog.close(); changed();
   }
   function updateExportSummary() {
@@ -2297,10 +2337,25 @@
     try { await navigator.clipboard.writeText(elements.calendarFeedUrl.value); showToast("Odkaz zkopírován."); }
     catch (_) { elements.calendarFeedUrl.select(); }
   });
-  elements.startLiveSet.addEventListener("click", startLiveSet); elements.stopLiveSet.addEventListener("click", stopLiveSet); elements.livePrevious.addEventListener("click", () => moveLiveSong(-1)); elements.liveNext.addEventListener("click", () => moveLiveSong(1));
+  elements.startLiveSet.addEventListener("click", async () => {
+    await startLiveSet();
+    if (isLiveLeader() && !elements.liveStage.hidden && document.activeElement === elements.startLiveSet) {
+      elements.liveSongCard.focus();
+    }
+  }); elements.stopLiveSet.addEventListener("click", stopLiveSet); elements.livePrevious.addEventListener("click", () => moveLiveSong(-1)); elements.liveNext.addEventListener("click", () => moveLiveSong(1));
   elements.liveSongCard.addEventListener("pointerdown", event => { liveSwipeStart = { id: event.pointerId, x: event.clientX }; elements.liveSongCard.setPointerCapture(event.pointerId); });
   elements.liveSongCard.addEventListener("pointerup", event => { if (!liveSwipeStart || liveSwipeStart.id !== event.pointerId) return; const distance = event.clientX - liveSwipeStart.x; liveSwipeStart = null; if (Math.abs(distance) >= 55) moveLiveSong(distance < 0 ? 1 : -1); });
-  elements.liveSongCard.addEventListener("pointercancel", () => { liveSwipeStart = null; }); elements.liveSongCard.addEventListener("keydown", event => { if (event.key === "ArrowLeft") moveLiveSong(-1); if (event.key === "ArrowRight") moveLiveSong(1); });
+  elements.liveSongCard.addEventListener("pointercancel", () => { liveSwipeStart = null; });
+  document.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight", " "].includes(event.key) || event.defaultPrevented ||
+        event.repeat || event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
+        elements.workspaceView.hidden || elements.liveStage.hidden || !isLiveLeader() ||
+        !elements.liveStage.closest(".app-view").classList.contains("active") ||
+        document.querySelector("dialog[open]") ||
+        event.target instanceof Element && event.target.closest("input, textarea, select, button, a, [contenteditable], [role=combobox]")) return;
+    event.preventDefault();
+    moveLiveSong(event.key === "ArrowLeft" ? -1 : 1);
+  });
   elements.enableLiveAudio.addEventListener("click", async () => { try { await enableLiveAudio(); showToast("Zvuk metronomu je na tomto zařízení povolený."); } catch (error) { showToast(error.message); } }); elements.startSharedMetronome.addEventListener("click", () => setSharedMetronome("start")); elements.stopSharedMetronome.addEventListener("click", () => setSharedMetronome("stop")); elements.liveCalibration.addEventListener("change", event => { const value = Math.max(-250, Math.min(250, Number(event.target.value) || 0)); event.target.value = String(value); localStorage.setItem("setlister-live-calibration", String(value)); liveLastScheduledBeat = -1; });
   elements.connectGmail.addEventListener("click", connectGmail);
   elements.mailChatForm.addEventListener("submit", event => { event.preventDefault(); askMailAgent(elements.mailQuestion.value.trim()); });
@@ -2308,12 +2363,18 @@
   elements.mailQuestion.addEventListener("input", event => { event.target.style.height = "auto"; event.target.style.height = Math.min(event.target.scrollHeight, 150) + "px"; });
   elements.mailQuickPrompts.querySelectorAll("button").forEach(button => button.addEventListener("click", () => askMailAgent(button.textContent.trim())));
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !elements.liveStage.hidden) requestLiveWakeLock(); });
+  elements.appIncludeGaps.addEventListener("change", event => {
+    workspace.state.draft.includeGaps = event.target.checked;
+    changed();
+  });
+  elements.showArchivedSongs.addEventListener("change", renderRepertoire);
+  elements.legacyImportInput.addEventListener("change", event => importLegacyBackup(event.target.files[0]));
   elements.addInterlude.addEventListener("click", () => openInterludeDialog());
   elements.interludeForm.addEventListener("submit", event => { event.preventDefault(); saveInterlude(event.currentTarget); });
   elements.saveSetlist.addEventListener("click", () => {
-    const { name, targetMinutes, songIds, interludes } = workspace.state.draft;
+    const { name, targetMinutes, songIds, interludes, includeGaps } = workspace.state.draft;
     const existing = workspace.state.savedSetlists.find(set => set.name.toLocaleLowerCase("cs") === name.toLocaleLowerCase("cs"));
-    const snapshot = { targetMinutes, songIds: [...songIds], interludes: interludes.map(item => ({ ...item })) };
+    const snapshot = { targetMinutes, includeGaps: Boolean(includeGaps), songIds: [...songIds], interludes: interludes.map(item => ({ ...item })) };
     if (existing) Object.assign(existing, snapshot);
     else workspace.state.savedSetlists.push({ id: uid("set"), name: name || "Setlist", ...snapshot });
     changed();

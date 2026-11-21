@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.7
+
+- Vlastník kapely může přidat repertoár, členy, osobní pokyny a setlisty ze zálohy původního Setlisteru. Aktuální rozpracovaný set zůstává v editoru a rozpracovaný set ze zálohy se přidá mezi uložené.
+- Vedoucí spuštěné zkoušky může listovat šipkami a přejít na další skladbu mezerníkem.
+
 ## 0.13.6
 
 - Marketingová stránka představuje aktuální funkce Setlisteru a ukazuje editor setlistu i kapelní kalendář na ukázkových datech.
