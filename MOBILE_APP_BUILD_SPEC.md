@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.13.9 · aktualizováno 22. 11. 2026
+> Stav specifikace: 0.13.10 · aktualizováno 22. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 >
@@ -471,4 +471,4 @@ Všechny POST/PUT požadavky posílej s `Content-Type: application/json`. Server
 - Pro pozvánku sdílej `https://app.setlister.cz/?invite=KOD`. Osmimístný kód po přihlášení nebo registraci pošli do `POST /api/app/bands/join` jako `{code}` a obnov relaci přes `GET /api/app/session`. Přihlášený uživatel se připojí rovnou. Otočení kódu zneplatňuje starý odkaz.
 - Obnova hesla používá `POST /api/app/password/forgot` s `{email}`, vrací stejný výsledek pro existující i neexistující účet. Jednorázový odkaz z e-mailu platí 30 minut a token nese ve fragmentu URL `/#reset=TOKEN`. Předej `{token,password}` do `POST /api/app/password/reset`. Úspěšná změna ukončí dosavadní relace a vyžádá nové přihlášení. Obnovovací tokeny nedávej do logů ani cache.
 - Volitelná cílová délka se ukládá jako `targetMinutes: null`. Celkový čas zůstává na obrazovce, srovnání s cílem a lišta se skryjí. Repertoár filtruj ihned podle názvu či alba. `song.archived` je obnovitelný příznak, který skryje skladbu z běžné nabídky, její vazby v uložených setlistech zůstanou.
-- Zkouška nabízí pouze uložené setlisty (`setlistRef: "saved:<id>"`) a umisťuje společné hraní nad chytrý plán. Dokud set neběží, zobraz kartu s výzvou k výběru. Připravenost je výchozí sbalená. Karta zobrazuje následující skladbu, osobní alias a pokyn k ladění ze stejného plánu jako aktuální skladba. Rychlá úprava ukládá právě otevřenou skladbu, její `bpm` a `memberDetails[memberId].note` bez přepsání ostatních údajů. Mezerník posouvá dopředu i při zaměření navigační šipky.
+- Zkouška nabízí pouze uložené setlisty (`setlistRef: "saved:<id>"`) a umisťuje společné hraní nad chytrý plán. Dokud set neběží, zobraz kartu s výzvou k výběru. Připravenost je výchozí sbalená. Následující skladbu, její osobní název a pokyn k ladění zobraz uvnitř karty aktuální skladby jako doplňující řádek oddělený linkou, také na celé obrazovce. Na konci setlistu se řádek skryje. Rychlá úprava ukládá právě otevřenou skladbu, její `bpm` a `memberDetails[memberId].note` bez přepsání ostatních údajů. Mezerník posouvá dopředu i při zaměření navigační šipky.

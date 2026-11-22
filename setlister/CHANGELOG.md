@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.10
+
+- Následující skladba a její ladění jsou přímo uvnitř karty právě hrané skladby, i v režimu celé obrazovky.
+
 ## 0.13.9
 
 - Zkouška začíná společným hraním z uloženého setlistu. Ukazuje další skladbu včetně osobního ladění a umožňuje upravit poznámku a BPM právě zobrazené skladby. Mezerník posouvá dopředu i po použití šipky zpět.

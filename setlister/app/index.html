@@ -9,7 +9,7 @@
   <link rel="icon" href="/brand/logo-mark.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=0.13.9">
+  <link rel="stylesheet" href="/styles.css?v=0.13.10">
 </head>
 <body>
   <header class="app-header">
@@ -159,11 +159,22 @@
               <button class="secondary-button compact" id="editLiveSong" type="button">Poznámka a BPM</button>
               <button class="secondary-button compact" id="toggleLiveFocus" type="button" aria-pressed="false">Celá obrazovka</button>
             </div>
-            <div class="live-song-shell"><button class="live-arrow" id="livePrevious" type="button" aria-label="Předchozí skladba">←</button><article class="live-song-card" id="liveSongCard" tabindex="0" aria-keyshortcuts="ArrowLeft ArrowRight Space"><p id="liveSongRole"></p><div class="tuning-cue" id="liveTuning" hidden></div><h2 id="liveSongTitle">Skladba</h2><div class="live-song-meta" id="liveSongMeta"></div><div class="live-instructions" id="liveInstructions"></div><small>Listuj tažením nebo šipkami. Mezerník posune na další skladbu.</small></article><button class="live-arrow" id="liveNext" type="button" aria-label="Další skladba">→</button></div>
-            <aside class="live-next-card" id="liveNextCard" aria-label="Následující skladba" hidden>
-              <div><span>Následuje</span><strong id="liveNextTitle"></strong></div>
-              <p class="tuning-cue" id="liveNextTuning" hidden></p>
-            </aside>
+            <div class="live-song-shell">
+              <button class="live-arrow" id="livePrevious" type="button" aria-label="Předchozí skladba">←</button>
+              <article class="live-song-card" id="liveSongCard" tabindex="0" aria-keyshortcuts="ArrowLeft ArrowRight Space">
+                <p id="liveSongRole"></p>
+                <div class="tuning-cue" id="liveTuning" hidden></div>
+                <h2 id="liveSongTitle">Skladba</h2>
+                <div class="live-song-meta" id="liveSongMeta"></div>
+                <div class="live-instructions" id="liveInstructions"></div>
+                <aside class="live-next-preview" id="liveNextCard" aria-label="Následující skladba" hidden>
+                  <div><span>Následuje</span><strong id="liveNextTitle"></strong></div>
+                  <p class="tuning-cue" id="liveNextTuning" hidden></p>
+                </aside>
+                <small>Listuj tažením nebo šipkami. Mezerník posune na další skladbu.</small>
+              </article>
+              <button class="live-arrow" id="liveNext" type="button" aria-label="Další skladba">→</button>
+            </div>
             <dialog id="liveSongEditDialog" aria-labelledby="liveSongEditTitle">
               <div class="dialog-heading"><h2 id="liveSongEditTitle">Poznámka a BPM</h2><button data-close-dialog="liveSongEditDialog" aria-label="Zavřít" type="button">×</button></div>
               <form id="liveSongEditForm" class="dialog-form">
@@ -448,8 +459,8 @@
 
   <div id="printRoot" aria-hidden="true"></div>
   <div class="toast" id="appToast" role="status" aria-live="polite"></div>
-  <script src="/planning.js?v=0.13.9"></script>
-  <script src="/legacy-import.js?v=0.13.9"></script>
-  <script src="/app.js?v=0.13.9"></script>
+  <script src="/planning.js?v=0.13.10"></script>
+  <script src="/legacy-import.js?v=0.13.10"></script>
+  <script src="/app.js?v=0.13.10"></script>
 </body>
 </html>
