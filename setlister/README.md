@@ -125,3 +125,12 @@ Při spuštění přes `server.py` nebo Docker se data synchronizují mezi zař�
 - sdílená SQLite databáze s detekcí souběžných změn a historií posledních 200 verzí.
 - chat nad dvěma kapelními Gmaily s rychlými dotazy a odkazy na zdrojové zprávy,
 - průběžná lokální indexace Gmailu pouze pro čtení.
+
+
+## Administrace platformy
+
+Administrace je určena pro hostname `admin.setlister.cz` a používá stejnou databázi jako webová aplikace. Nejdřív v Cloudflare vytvoř samostatnou self-hosted aplikaci Access pro tento hostname s MFA a výslovně povolenými e-maily správců. Poté přidej published application route do existujícího tunelu na stejný HTTP origin Setlisteru. Aplikace i na originu ověřuje podepsaný Access JWT pro vlastní AUD. Soukromý PropsBot používá jiné AUD a jiné nastavení správy.
+
+V nastavení add-onu vyplň `platform_admin_aud`, `platform_admin_owners` a případně `platform_admin_support`. Seznamy přijímají e-maily oddělené čárkou. Doménu nastavuje `platform_admin_host`, tým Cloudflare používá už existující `cloudflare_access_team`. Docker přijímá stejné hodnoty přes proměnné `SETLISTER_PLATFORM_ADMIN_HOST`, `SETLISTER_PLATFORM_ADMIN_AUD`, `SETLISTER_PLATFORM_ADMIN_OWNERS` a `SETLISTER_PLATFORM_ADMIN_SUPPORT`, tým přes `CF_ACCESS_TEAM_DOMAIN`.
+
+Podpora má přehled, diagnostiku a pohled na data vybraného člena pouze ke čtení. Hlavní správce může přidělit kapelám promo období, převádět vlastnictví, mazat a číst audit. Smazání účtu ukončí jeho relace a odstraní účet z kapel. Pódiové profily a jejich hudební pokyny zůstanou. Pokud účet kapelu vlastní, musí se vlastnictví nejdřív převést nebo kapela zvlášť smazat. Při smazání kapely se odstraní její živá data včetně lokálního indexu Gmailu. Zálohy se řídí samostatnou dobou uchování.

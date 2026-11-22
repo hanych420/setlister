@@ -292,7 +292,19 @@
         renderCalendarFeed("");
       }
       elements.currentBandName.textContent = workspace.band.name; elements.settingsBandName.textContent = workspace.band.name; elements.inviteCode.textContent = workspace.band.inviteCode;
-      elements.planStatus.textContent = workspace.subscription.status === "active" ? "Aktivní plán" : "Zkušební provoz"; elements.planName.textContent = workspace.subscription.planName || "Setlister Early";
+      const plan = workspace.subscription;
+      const promoStarts = Date.parse(plan.promoStartsAt);
+      const promoEnds = Date.parse(plan.promoEndsAt);
+      const hasPromo = Date.now() < promoEnds;
+      const promoActive = hasPromo && Date.now() >= promoStarts;
+      elements.planStatus.textContent = promoActive ? "Přístup zdarma" : plan.status === "active" ? "Aktivní plán" : "Zkušební provoz";
+      elements.planName.textContent = plan.planName || "Setlister Early";
+      elements.bandPromoPeriod.hidden = !hasPromo;
+      if (hasPromo) {
+        const formatPromoDate = new Intl.DateTimeFormat("cs", { dateStyle: "medium", timeZone: "Europe/Prague" });
+        elements.bandPromoPeriod.textContent = promoActive ? "Přístup zdarma do " + formatPromoDate.format(promoEnds) + "."
+          : "Přístup zdarma od " + formatPromoDate.format(promoStarts) + " do " + formatPromoDate.format(promoEnds) + ".";
+      }
       renderWorkspace(); renderBandDialog();
     } catch (error) { showToast(error.message); }
   }

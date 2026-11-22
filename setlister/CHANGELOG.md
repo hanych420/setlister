@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.0
+
+- Administrace platformy zobrazuje počty účtů, kapel, členství a pódiových profilů. Nabízí vyhledávání, diagnostiku Gmailu a pohled na setlisty, repertoár a osobní pokyny zvoleného uživatele pouze ke čtení.
+- Hlavní správce může kapelám přidělovat měsíce zdarma, převádět vlastnictví a po potvrzení mazat účty či kapely. Promo období je oddělené od dat poskytovatele plateb. Zásahy správců se zapisují do auditu.
+
 ## 0.13.10
 
 - Následující skladba a její ladění jsou přímo uvnitř karty právě hrané skladby, i v režimu celé obrazovky.

@@ -1,5 +1,5 @@
 name: Setlister
-version: "0.13.10"
+version: "0.14.0"
 slug: setlister
 description: Kapelní repertoár, setlisty, tisk a read-only asistent nad kapelními Gmaily.
 url: https://github.com/hanych420/setlister
@@ -23,6 +23,10 @@ environment:
 options:
   base_url: https://setlister.cz
   app_host: app.setlister.cz
+  platform_admin_host: admin.setlister.cz
+  platform_admin_aud: ""
+  platform_admin_owners: ""
+  platform_admin_support: ""
   admin_email: propadleek@gmail.com
   admin_history_pin: "0000"
   google_client_id: ""
@@ -40,6 +44,10 @@ options:
 schema:
   base_url: str
   app_host: str
+  platform_admin_host: str
+  platform_admin_aud: str
+  platform_admin_owners: str
+  platform_admin_support: str
   admin_email: str
   admin_history_pin: password
   google_client_id: str

@@ -38,10 +38,11 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
 if __package__:
-    from . import band_calendar, invoicing, public_concerts
+    from . import band_calendar, invoicing, platform_admin, public_concerts
 else:
     import band_calendar
     import invoicing
+    import platform_admin
     import public_concerts
 
 
@@ -202,6 +203,10 @@ def load_options() -> dict[str, Any]:
     return {
         "base_url": str(value("SETLISTER_BASE_URL", "base_url", f"http://localhost:{PORT}")).rstrip("/"),
         "app_host": str(value("SETLISTER_APP_HOST", "app_host", "app.setlister.cz")).lower().strip(),
+        "platform_admin_host": str(value("SETLISTER_PLATFORM_ADMIN_HOST", "platform_admin_host", "admin.setlister.cz")).lower().strip(),
+        "platform_admin_aud": str(value("SETLISTER_PLATFORM_ADMIN_AUD", "platform_admin_aud")).strip(),
+        "platform_admin_owners": str(value("SETLISTER_PLATFORM_ADMIN_OWNERS", "platform_admin_owners")),
+        "platform_admin_support": str(value("SETLISTER_PLATFORM_ADMIN_SUPPORT", "platform_admin_support")),
         "admin_email": str(value("SETLISTER_ADMIN_EMAIL", "admin_email", "propadleek@gmail.com")).lower(),
         "admin_history_pin": str(value("SETLISTER_ADMIN_HISTORY_PIN", "admin_history_pin", "0000")),
         "google_client_id": str(value("GOOGLE_CLIENT_ID", "google_client_id")),
@@ -433,6 +438,7 @@ def initialize_database() -> None:
             WHERE sync_state='syncing'""")
         public_concerts.initialize(database)
         database.executescript(invoicing.SCHEMA)
+        platform_admin.initialize(database)
 
 
 def encryption_box() -> Fernet:
@@ -2625,7 +2631,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.13.10"
+    server_version = "Setlister/0.14.0"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -2634,13 +2640,15 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
 
     def log_message(self, format: str, *args: object) -> None:
         message = format % args
-        message = re.sub(r"([?&](?:code|state|invite|reset)=)[^&\s]+", r"\1[REDACTED]", message)
+        message = re.sub(r"([?&](?:code|state|invite|reset|q)=)[^&\s]+", r"\1[REDACTED]", message)
         message = re.sub(r"(/calendar/feed/)[^\s?]+", r"\1[REDACTED]", message)
         print(f"{self.log_date_time_string()} {self.address_string()} {message}", flush=True)
 
     def end_headers(self) -> None:
         request_path = urlparse(self.path).path
-        if not request_path.startswith(("/api/", "/calendar/feed/", f"{self.private_prefix}/api/")):
+        if getattr(self, "platform_admin_response", False):
+            self.send_header("Cache-Control", "no-store")
+        elif not request_path.startswith(("/api/", "/calendar/feed/", f"{self.private_prefix}/api/")):
             self.send_header("Cache-Control", "no-cache")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
@@ -2748,6 +2756,112 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                   + str(PUBLIC_SESSION_SECONDS) + secure)
         return {"payload": self.public_session_payload(user), "cookie": cookie}
 
+    def is_platform_admin_host(self) -> bool:
+        return self.request_hostname() == load_options()["platform_admin_host"]
+
+    def platform_admin_identity(self):
+        options = load_options()
+        audience = options["platform_admin_aud"]
+        if not audience or audience == options["cf_access_aud"]:
+            self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Administrace potřebuje vlastní Cloudflare Access AUD."})
+            return None
+        token = self.headers.get("Cf-Access-Jwt-Assertion", "")
+        email_address = cloudflare_identity(token, {**options, "cf_access_aud": audience}) if token else None
+        if not email_address:
+            self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "Přihlas se přes Cloudflare Access."})
+            return None
+        owners = set(filter(None, re.split(r"[,;\s]+", options["platform_admin_owners"].lower())))
+        support = set(filter(None, re.split(r"[,;\s]+", options["platform_admin_support"].lower())))
+        if email_address in owners:
+            return email_address, "owner"
+        if email_address in support:
+            return email_address, "support"
+        self.send_json(HTTPStatus.FORBIDDEN, {"error": "Pro tento účet není administrace povolená."})
+        return None
+
+    def handle_platform_admin(self, path, query, *, head=False):
+        self.platform_admin_response = True
+        identity = self.platform_admin_identity()
+        if not identity:
+            return
+        actor, role = identity
+        static = {"/": "/admin/index.html", "/admin.js": "/admin/admin.js", "/admin.css": "/admin/admin.css",
+                  "/brand/logo-mark.svg": "/brand/logo-mark.svg"}
+        if path in static and self.command in ("GET", "HEAD"):
+            original = self.path
+            try:
+                self.path = static[path]
+                if head:
+                    super().do_HEAD()
+                else:
+                    super().do_GET()
+            finally:
+                self.path = original
+            return
+        try:
+            if self.command == "GET":
+                with connect_db() as database:
+                    if path == "/api/admin/overview":
+                        result = {"identity": {"email": actor, "role": role}, "counts": platform_admin.overview(database)}
+                    elif path == "/api/admin/directory":
+                        kind = (query.get("kind") or ["users"])[0]
+                        page = int((query.get("page") or ["0"])[0])
+                        if not 0 <= page <= 10000:
+                            raise platform_admin.AdminError("Neplatná stránka.")
+                        result = platform_admin.directory(database, kind, (query.get("q") or [""])[0], page)
+                    elif path == "/api/admin/user":
+                        result = platform_admin.user_detail(database, (query.get("id") or [""])[0])
+                    elif path == "/api/admin/band":
+                        result = platform_admin.band_detail(database, (query.get("id") or [""])[0])
+                    elif path == "/api/admin/audit" and role == "owner":
+                        result = {"items": platform_admin.audit_list(database)}
+                    else:
+                        raise platform_admin.AdminError("Nenalezeno.", HTTPStatus.NOT_FOUND)
+                self.send_json(HTTPStatus.OK, result)
+                return
+            if self.command == "POST" and path == "/api/admin/action":
+                if not self.headers.get("Origin") or not self.same_origin_request():
+                    raise platform_admin.AdminError("Neplatný původ požadavku.", HTTPStatus.FORBIDDEN)
+                payload = self.read_json_body(16 * 1024)
+                action = str(payload.get("action") or "")
+                reason = str(payload.get("reason") or "").strip()
+                if not 3 <= len(reason) <= 300:
+                    raise platform_admin.AdminError("Zadej důvod o 3 až 300 znacích.")
+                if action != "preview" and role != "owner":
+                    raise platform_admin.AdminError("Tuto akci může provést pouze hlavní správce.", HTTPStatus.FORBIDDEN)
+                band_id = str(payload.get("bandId") or "")
+                user_id = str(payload.get("userId") or "")
+                result = {"ok": True}
+                with connect_db() as database:
+                    database.execute("BEGIN IMMEDIATE")
+                    audit_details = {}
+                    if action == "preview":
+                        result["preview"] = platform_admin.support_preview(database, band_id, user_id)
+                    elif action == "grant_promo":
+                        result["promo"] = platform_admin.grant_promo(database, band_id, payload.get("months"))
+                        audit_details = {"months": payload["months"], **result["promo"]}
+                    elif action == "transfer_band":
+                        audit_details = platform_admin.transfer_band(database, band_id, user_id)
+                    elif action == "delete_user":
+                        platform_admin.delete_user(database, user_id, payload.get("confirmation"))
+                        band_id = ""
+                    elif action == "delete_band":
+                        platform_admin.delete_band(database, band_id, payload.get("confirmation"))
+                    else:
+                        raise platform_admin.AdminError("Neznámá akce.")
+                    target_id = user_id if action in ("preview", "delete_user") else band_id
+                    platform_admin.audit(database, actor, action, target_id, band_id or None, reason, audit_details)
+                    database.commit()
+                self.send_json(HTTPStatus.OK, result)
+                return
+            raise platform_admin.AdminError("Nenalezeno.", HTTPStatus.NOT_FOUND)
+        except platform_admin.AdminError as error:
+            self.send_json(error.status, {"error": str(error)})
+        except ValueError:
+            self.send_json(HTTPStatus.BAD_REQUEST, {"error": "Neplatný požadavek."})
+        except sqlite3.IntegrityError:
+            self.send_json(HTTPStatus.CONFLICT, {"error": "Akce je v konfliktu se stávajícími daty."})
+
     def serve_public_app_file(self, request_path: str, *, head: bool = False) -> None:
         if ".." in Path(request_path).parts:
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -2806,6 +2920,9 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         request_path = unquote(parsed.path)
+        if self.is_platform_admin_host():
+            self.handle_platform_admin(request_path, parse_qs(parsed.query))
+            return
         if self.is_public_app_host():
             if request_path == "/oauth/google/callback":
                 self.handle_public_oauth_callback(parse_qs(parsed.query))
@@ -2981,6 +3098,8 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                 subscription = database.execute("""SELECT status, plan_name, provider,
                     entitlement_source, current_period_end FROM public_subscriptions WHERE band_id=?""",
                     (band_id,)).fetchone()
+                promo = database.execute("SELECT starts_at, ends_at FROM public_promo_access WHERE band_id=?",
+                                         (band_id,)).fetchone()
             if not band or not state_row:
                 self.send_json(HTTPStatus.NOT_FOUND, {"error": "Kapela nebyla nalezena."})
                 return
@@ -2996,6 +3115,8 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                     "provider": subscription["provider"] if subscription else None,
                     "entitlementSource": subscription["entitlement_source"] if subscription else None,
                     "currentPeriodEnd": subscription["current_period_end"] if subscription else None,
+                    "promoStartsAt": promo["starts_at"] if promo else None,
+                    "promoEndsAt": promo["ends_at"] if promo else None,
                 },
                 "state": state, "revision": state_row["revision"],
                 "updatedAt": state_row["updated_at"],
@@ -3201,7 +3322,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def public_oauth_result_page(title: str, message: str, success: bool) -> str:
         state = "success" if success else "error"
         return f'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>
-        <link rel="stylesheet" href="/styles.css?v=0.13.10"></head>
+        <link rel="stylesheet" href="/styles.css?v=0.14.0"></head>
         <body class="oauth-result {state}"><main><h1>{html.escape(title)}</h1><p>{html.escape(message)}</p><a href="/">Zpět do Setlisteru</a></main></body></html>'''
 
     def handle_oauth_callback(self, query: dict[str, list[str]]) -> None:
@@ -3244,6 +3365,9 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         <body><main><h1>{html.escape(title)}</h1><p>{message}</p><p><a href="/propadleek/ask.html">Zpět do Setlisteru</a></p></main></body></html>'''
 
     def do_HEAD(self) -> None:
+        if self.is_platform_admin_host():
+            self.handle_platform_admin(unquote(urlparse(self.path).path), {}, head=True)
+            return
         if self.is_public_app_host():
             request_path = unquote(urlparse(self.path).path)
             if request_path.startswith("/calendar/feed/"):
@@ -3257,6 +3381,9 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:
         request_path = unquote(urlparse(self.path).path)
+        if self.is_platform_admin_host():
+            self.handle_platform_admin(request_path, {})
+            return
         if self.is_public_app_host() and request_path.startswith("/api/app/"):
             self.handle_public_app_post(request_path)
             return
@@ -3818,6 +3945,9 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
 
     def do_PUT(self) -> None:
         request_path = unquote(urlparse(self.path).path)
+        if self.is_platform_admin_host():
+            self.handle_platform_admin(request_path, {})
+            return
         if self.is_public_app_host() and request_path == "/api/app/band-state":
             if not self.same_origin_request():
                 self.send_json(HTTPStatus.FORBIDDEN, {"error": "Neplatný původ požadavku."})

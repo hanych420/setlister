@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Administrace · Setlister</title>
+  <link rel="icon" href="/brand/logo-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/admin.css">
+  <script src="/admin.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="/brand/logo-mark.svg" alt=""><strong>Setlister</strong><span>Administrace</span></div>
+    <p id="identity"></p>
+  </header>
+  <main>
+    <header class="page-title"><div><h1>Přehled Setlisteru</h1><p>Účty, kapely a technická podpora.</p></div></header>
+    <section class="metrics" id="metrics" aria-label="Počty v Setlisteru" hidden></section>
+    <p id="status" role="status" aria-live="polite"></p>
+    <section class="workspace" id="workspace" hidden aria-label="Správa Setlisteru">
+      <nav class="tabs" aria-label="Administrace">
+        <button type="button" data-view="users" aria-pressed="false">Uživatelé</button>
+        <button type="button" data-view="bands" aria-pressed="true">Kapely</button>
+        <button type="button" data-view="audit" aria-pressed="false" id="auditTab" hidden>Audit</button>
+      </nav>
+      <div id="directory" class="directory">
+        <section class="list-pane" aria-labelledby="directoryTitle">
+          <div class="list-head"><h2 id="directoryTitle">Kapely</h2><input type="search" id="search" aria-label="Hledat podle jména nebo e-mailu" placeholder="Hledat podle názvu nebo e-mailu"></div>
+          <div id="rows"></div>
+          <div class="pager"><button class="button" type="button" id="prevPage" disabled>Předchozí</button><span id="pageNumber">1</span><button class="button" type="button" id="nextPage" disabled>Další</button></div>
+        </section>
+        <section class="detail" id="detail" aria-label="Detail"><p>Vyber kapelu ze seznamu.</p></section>
+      </div>
+      <section id="audit" class="audit" aria-label="Historie správy" hidden></section>
+    </section>
+  </main>
+
+  <dialog id="actionDialog" aria-labelledby="actionTitle">
+    <form id="actionForm">
+      <header class="dialog-head"><div><h2 id="actionTitle"></h2><p id="actionDescription"></p></div><button class="close-button" type="button" data-close="actionDialog" aria-label="Zavřít">×</button></header>
+      <div id="actionFields" class="fields"></div>
+      <label>Důvod<textarea name="reason" rows="2" minlength="3" maxlength="300" required placeholder="Např. řešení problému s tiskem"></textarea></label>
+      <p id="actionStatus" class="feedback" role="status"></p>
+      <div class="actions"><button type="button" class="button" data-close="actionDialog">Zrušit</button><button type="submit" class="button primary" id="actionSubmit">Potvrdit</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="previewDialog" class="preview-dialog" aria-labelledby="previewTitle">
+    <header class="dialog-head"><div><p class="preview-mode">Pohled uživatele · pouze čtení</p><h2 id="previewTitle"></h2><p id="previewIdentity"></p></div><button type="button" class="button" data-close="previewDialog">Ukončit náhled</button></header>
+    <div class="preview-grid"><section><h3>Setlisty</h3><div id="previewSets"></div></section><section><h3>Repertoár a pokyny člena</h3><div id="previewSongs"></div></section></div>
+  </dialog>
+</body>
+</html>
