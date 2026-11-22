@@ -103,7 +103,8 @@ globalThis.SetlisterLegacyImport = (() => {
       }
       state.savedSetlists.push({
         id, name: String(original.name || "").trim() || fallbackName,
-        targetMinutes: Math.max(1, Number(original.targetMinutes) || 45),
+        targetMinutes: original.targetMinutes === "" || original.targetMinutes === null
+          ? null : Math.max(1, Number(original.targetMinutes) || 45),
         songIds, interludes, includeGaps: Boolean(original.includeGaps)
       });
       counts.sets += 1;

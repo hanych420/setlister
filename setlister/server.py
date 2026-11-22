@@ -80,6 +80,11 @@ GMAIL_LAST_REQUEST_AT = 0.0
 ADMIN_AUTH_ATTEMPTS: dict[str, list[float]] = {}
 ADMIN_AUTH_LOCK = threading.Lock()
 PUBLIC_SESSION_SECONDS = 30 * 24 * 60 * 60
+PASSWORD_RESET_SECONDS = 30 * 60
+PASSWORD_RESET_COOLDOWN_SECONDS = 120
+ACCOUNT_MAIL_SLOTS = threading.BoundedSemaphore(8)
+ACCOUNT_REQUESTS_LOCK = threading.Lock()
+ACCOUNT_REQUESTS = {}
 PASSWORD_ITERATIONS = 310_000
 CONTACT_ATTEMPTS: dict[str, list[float]] = {}
 CONTACT_ATTEMPTS_LOCK = threading.Lock()
@@ -323,6 +328,11 @@ def initialize_database() -> None:
                 id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
                 password_hash TEXT NOT NULL, created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS public_password_resets (
+                user_id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE,
+                requested_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES public_users(id) ON DELETE CASCADE
+            );
             CREATE TABLE IF NOT EXISTS public_sessions (
                 token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL,
                 created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
@@ -441,6 +451,42 @@ def decrypt_secret(value: str) -> str:
         return encryption_box().decrypt(value.encode("ascii")).decode()
     except (InvalidToken, ValueError) as error:
         raise RuntimeError("Uložený Gmail token se nepodařilo odemknout.") from error
+
+
+def allow_account_request(kind: str, client: str, limit: int) -> bool:
+    now = time.monotonic()
+    key = (kind, client)
+    with ACCOUNT_REQUESTS_LOCK:
+        for request_key, stamps in list(ACCOUNT_REQUESTS.items()):
+            if stamps[-1] <= now - 3600:
+                del ACCOUNT_REQUESTS[request_key]
+        recent = [stamp for stamp in ACCOUNT_REQUESTS.get(key, []) if stamp > now - 3600]
+        if len(recent) >= limit:
+            return False
+        ACCOUNT_REQUESTS[key] = [*recent, now]
+    return True
+
+
+def queue_account_email(options: dict[str, Any], address: str, subject: str, message: str) -> None:
+    api_key = options["resend_api_key"]
+    if not api_key:
+        return
+    if not ACCOUNT_MAIL_SLOTS.acquire(blocking=False):
+        print("Kapacita pro odesílání e-mailů k účtům je dočasně vyčerpaná.", flush=True)
+        return
+
+    def send() -> None:
+        try:
+            json_request("https://api.resend.com/emails", method="POST",
+                         headers={"Authorization": "Bearer " + api_key},
+                         data={"from": options["contact_from"], "to": [address],
+                               "subject": subject, "text": message}, timeout=15)
+        except Exception:
+            print("E-mail k účtu se nepodařilo odeslat přes Resend.", flush=True)
+        finally:
+            ACCOUNT_MAIL_SLOTS.release()
+
+    threading.Thread(target=send, daemon=True).start()
 
 
 def valid_state(value: object) -> bool:
@@ -2579,7 +2625,7 @@ def public_membership(database: sqlite3.Connection, user_id: str, band_id: str) 
 
 
 class SetlisterHandler(SimpleHTTPRequestHandler):
-    server_version = "Setlister/0.13.8"
+    server_version = "Setlister/0.13.9"
     private_prefix = "/propadleek"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
 
@@ -2588,7 +2634,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
 
     def log_message(self, format: str, *args: object) -> None:
         message = format % args
-        message = re.sub(r"([?&](?:code|state)=)[^&\s]+", r"\1[REDACTED]", message)
+        message = re.sub(r"([?&](?:code|state|invite|reset)=)[^&\s]+", r"\1[REDACTED]", message)
         message = re.sub(r"(/calendar/feed/)[^\s?]+", r"\1[REDACTED]", message)
         print(f"{self.log_date_time_string()} {self.address_string()} {message}", flush=True)
 
@@ -3155,7 +3201,7 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
     def public_oauth_result_page(title: str, message: str, success: bool) -> str:
         state = "success" if success else "error"
         return f'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>
-        <link rel="stylesheet" href="/styles.css?v=0.13.8"></head>
+        <link rel="stylesheet" href="/styles.css?v=0.13.9"></head>
         <body class="oauth-result {state}"><main><h1>{html.escape(title)}</h1><p>{html.escape(message)}</p><a href="/">Zpět do Setlisteru</a></main></body></html>'''
 
     def handle_oauth_callback(self, query: dict[str, list[str]]) -> None:
@@ -3336,7 +3382,16 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
         if not self.same_origin_request():
             self.send_json(HTTPStatus.FORBIDDEN, {"error": "Neplatný původ požadavku."})
             return
+        if path == "/api/app/password/forgot":
+            self.request_password_reset()
+            return
+        if path == "/api/app/password/reset":
+            self.set_new_password()
+            return
         if path == "/api/app/register":
+            if not allow_account_request("register", self.admin_client_key(), 15):
+                self.send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Příliš mnoho registrací. Zkus to později."})
+                return
             try:
                 payload = self.read_json_body(16 * 1024)
                 name = str(payload.get("name") or "").strip()
@@ -3356,6 +3411,10 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                     user = database.execute("SELECT * FROM public_users WHERE id=?", (user_id,)).fetchone()
                 issued = self.issue_public_session(user)
                 self.send_json(HTTPStatus.CREATED, issued["payload"], {"Set-Cookie": issued["cookie"]})
+                options = load_options()
+                queue_account_email(options, email_address, "Vítej v Setlisteru",
+                                    "Tvůj účet je připravený. Otevři Setlister a založ kapelu nebo se připoj k té své.\n\n"
+                                    + self.public_app_base_url(options))
             except ValueError as error:
                 self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
@@ -3535,18 +3594,16 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                                       "startedAtMs": now_ms + 2000 if action == "start" else 0,
                                       "leaderUserId": user["id"], "leaderName": user["name"]})
                     elif action == "start_set":
-                        setlist_ref = str(payload.get("setlistRef") or "draft")
+                        setlist_ref = str(payload.get("setlistRef") or "")
                         band_state_row = database.execute("SELECT state_json FROM public_band_state WHERE band_id=?", (band_id,)).fetchone()
                         band_state = json.loads(band_state_row["state_json"]) if band_state_row else {}
-                        if setlist_ref == "draft":
-                            selected = band_state.get("draft") or {}; setlist_name = str(selected.get("name") or "Aktuální set")
-                        elif setlist_ref.startswith("saved:"):
+                        if setlist_ref.startswith("saved:"):
                             set_id = setlist_ref.split(":", 1)[1]
                             selected = next((item for item in band_state.get("savedSetlists") or [] if str(item.get("id")) == set_id), None)
                             if not selected: raise ValueError("Vybraný setlist už neexistuje.")
                             setlist_name = str(selected.get("name") or "Setlist")
                         else:
-                            raise ValueError("Neplatný výběr setlistu.")
+                            raise ValueError("Pro zkoušku vyber uložený setlist.")
                         song_ids = [str(item) for item in selected.get("songIds") or []]
                         valid_ids = {str(item.get("id")) for item in band_state.get("songs") or [] if isinstance(item, dict)}
                         song_ids = [item for item in song_ids if item in valid_ids]
@@ -3643,6 +3700,75 @@ class SetlisterHandler(SimpleHTTPRequestHandler):
                 self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         self.send_json(HTTPStatus.NOT_FOUND, {"error": "Nenalezeno"})
+
+    def request_password_reset(self) -> None:
+        try:
+            address = normalize_email(self.read_json_body(4096).get("email"))
+        except ValueError as error:
+            self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if not allow_account_request("forgot", self.admin_client_key(), 15):
+            self.send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Příliš mnoho žádostí. Zkus to později."})
+            return
+        options = load_options()
+        if not options["resend_api_key"]:
+            self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Obnova hesla je dočasně nedostupná."})
+            return
+        now = int(time.time())
+        token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        queued = False
+        with connect_db() as database:
+            database.execute("BEGIN IMMEDIATE")
+            user = database.execute("SELECT id FROM public_users WHERE email=?", (address,)).fetchone()
+            if user:
+                updated = database.execute(
+                    """INSERT INTO public_password_resets (user_id, token_hash, requested_at, expires_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(user_id) DO UPDATE SET token_hash=excluded.token_hash,
+                        requested_at=excluded.requested_at, expires_at=excluded.expires_at
+                    WHERE public_password_resets.requested_at <= ?""",
+                    (user["id"], token_hash, now, now + PASSWORD_RESET_SECONDS,
+                     now - PASSWORD_RESET_COOLDOWN_SECONDS))
+                queued = updated.rowcount == 1
+            database.commit()
+        self.send_json(HTTPStatus.OK, {"ok": True})
+        if queued:
+            url = self.public_app_base_url(options) + "/#" + urlencode({"reset": token})
+            queue_account_email(options, address, "Obnovení hesla do Setlisteru",
+                                "Nové heslo nastavíš na tomto odkazu do 30 minut. Odkaz platí jednou.\n\n"
+                                + url + "\n\nPokud jsi o obnovu nežádal/a, můžeš e-mail ignorovat.")
+
+    def set_new_password(self) -> None:
+        invalid = "Odkaz pro obnovu už neplatí. Vyžádej si nový."
+        try:
+            payload = self.read_json_body(4096)
+            token = str(payload.get("token") or "")
+            if not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
+                raise ValueError(invalid)
+            token_hash = hashlib.sha256(token.encode()).hexdigest()
+            with connect_db() as database:
+                existing = database.execute(
+                    "SELECT 1 FROM public_password_resets WHERE token_hash=? AND expires_at>?",
+                    (token_hash, int(time.time()))).fetchone()
+            if not existing:
+                raise ValueError(invalid)
+            encoded = password_hash(str(payload.get("password") or ""))
+            with connect_db() as database:
+                database.execute("BEGIN IMMEDIATE")
+                reset = database.execute(
+                    "SELECT user_id FROM public_password_resets WHERE token_hash=? AND expires_at>?",
+                    (token_hash, int(time.time()))).fetchone()
+                if not reset:
+                    raise ValueError(invalid)
+                user_id = reset["user_id"]
+                database.execute("UPDATE public_users SET password_hash=? WHERE id=?", (encoded, user_id))
+                database.execute("DELETE FROM public_password_resets WHERE user_id=?", (user_id,))
+                database.execute("DELETE FROM public_sessions WHERE user_id=?", (user_id,))
+                database.commit()
+            self.send_json(HTTPStatus.OK, {"ok": True})
+        except ValueError as error:
+            self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
 
     def handle_contact_form(self) -> None:
         if not self.same_origin_request():

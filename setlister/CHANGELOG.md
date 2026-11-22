@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.9
+
+- Zkouška začíná společným hraním z uloženého setlistu. Ukazuje další skladbu včetně osobního ladění a umožňuje upravit poznámku a BPM právě zobrazené skladby. Mezerník posouvá dopředu i po použití šipky zpět.
+- Chytrý plán je pod společným hraním a přehled připravenosti je při otevření sbalený. Navigace má nové pořadí.
+- Setlist lze uložit bez cílové délky. Repertoár se průběžně filtruje podle názvu nebo alba a skladby lze archivovat i obnovit.
+- Kapelu lze sdílet odkazem, který připojí člena po přihlášení či registraci. Přihlášení je výchozí, stav přihlašování je zelený. Resend posílá uvítání a jednorázové odkazy pro obnovu hesla.
+
 ## 0.13.8
 
 - Společná zkouška má posun karty skladby ve směru gesta a režim celé obrazovky s navigací a ovládáním metronomu.

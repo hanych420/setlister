@@ -1,6 +1,6 @@
 # Setlister — živá specifikace a prompt pro iOS / Android
 
-> Stav specifikace: 0.13.8 · aktualizováno 21. 11. 2026
+> Stav specifikace: 0.13.9 · aktualizováno 22. 11. 2026
 >
 > Tento soubor je součást produktu. Při každé funkční, vizuální nebo API změně webu musí být aktualizován ve stejném commitu. Je zdrojem pravdy pro budoucí nativní aplikace.
 >
@@ -463,3 +463,12 @@ Všechny POST/PUT požadavky posílej s `Content-Type: application/json`. Server
 - V připravenosti přidej lokální filtry podle názvu skladby, člena a stavu (připraveno, dopilovat, nenacvičeno, bez hodnocení). Člen ve filtru omezuje zobrazené výsledky. Hodnocení se dál zapisuje za zvoleného editovatelného člena. Souhrn a návrh zkoušky používají celý zvolený rozsah.
 - Ve spuštěné společné zkoušce nabídni celou obrazovku s názvem skladby, pozicí, osobními pokyny, oběma šipkami a metronomem včetně BPM, povolení zvuku, startu, stopu a kalibrace. Otevření a návrat zachovají relaci i zvuk. Obrazovku lze zavřít bez ukončení hraní. Při změně skladby posuň kartu ve směru listování a respektuj systémové nastavení omezení animací. Posouvá vedoucí stávajícím voláním `POST /api/app/live-session` s `action: "set_song"`. Přechod na skladbu s vlastním BPM připraví hodnotu do ovládání. Běžící klik změní tempo po novém startu.
 - V repertoáru nabídni výběr jednotlivých skladeb, výběr zobrazených a počet vybraných. Otevři tabulku s jedním řádkem na skladbu a s poli název, album, délka, BPM, energie, role a společné štítky. Prázdné BPM vymaže uložené tempo. Validuj všechny změněné hodnoty a ulož je jedním `PUT /api/app/band-state` s aktuální revizí. Pokyny členů a hodnocení připravenosti patří ke skladbě a v této úpravě se nepřepisují. Při chybě uložení ponech rozepsané hodnoty v editoru.
+
+
+### Pozvánky, obnova účtu a úpravy zkoušky
+
+- Navigace v pořadí Setlist, Zkouška, Koncerty, Úkoly, Repertoár, Mailový agent, Kapela a účet. Přihlášení je výchozí a registrace je vedlejší záložka. Průběh přihlášení je v limetkové barvě palety, chyby červené.
+- Pro pozvánku sdílej `https://app.setlister.cz/?invite=KOD`. Osmimístný kód po přihlášení nebo registraci pošli do `POST /api/app/bands/join` jako `{code}` a obnov relaci přes `GET /api/app/session`. Přihlášený uživatel se připojí rovnou. Otočení kódu zneplatňuje starý odkaz.
+- Obnova hesla používá `POST /api/app/password/forgot` s `{email}`, vrací stejný výsledek pro existující i neexistující účet. Jednorázový odkaz z e-mailu platí 30 minut a token nese ve fragmentu URL `/#reset=TOKEN`. Předej `{token,password}` do `POST /api/app/password/reset`. Úspěšná změna ukončí dosavadní relace a vyžádá nové přihlášení. Obnovovací tokeny nedávej do logů ani cache.
+- Volitelná cílová délka se ukládá jako `targetMinutes: null`. Celkový čas zůstává na obrazovce, srovnání s cílem a lišta se skryjí. Repertoár filtruj ihned podle názvu či alba. `song.archived` je obnovitelný příznak, který skryje skladbu z běžné nabídky, její vazby v uložených setlistech zůstanou.
+- Zkouška nabízí pouze uložené setlisty (`setlistRef: "saved:<id>"`) a umisťuje společné hraní nad chytrý plán. Dokud set neběží, zobraz kartu s výzvou k výběru. Připravenost je výchozí sbalená. Karta zobrazuje následující skladbu, osobní alias a pokyn k ladění ze stejného plánu jako aktuální skladba. Rychlá úprava ukládá právě otevřenou skladbu, její `bpm` a `memberDetails[memberId].note` bez přepsání ostatních údajů. Mezerník posouvá dopředu i při zaměření navigační šipky.
